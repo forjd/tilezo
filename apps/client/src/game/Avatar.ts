@@ -1,7 +1,6 @@
 import { type TilePosition, tileToScreen } from "@tilezo/engine";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { Container, Graphics, Text } from "pixi.js";
-
-const AVATAR_COLORS = [0x2f9fc0, 0xf2bd3d, 0x62ad54, 0xd95763, 0x8c72c7, 0xd68036];
 
 type ScreenPosition = {
   x: number;
@@ -13,6 +12,7 @@ export class Avatar {
   readonly userId: string;
   username: string;
   position: TilePosition;
+  appearance: AvatarAppearance;
 
   private readonly body = new Graphics();
   private readonly label: Text;
@@ -23,10 +23,16 @@ export class Avatar {
   private progress = 0;
   private readonly secondsPerTile = 0.36;
 
-  constructor(userId: string, username: string, position: TilePosition) {
+  constructor(
+    userId: string,
+    username: string,
+    position: TilePosition,
+    appearance: AvatarAppearance = DEFAULT_AVATAR_APPEARANCE,
+  ) {
     this.userId = userId;
     this.username = username;
     this.position = { ...position };
+    this.appearance = { ...appearance };
     this.from = { ...position };
     this.fromScreen = tileToScreen(position.x, position.y);
 
@@ -45,14 +51,14 @@ export class Avatar {
     this.label.anchor.set(0.5, 1);
     this.label.y = -34;
 
-    const color = AVATAR_COLORS[Math.abs(hashCode(userId)) % AVATAR_COLORS.length] ?? 0x65d0ff;
-    this.body.circle(0, -18, 12).fill(color);
-    this.body.roundRect(-7, -18, 14, 22, 5).fill(color);
-    this.body.circle(-4, -21, 2).fill(0x1d2324);
-    this.body.circle(4, -21, 2).fill(0x1d2324);
-
     this.view.addChild(this.body, this.label);
+    this.drawBody();
     this.syncViewToTile(position);
+  }
+
+  setAppearance(appearance: AvatarAppearance): void {
+    this.appearance = { ...appearance };
+    this.drawBody();
   }
 
   setPath(path: TilePosition[]): void {
@@ -125,6 +131,47 @@ export class Avatar {
     this.view.x = screen.x;
     this.view.y = screen.y;
   }
+
+  private drawBody(): void {
+    const skinTone = toPixiColor(this.appearance.skinTone);
+    const hairColor = toPixiColor(this.appearance.hairColor);
+    const shirtColor = toPixiColor(this.appearance.shirtColor);
+    const pantsColor = toPixiColor(this.appearance.pantsColor);
+    const shoesColor = toPixiColor(this.appearance.shoesColor);
+
+    this.body.clear();
+    this.body.rect(-5, -10, 4, 10).fill(pantsColor);
+    this.body.rect(2, -10, 4, 10).fill(pantsColor);
+    this.body.roundRect(-8, -1, 8, 4, 2).fill(shoesColor);
+    this.body.roundRect(1, -1, 8, 4, 2).fill(shoesColor);
+    this.body.roundRect(-8, -28, 16, 20, 4).fill(shirtColor);
+    this.body.rect(-11, -25, 4, 13).fill(skinTone);
+    this.body.rect(8, -25, 4, 13).fill(skinTone);
+    this.body.circle(0, -34, 10).fill(skinTone);
+    this.drawHair(hairColor);
+    this.body.circle(-4, -35, 1.5).fill(0x1d2324);
+    this.body.circle(4, -35, 1.5).fill(0x1d2324);
+    this.body.rect(-2, -30, 4, 1).fill(0x9d5f46);
+  }
+
+  private drawHair(color: number): void {
+    if (this.appearance.hair === "side-part") {
+      this.body.circle(-2, -39, 9).fill(color);
+      this.body.rect(-11, -38, 8, 8).fill(color);
+      this.body.rect(6, -36, 6, 5).fill(color);
+      return;
+    }
+
+    if (this.appearance.hair === "bob") {
+      this.body.circle(0, -38, 10).fill(color);
+      this.body.roundRect(-11, -36, 5, 13, 2).fill(color);
+      this.body.roundRect(6, -36, 5, 13, 2).fill(color);
+      return;
+    }
+
+    this.body.circle(0, -39, 9).fill(color);
+    this.body.rect(-9, -38, 18, 7).fill(color);
+  }
 }
 
 function lerp(start: number, end: number, progress: number): number {
@@ -135,13 +182,6 @@ function sameTile(a: TilePosition, b: TilePosition): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
-function hashCode(value: string): number {
-  let hash = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(index);
-    hash |= 0;
-  }
-
-  return hash;
+function toPixiColor(value: string): number {
+  return Number.parseInt(value.slice(1), 16);
 }

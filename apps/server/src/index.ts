@@ -1,4 +1,5 @@
 import type { ServerMessage } from "@tilezo/protocol";
+import { avatarAppearanceSchema } from "@tilezo/protocol";
 import { AuthError, AuthService, DrizzleAuthStore } from "./auth/auth";
 import { getConfig } from "./config";
 import { createDatabase } from "./db/db";
@@ -34,6 +35,10 @@ const server = Bun.serve<SocketData>({
       return handleAuthRequest(request, auth, "login");
     }
 
+    if (url.pathname === "/me/appearance") {
+      return handleAppearanceRequest(request, auth);
+    }
+
     if (url.pathname === "/ws") {
       const user = await auth?.verifyToken(url.searchParams.get("token") ?? "");
 
@@ -48,6 +53,7 @@ const server = Bun.serve<SocketData>({
         data: {
           userId: user.id,
           username: user.username,
+          appearance: user.appearance,
         },
       });
 
@@ -148,6 +154,59 @@ async function handleAuthRequest(
   }
 }
 
+async function handleAppearanceRequest(
+  request: Request,
+  authService: AuthService | undefined,
+): Promise<Response> {
+  if (!authService) {
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for profiles" } },
+      503,
+    );
+  }
+
+  const user = await authService.verifyToken(readBearerToken(request) ?? "");
+
+  if (!user) {
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before editing your character" } },
+      401,
+    );
+  }
+
+  if (request.method === "GET") {
+    return authJson({ appearance: user.appearance }, 200);
+  }
+
+  if (request.method !== "PUT") {
+    return authJson({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } }, 405);
+  }
+
+  try {
+    const body = (await request.json()) as { appearance?: unknown };
+    const parsed = avatarAppearanceSchema.safeParse(body.appearance);
+
+    if (!parsed.success) {
+      return authJson(
+        { error: { code: "INVALID_APPEARANCE", message: "Invalid character appearance" } },
+        400,
+      );
+    }
+
+    const updated = await authService.updateAppearance(user.id, parsed.data);
+    return authJson({ appearance: updated.appearance }, 200);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return authJson({ error: { code: error.code, message: error.message } }, authStatus(error));
+    }
+
+    return authJson(
+      { error: { code: "INVALID_APPEARANCE", message: "Invalid character appearance" } },
+      400,
+    );
+  }
+}
+
 function authStatus(error: AuthError): number {
   if (error.code === "USERNAME_TAKEN") {
     return 409;
@@ -157,7 +216,17 @@ function authStatus(error: AuthError): number {
     return 401;
   }
 
+  if (error.code === "USER_NOT_FOUND") {
+    return 404;
+  }
+
   return 400;
+}
+
+function readBearerToken(request: Request): string | undefined {
+  const authorization = request.headers.get("authorization");
+  const [scheme, token] = authorization?.split(" ") ?? [];
+  return scheme?.toLocaleLowerCase("en-US") === "bearer" ? token : undefined;
 }
 
 function authJson(body: unknown, status: number): Response {
@@ -166,8 +235,8 @@ function authJson(body: unknown, status: number): Response {
 
 function corsHeaders(): Record<string, string> {
   return {
-    "access-control-allow-headers": "content-type",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "authorization,content-type",
+    "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
     "access-control-allow-origin": "*",
   };
 }

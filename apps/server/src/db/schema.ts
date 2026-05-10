@@ -1,4 +1,5 @@
 import type { RoomLayout } from "@tilezo/engine";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -6,6 +7,10 @@ export const users = pgTable("users", {
   username: text("username").notNull(),
   usernameKey: text("username_key").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  appearance: jsonb("appearance")
+    .$type<AvatarAppearance>()
+    .notNull()
+    .default(DEFAULT_AVATAR_APPEARANCE),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

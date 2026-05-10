@@ -1,5 +1,5 @@
 import { screenToTile, type TilePosition } from "@tilezo/engine";
-import type { RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol";
+import type { AvatarAppearance, RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol";
 import { type Application, Container } from "pixi.js";
 import { Avatar } from "./Avatar";
 import { TileMap } from "./TileMap";
@@ -29,7 +29,7 @@ export class RoomScene {
     this.avatars.clear();
 
     for (const user of snapshot.users) {
-      this.addAvatar(user.id, user.username, user.position);
+      this.addAvatar(user.id, user.username, user.position, user.appearance);
     }
   }
 
@@ -39,13 +39,21 @@ export class RoomScene {
         this.loadSnapshot(message);
         break;
       case "user.joined":
-        this.addAvatar(message.user.id, message.user.username, message.user.position);
+        this.addAvatar(
+          message.user.id,
+          message.user.username,
+          message.user.position,
+          message.user.appearance,
+        );
         break;
       case "user.left":
         this.removeAvatar(message.userId);
         break;
       case "avatar.moved":
         this.avatars.get(message.userId)?.setPath(message.path);
+        break;
+      case "avatar.appearance.updated":
+        this.avatars.get(message.userId)?.setAppearance(message.appearance);
         break;
     }
   }
@@ -60,9 +68,14 @@ export class RoomScene {
     this.centerWorld();
   }
 
-  private addAvatar(userId: string, username: string, position: TilePosition): void {
+  private addAvatar(
+    userId: string,
+    username: string,
+    position: TilePosition,
+    appearance: AvatarAppearance,
+  ): void {
     this.removeAvatar(userId);
-    const avatar = new Avatar(userId, username, position);
+    const avatar = new Avatar(userId, username, position, appearance);
     this.avatars.set(userId, avatar);
     this.avatarLayer.addChild(avatar.view);
   }

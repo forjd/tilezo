@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ServerMessage } from "@tilezo/protocol";
+import { DEFAULT_AVATAR_APPEARANCE, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import { RoomManager } from "../rooms/RoomManager";
 import { handleClose, handleMessage } from "./handleMessage";
@@ -36,7 +36,12 @@ describe("handleMessage", () => {
     expect(ws.unsubscribed).toEqual(["room:lobby"]);
     expect(rooms.get("lobby")).toBeUndefined();
     expect(rooms.get("studio")?.getUsers()).toEqual([
-      { id: "user_db_1", username: "Dan", position: { x: 2, y: 2 } },
+      {
+        id: "user_db_1",
+        username: "Dan",
+        position: { x: 2, y: 2 },
+        appearance: DEFAULT_AVATAR_APPEARANCE,
+      },
     ]);
     expect(published).toContainEqual({
       topic: "room:lobby",
@@ -133,6 +138,63 @@ describe("handleMessage", () => {
       text: "hello",
     });
     expect(ws.sent).toEqual([{ type: "pong", sentAt: "2026-05-10T00:00:00.000Z" }]);
+  });
+
+  test("includes appearance in room snapshots and broadcasts updates", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      appearance: { ...DEFAULT_AVATAR_APPEARANCE, shirtColor: "#2f5f7f" },
+    });
+    const published: { topic: string; message: ServerMessage }[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish(topic, message) {
+        published.push({ topic, message });
+      },
+    });
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "avatar.appearance.update",
+        appearance: { ...DEFAULT_AVATAR_APPEARANCE, hair: "side-part", hairColor: "#8b4a24" },
+      }),
+      {
+        rooms,
+        publish(topic, message) {
+          published.push({ topic, message });
+        },
+      },
+    );
+
+    expect(ws.sent[0]).toMatchObject({
+      type: "room.snapshot",
+      users: [
+        {
+          id: "user_db_1",
+          appearance: { ...DEFAULT_AVATAR_APPEARANCE, shirtColor: "#2f5f7f" },
+        },
+      ],
+    });
+    expect(ws.data.appearance).toEqual({
+      ...DEFAULT_AVATAR_APPEARANCE,
+      hair: "side-part",
+      hairColor: "#8b4a24",
+    });
+    expect(published).toContainEqual({
+      topic: "room:lobby",
+      message: {
+        type: "avatar.appearance.updated",
+        userId: "user_db_1",
+        appearance: {
+          ...DEFAULT_AVATAR_APPEARANCE,
+          hair: "side-part",
+          hairColor: "#8b4a24",
+        },
+      },
+    });
   });
 });
 

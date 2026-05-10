@@ -109,7 +109,24 @@ select {
   white-space: nowrap;
 }
 
-.login-panel {
+.edit-character-button {
+  height: 34px;
+  padding: 0 12px;
+  border: 2px solid #1d2324;
+  border-radius: 5px;
+  background: #eeeade;
+  color: #2c7794;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  pointer-events: auto;
+  box-shadow:
+    inset 0 0 0 2px #ffffff,
+    2px 2px 0 rgba(0, 0, 0, 0.22);
+}
+
+.login-panel,
+.character-panel {
   position: absolute;
   top: 48%;
   left: 50%;
@@ -126,6 +143,17 @@ select {
   transform: translate(-50%, -50%);
 }
 
+.character-panel {
+  top: 52%;
+  display: grid;
+  width: min(940px, calc(100vw - 40px));
+  max-height: calc(100vh - 56px);
+  grid-template-columns: 280px minmax(0, 1fr);
+  column-gap: 22px;
+  overflow: auto;
+  padding: 0 22px 22px;
+}
+
 .login-header {
   margin: 0 -18px 14px;
   padding: 14px 18px 15px;
@@ -133,7 +161,14 @@ select {
   background: linear-gradient(180deg, #4ba4bd 0%, #2c7794 100%);
 }
 
-.login-panel h1 {
+.character-panel .login-header {
+  grid-column: 1 / -1;
+  margin: 0 -22px 18px;
+  padding: 18px 38px 19px;
+}
+
+.login-panel h1,
+.character-panel h1 {
   margin: 0;
   color: #ffffff;
   font-size: 22px;
@@ -141,7 +176,12 @@ select {
   text-shadow: 1px 1px 0 #17485a;
 }
 
-.login-panel p {
+.character-panel h1 {
+  font-size: 30px;
+}
+
+.login-panel p,
+.character-panel p {
   margin: 5px 0 0;
   color: rgba(255, 255, 255, 0.88);
   font-size: 12px;
@@ -166,6 +206,252 @@ select {
 .login-panel form {
   display: grid;
   gap: 12px;
+}
+
+.character-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 10px 14px;
+}
+
+.character-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-self: start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px;
+  border: 2px solid #6f6a60;
+  border-radius: 6px;
+  background: #d9d3c5;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #aca697;
+  color: #5f5a51;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.character-preview-views {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.character-preview-avatar {
+  display: grid;
+  min-height: 102px;
+  grid-template-columns: minmax(0, 1fr) 52px;
+  grid-template-rows: 1fr;
+  align-items: end;
+  justify-items: center;
+  padding: 8px 10px 6px;
+  border: 2px solid #6f6a60;
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, rgba(111, 106, 96, 0.16) 1px, transparent 1px) 0 0 / 12px 12px,
+    linear-gradient(rgba(111, 106, 96, 0.16) 1px, transparent 1px) 0 0 / 12px 12px,
+    #fbfaf0;
+  box-shadow: inset 1px 1px 0 #ffffff;
+}
+
+.character-preview-avatar span {
+  align-self: center;
+  justify-self: end;
+  color: #5f5a51;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.character-preview-body {
+  position: relative;
+  width: 42px;
+  height: 78px;
+  margin-bottom: 6px;
+  image-rendering: pixelated;
+}
+
+.character-preview-body::before,
+.character-preview-body::after {
+  position: absolute;
+  content: "";
+}
+
+.character-preview-body.view-side {
+  width: 36px;
+}
+
+.character-preview-body.view-side::before {
+  top: 2px;
+  left: 8px;
+  width: 18px;
+  height: 22px;
+  border-radius: 9px 11px 8px 8px;
+  background:
+    radial-gradient(circle at 72% 42%, #1d2324 0 1.5px, transparent 1.75px),
+    linear-gradient(90deg, var(--hair-color) 0 22%, transparent 22%), var(--skin-tone);
+  box-shadow:
+    1px -5px 0 1px var(--hair-color),
+    -3px 1px 0 0 var(--hair-color),
+    9px 7px 0 -5px var(--skin-tone),
+    8px 8px 0 -7px #9d5f46;
+}
+
+.character-preview-body.view-side::after {
+  top: 32px;
+  left: 8px;
+  width: 18px;
+  height: 22px;
+  border-radius: 8px 9px 7px 7px;
+  background: var(--shirt-color);
+  box-shadow:
+    -5px 1px 0 -2px var(--skin-tone),
+    7px 1px 0 -3px var(--skin-tone),
+    1px 22px 0 -1px var(--pants-color),
+    8px 23px 0 -4px var(--pants-color),
+    0 35px 0 -3px var(--shoes-color),
+    9px 36px 0 -5px var(--shoes-color);
+}
+
+.character-preview-body.view-back::before {
+  box-shadow:
+    0 -5px 0 1px var(--hair-color),
+    -5px -1px 0 -1px var(--hair-color),
+    5px -1px 0 -1px var(--hair-color),
+    0 28px 0 8px var(--shirt-color),
+    -12px 30px 0 -3px var(--skin-tone),
+    12px 30px 0 -3px var(--skin-tone),
+    -5px 53px 0 -2px var(--pants-color),
+    5px 53px 0 -2px var(--pants-color),
+    -7px 66px 0 -3px var(--shoes-color),
+    7px 66px 0 -3px var(--shoes-color);
+}
+
+.character-preview-body::before {
+  top: 2px;
+  left: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px 8px 7px 7px;
+  background: var(--skin-tone);
+  box-shadow:
+    0 -5px 0 1px var(--hair-color),
+    -5px -1px 0 -1px var(--hair-color),
+    5px -1px 0 -1px var(--hair-color),
+    -4px 8px 0 -3px #1d2324,
+    4px 8px 0 -3px #1d2324,
+    0 14px 0 -8px #9d5f46,
+    0 28px 0 8px var(--shirt-color),
+    -12px 30px 0 -3px var(--skin-tone),
+    12px 30px 0 -3px var(--skin-tone),
+    -5px 53px 0 -2px var(--pants-color),
+    5px 53px 0 -2px var(--pants-color),
+    -7px 66px 0 -3px var(--shoes-color),
+    7px 66px 0 -3px var(--shoes-color);
+}
+
+.character-preview-body::after {
+  top: 33px;
+  left: 12px;
+  width: 18px;
+  height: 22px;
+  border-radius: 5px 5px 3px 3px;
+  background: var(--shirt-color);
+}
+
+.character-preview-body.hair-side-part::before {
+  box-shadow:
+    -3px -6px 0 2px var(--hair-color),
+    -9px -1px 0 -2px var(--hair-color),
+    8px 1px 0 -3px var(--hair-color),
+    -4px 8px 0 -3px #1d2324,
+    4px 8px 0 -3px #1d2324,
+    0 14px 0 -8px #9d5f46,
+    0 28px 0 8px var(--shirt-color),
+    -12px 30px 0 -3px var(--skin-tone),
+    12px 30px 0 -3px var(--skin-tone),
+    -5px 53px 0 -2px var(--pants-color),
+    5px 53px 0 -2px var(--pants-color),
+    -7px 66px 0 -3px var(--shoes-color),
+    7px 66px 0 -3px var(--shoes-color);
+}
+
+.character-preview-body.view-side.hair-side-part::before {
+  background:
+    radial-gradient(circle at 72% 42%, #1d2324 0 1.5px, transparent 1.75px),
+    linear-gradient(90deg, var(--hair-color) 0 20%, transparent 20%), var(--skin-tone);
+  box-shadow:
+    -1px -6px 0 2px var(--hair-color),
+    -5px 2px 0 -1px var(--hair-color),
+    4px -2px 0 -2px var(--hair-color),
+    9px 7px 0 -5px var(--skin-tone),
+    8px 8px 0 -7px #9d5f46;
+}
+
+.character-preview-body.view-back.hair-side-part::before {
+  box-shadow:
+    -3px -6px 0 2px var(--hair-color),
+    -9px -1px 0 -2px var(--hair-color),
+    8px 1px 0 -3px var(--hair-color),
+    0 28px 0 8px var(--shirt-color),
+    -12px 30px 0 -3px var(--skin-tone),
+    12px 30px 0 -3px var(--skin-tone),
+    -5px 53px 0 -2px var(--pants-color),
+    5px 53px 0 -2px var(--pants-color),
+    -7px 66px 0 -3px var(--shoes-color),
+    7px 66px 0 -3px var(--shoes-color);
+}
+
+.character-preview-body.hair-bob::before {
+  box-shadow:
+    0 -4px 0 2px var(--hair-color),
+    -8px 5px 0 -2px var(--hair-color),
+    8px 5px 0 -2px var(--hair-color),
+    -4px 8px 0 -3px #1d2324,
+    4px 8px 0 -3px #1d2324,
+    0 14px 0 -8px #9d5f46,
+    0 28px 0 8px var(--shirt-color),
+    -12px 30px 0 -3px var(--skin-tone),
+    12px 30px 0 -3px var(--skin-tone),
+    -5px 53px 0 -2px var(--pants-color),
+    5px 53px 0 -2px var(--pants-color),
+    -7px 66px 0 -3px var(--shoes-color),
+    7px 66px 0 -3px var(--shoes-color);
+}
+
+.character-preview-body.view-side.hair-bob::before {
+  background:
+    radial-gradient(circle at 72% 42%, #1d2324 0 1.5px, transparent 1.75px),
+    linear-gradient(90deg, var(--hair-color) 0 28%, transparent 28%), var(--skin-tone);
+  box-shadow:
+    0 -4px 0 2px var(--hair-color),
+    -4px 7px 0 -1px var(--hair-color),
+    3px 8px 0 -2px var(--hair-color),
+    9px 7px 0 -5px var(--skin-tone),
+    8px 8px 0 -7px #9d5f46;
+}
+
+.character-preview-body.view-back.hair-bob::before {
+  box-shadow:
+    0 -4px 0 2px var(--hair-color),
+    -8px 5px 0 -2px var(--hair-color),
+    8px 5px 0 -2px var(--hair-color),
+    0 28px 0 8px var(--shirt-color),
+    -12px 30px 0 -3px var(--skin-tone),
+    12px 30px 0 -3px var(--skin-tone),
+    -5px 53px 0 -2px var(--pants-color),
+    5px 53px 0 -2px var(--pants-color),
+    -7px 66px 0 -3px var(--shoes-color),
+    7px 66px 0 -3px var(--shoes-color);
+}
+
+.character-preview p {
+  margin: 0;
+  color: #5f5a51;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .mode-toggle {
@@ -211,6 +497,7 @@ select {
 }
 
 .field input,
+.field select,
 .chat-input {
   width: 100%;
   border: 2px solid #6f6a60;
@@ -222,12 +509,23 @@ select {
 }
 
 .field input {
-  height: 42px;
-  padding: 0 12px;
-  font-size: 14px;
+  height: 40px;
+  padding: 0 11px;
+  font-size: 13px;
+}
+
+.field select {
+  height: 40px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.field input[type="color"] {
+  padding: 5px 8px;
 }
 
 .field input:focus,
+.field select:focus,
 .chat-input:focus {
   border-color: #2f7f9d;
   box-shadow:
@@ -236,7 +534,7 @@ select {
 }
 
 .primary-button {
-  height: 44px;
+  height: 42px;
   margin-top: 2px;
   border: 2px solid #463816;
   border-radius: 5px;
@@ -262,6 +560,27 @@ select {
     inset 1px 1px 0 #9f6522,
     inset -1px -1px 0 #fff3b0,
     1px 1px 0 rgba(0, 0, 0, 0.22);
+}
+
+.secondary-button {
+  height: 42px;
+  border: 2px solid #6f6a60;
+  border-radius: 5px;
+  background: #fbfaf0;
+  color: #4f493f;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    2px 2px 0 rgba(0, 0, 0, 0.14);
+}
+
+.character-actions {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .chat-panel {
@@ -301,6 +620,42 @@ select {
 
   .login-panel {
     top: 52%;
+  }
+
+  .character-panel {
+    top: 52%;
+    width: min(520px, calc(100vw - 24px));
+    max-height: calc(100vh - 32px);
+    grid-template-columns: 1fr;
+    padding: 0 14px 14px;
+    overflow: auto;
+  }
+
+  .character-panel .login-header {
+    margin: 0 -14px 14px;
+    padding: 14px 18px 15px;
+  }
+
+  .character-panel h1 {
+    font-size: 22px;
+  }
+
+  .character-preview-views {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .character-preview-avatar {
+    min-height: 112px;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .character-preview-avatar span {
+    justify-self: center;
+  }
+
+  .character-form {
+    grid-template-columns: 1fr;
   }
 }
 

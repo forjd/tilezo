@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RoomSnapshotMessage } from "@tilezo/protocol";
+import { DEFAULT_AVATAR_APPEARANCE, type RoomSnapshotMessage } from "@tilezo/protocol";
 import { type Application, Container } from "pixi.js";
 import { RoomScene } from "./RoomScene";
 
@@ -8,10 +8,10 @@ describe("RoomScene", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});
 
-    scene.loadSnapshot(snapshot([{ id: "user_1", username: "Dan", position: { x: 0, y: 0 } }]));
+    scene.loadSnapshot(snapshot([user("user_1", "Dan", { x: 0, y: 0 })]));
     scene.handleServerMessage({
       type: "user.joined",
-      user: { id: "user_2", username: "Ada", position: { x: 1, y: 0 } },
+      user: user("user_2", "Ada", { x: 1, y: 0 }),
     });
     scene.handleServerMessage({ type: "user.left", userId: "user_1" });
 
@@ -23,9 +23,7 @@ describe("RoomScene", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});
 
-    scene.handleServerMessage(
-      snapshot([{ id: "user_1", username: "Dan", position: { x: 0, y: 0 } }]),
-    );
+    scene.handleServerMessage(snapshot([user("user_1", "Dan", { x: 0, y: 0 })]));
     scene.handleServerMessage({
       type: "avatar.moved",
       userId: "user_1",
@@ -79,6 +77,19 @@ function snapshot(users: RoomSnapshotMessage["users"]): RoomSnapshotMessage {
       { x: 0, y: 0, z: 0, walkable: true },
       { x: 1, y: 0, z: 0, walkable: false },
     ],
+  };
+}
+
+function user(
+  id: string,
+  username: string,
+  position: RoomSnapshotMessage["users"][number]["position"],
+): RoomSnapshotMessage["users"][number] {
+  return {
+    id,
+    username,
+    position,
+    appearance: DEFAULT_AVATAR_APPEARANCE,
   };
 }
 

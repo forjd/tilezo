@@ -1,3 +1,4 @@
+import type { AvatarAppearance } from "@tilezo/protocol";
 import { Application } from "pixi.js";
 import type { ChatPanel } from "../ui/ChatPanel";
 import { NetClient } from "./NetClient";
@@ -65,6 +66,10 @@ export class Game {
     });
 
     globalThis.addEventListener("resize", () => this.scene?.resize());
+  }
+
+  updateAppearance(appearance: AvatarAppearance): void {
+    this.net.send({ type: "avatar.appearance.update", appearance });
   }
 
   stop(): void {

@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { eq } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
 import { users } from "../db/schema";
@@ -7,6 +8,7 @@ import { createId } from "../util/ids";
 export type AuthUser = {
   id: string;
   username: string;
+  appearance: AvatarAppearance;
 };
 
 export type StoredAuthUser = AuthUser & {
@@ -27,6 +29,10 @@ export type AuthStore = {
   }): Promise<StoredAuthUser>;
   findUserByUsernameKey(usernameKey: string): Promise<StoredAuthUser | undefined>;
   findUserById(id: string): Promise<StoredAuthUser | undefined>;
+  updateUserAppearance(
+    id: string,
+    appearance: AvatarAppearance,
+  ): Promise<StoredAuthUser | undefined>;
 };
 
 type AuthOptions = {
@@ -86,6 +92,16 @@ export class AuthService {
     return user ? toAuthUser(user) : undefined;
   }
 
+  async updateAppearance(userId: string, appearance: AvatarAppearance): Promise<AuthUser> {
+    const user = await this.store.updateUserAppearance(userId, appearance);
+
+    if (!user) {
+      throw new AuthError("USER_NOT_FOUND", "User not found");
+    }
+
+    return toAuthUser(user);
+  }
+
   private createSession(user: AuthUser): AuthSession {
     const expiresAt = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
     const payload = `${user.id}.${expiresAt}`;
@@ -131,6 +147,7 @@ export class DrizzleAuthStore implements AuthStore {
       .insert(users)
       .values({
         id: createId("user"),
+        appearance: DEFAULT_AVATAR_APPEARANCE,
         ...user,
       })
       .returning({
@@ -138,6 +155,7 @@ export class DrizzleAuthStore implements AuthStore {
         username: users.username,
         usernameKey: users.usernameKey,
         passwordHash: users.passwordHash,
+        appearance: users.appearance,
       });
 
     if (!created) {
@@ -154,6 +172,7 @@ export class DrizzleAuthStore implements AuthStore {
         username: users.username,
         usernameKey: users.usernameKey,
         passwordHash: users.passwordHash,
+        appearance: users.appearance,
       })
       .from(users)
       .where(eq(users.usernameKey, usernameKey));
@@ -167,9 +186,32 @@ export class DrizzleAuthStore implements AuthStore {
         username: users.username,
         usernameKey: users.usernameKey,
         passwordHash: users.passwordHash,
+        appearance: users.appearance,
       })
       .from(users)
       .where(eq(users.id, id));
+    return user;
+  }
+
+  async updateUserAppearance(
+    id: string,
+    appearance: AvatarAppearance,
+  ): Promise<StoredAuthUser | undefined> {
+    const [user] = await this.db
+      .update(users)
+      .set({
+        appearance,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning({
+        id: users.id,
+        username: users.username,
+        usernameKey: users.usernameKey,
+        passwordHash: users.passwordHash,
+        appearance: users.appearance,
+      });
+
     return user;
   }
 }
@@ -188,7 +230,11 @@ export function normalizeUsername(username: string): string {
 }
 
 function toAuthUser(user: AuthUser): AuthUser {
-  return { id: user.id, username: user.username };
+  return {
+    id: user.id,
+    username: user.username,
+    appearance: { ...user.appearance },
+  };
 }
 
 function safeEqual(value: string, expected: string): boolean {

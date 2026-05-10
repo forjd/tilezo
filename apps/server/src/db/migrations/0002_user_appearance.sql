@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "appearance" jsonb DEFAULT '{"hair":"short","hairColor":"#7a4424","skinTone":"#f2c097","shirt":"crew","shirtColor":"#2f5f7f","pants":"straight","pantsColor":"#d2c294","shoes":"boots","shoesColor":"#5b4218"}'::jsonb NOT NULL;

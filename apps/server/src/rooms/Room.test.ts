@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRectRoomLayout } from "@tilezo/engine";
+import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { Room } from "./Room";
 
 describe("Room", () => {
@@ -13,6 +14,7 @@ describe("Room", () => {
         id: "user_1",
         username: "Dan",
         position: { x: 1, y: 1 },
+        appearance: DEFAULT_AVATAR_APPEARANCE,
       },
     ]);
   });

@@ -1,4 +1,5 @@
 import type { RoomTile, TilePosition } from "@tilezo/engine";
+import type { AvatarAppearance } from "./appearance";
 
 export type RoomJoinMessage = {
   type: "room.join";
@@ -15,6 +16,11 @@ export type ChatSayMessage = {
   text: string;
 };
 
+export type AvatarAppearanceUpdateMessage = {
+  type: "avatar.appearance.update";
+  appearance: AvatarAppearance;
+};
+
 export type PingMessage = {
   type: "ping";
   sentAt: string;
@@ -24,6 +30,7 @@ export type ClientMessage =
   | RoomJoinMessage
   | AvatarMoveRequestMessage
   | ChatSayMessage
+  | AvatarAppearanceUpdateMessage
   | PingMessage;
 
 export type ConnectedMessage = {
@@ -35,6 +42,7 @@ export type RoomUserSnapshot = {
   id: string;
   username: string;
   position: TilePosition;
+  appearance: AvatarAppearance;
 };
 
 export type RoomSnapshotMessage = {
@@ -58,6 +66,12 @@ export type AvatarMovedMessage = {
   type: "avatar.moved";
   userId: string;
   path: TilePosition[];
+};
+
+export type AvatarAppearanceUpdatedMessage = {
+  type: "avatar.appearance.updated";
+  userId: string;
+  appearance: AvatarAppearance;
 };
 
 export type ChatMessage = {
@@ -85,6 +99,7 @@ export type ServerMessage =
   | UserJoinedMessage
   | UserLeftMessage
   | AvatarMovedMessage
+  | AvatarAppearanceUpdatedMessage
   | ChatMessage
   | PongMessage
   | ErrorMessage;

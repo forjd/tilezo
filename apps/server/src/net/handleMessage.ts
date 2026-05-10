@@ -1,4 +1,8 @@
-import { parseRawClientMessage, type ServerMessage } from "@tilezo/protocol";
+import {
+  DEFAULT_AVATAR_APPEARANCE,
+  parseRawClientMessage,
+  type ServerMessage,
+} from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import type { RoomManager } from "../rooms/RoomManager";
@@ -46,6 +50,7 @@ export function handleMessage(
       const user = room.join({
         id: ws.data.userId,
         username: ws.data.username,
+        appearance: ws.data.appearance ?? DEFAULT_AVATAR_APPEARANCE,
       });
 
       ws.data.roomId = room.id;
@@ -82,6 +87,28 @@ export function handleMessage(
         type: "avatar.moved",
         userId: ws.data.userId,
         path,
+      });
+      break;
+    }
+
+    case "avatar.appearance.update": {
+      const room = getJoinedRoom(ws, context.rooms);
+      ws.data.appearance = parsed.value.appearance;
+
+      if (!room) {
+        sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
+        return;
+      }
+
+      if (!room.updateAppearance(ws.data.userId, parsed.value.appearance)) {
+        sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
+        return;
+      }
+
+      context.publish(roomTopic(room.id), {
+        type: "avatar.appearance.updated",
+        userId: ws.data.userId,
+        appearance: parsed.value.appearance,
       });
       break;
     }

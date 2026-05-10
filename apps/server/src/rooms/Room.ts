@@ -1,4 +1,5 @@
 import { findPath, type RoomLayout, TileGrid, type TilePosition } from "@tilezo/engine";
+import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import type { RoomSnapshot, RoomUser } from "./types";
 
 const MOVEMENT_MILLISECONDS_PER_TILE = 360;
@@ -25,9 +26,12 @@ export class Room {
     this.grid = new TileGrid(layout);
   }
 
-  join(user: Omit<RoomUser, "position">): RoomUser {
+  join(
+    user: Omit<RoomUser, "position" | "appearance"> & Partial<Pick<RoomUser, "appearance">>,
+  ): RoomUser {
     const roomUser = {
       ...user,
+      appearance: user.appearance ?? DEFAULT_AVATAR_APPEARANCE,
       position: this.getSpawnPosition(),
     };
 
@@ -66,6 +70,17 @@ export class Room {
     return path;
   }
 
+  updateAppearance(userId: string, appearance: RoomUser["appearance"]): boolean {
+    const user = this.users.get(userId);
+
+    if (!user) {
+      return false;
+    }
+
+    user.appearance = { ...appearance };
+    return true;
+  }
+
   getSnapshot(): RoomSnapshot {
     return {
       roomId: this.id,
@@ -79,6 +94,7 @@ export class Room {
       id: user.id,
       username: user.username,
       position: this.resolveUserPosition(user.id, user),
+      appearance: { ...user.appearance },
     }));
   }
 
