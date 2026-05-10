@@ -3,6 +3,11 @@ import { Container, Graphics, Text } from "pixi.js";
 
 const AVATAR_COLORS = [0x65d0ff, 0xffc857, 0x93e088, 0xff7b9c, 0xb892ff, 0xff9f43];
 
+type ScreenPosition = {
+  x: number;
+  y: number;
+};
+
 export class Avatar {
   readonly view = new Container();
   readonly userId: string;
@@ -13,15 +18,17 @@ export class Avatar {
   private readonly label: Text;
   private path: TilePosition[] = [];
   private from: TilePosition;
+  private fromScreen: ScreenPosition;
   private to?: TilePosition;
   private progress = 0;
-  private readonly secondsPerTile = 0.18;
+  private readonly secondsPerTile = 0.36;
 
   constructor(userId: string, username: string, position: TilePosition) {
     this.userId = userId;
     this.username = username;
     this.position = { ...position };
     this.from = { ...position };
+    this.fromScreen = tileToScreen(position.x, position.y);
 
     this.label = new Text({
       text: username,
@@ -55,7 +62,34 @@ export class Avatar {
       return;
     }
 
-    this.path = sameTile(first, this.position) ? path.slice(1) : [...path];
+    if (this.to && sameTile(first, this.to)) {
+      this.path = path.slice(1);
+      return;
+    }
+
+    const second = path[1];
+
+    if (this.to && sameTile(first, this.position) && second && sameTile(second, this.to)) {
+      this.path = path.slice(2);
+      return;
+    }
+
+    const nextPath = sameTile(first, this.position) ? path.slice(1) : [...path];
+
+    if (this.to) {
+      const next = nextPath.shift();
+
+      if (next) {
+        this.path = nextPath;
+        this.from = { ...this.position };
+        this.fromScreen = { x: this.view.x, y: this.view.y };
+        this.to = next;
+        this.progress = 0;
+        return;
+      }
+    }
+
+    this.path = nextPath;
     this.to = undefined;
     this.progress = 0;
   }
@@ -69,16 +103,16 @@ export class Avatar {
       }
 
       this.from = { ...this.position };
+      this.fromScreen = tileToScreen(this.from.x, this.from.y);
       this.to = next;
       this.progress = 0;
     }
 
     this.progress = Math.min(1, this.progress + deltaSeconds / this.secondsPerTile);
-    const screenFrom = tileToScreen(this.from.x, this.from.y);
     const screenTo = tileToScreen(this.to.x, this.to.y);
 
-    this.view.x = lerp(screenFrom.x, screenTo.x, this.progress);
-    this.view.y = lerp(screenFrom.y, screenTo.y, this.progress);
+    this.view.x = lerp(this.fromScreen.x, screenTo.x, this.progress);
+    this.view.y = lerp(this.fromScreen.y, screenTo.y, this.progress);
 
     if (this.progress >= 1) {
       this.position = { ...this.to };

@@ -51,7 +51,7 @@ The server:
 1. Confirms the socket is in a room.
 2. Looks up the user's current authoritative tile.
 3. Rejects out-of-bounds or blocked targets.
-4. Calculates a cardinal path with shared pathfinding logic.
+4. Calculates a path with shared A* pathfinding logic.
 5. Updates the authoritative user position.
 6. Broadcasts `avatar.moved` with the accepted path.
 
@@ -79,6 +79,6 @@ When a WebSocket closes, the server:
 ## Current Tradeoffs
 
 - Occupied-user tile blocking is not implemented.
-- Diagonal movement is intentionally not implemented.
+- Diagonal movement is supported when the diagonal tile is walkable and the move does not cut between two blocked adjacent tiles.
 - High-frequency position persistence is intentionally not implemented.
 - Room state is in memory and resets when the server restarts.

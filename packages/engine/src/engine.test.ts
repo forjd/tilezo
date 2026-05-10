@@ -25,15 +25,23 @@ describe("grid and pathfinding", () => {
     expect(grid.isWalkable({ x: 10, y: 10 })).toBe(false);
   });
 
-  test("pathfinding returns a route for valid movement", () => {
+  test("pathfinding returns a diagonal route for valid movement", () => {
     const layout = createRectRoomLayout("lobby", "Lobby", 4, 4, { x: 0, y: 0 });
 
     expect(findPath(layout, { x: 0, y: 0 }, { x: 2, y: 1 })).toEqual([
       { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 2, y: 0 },
+      { x: 1, y: 1 },
       { x: 2, y: 1 },
     ]);
+  });
+
+  test("pathfinding does not cut diagonally between blocked tiles", () => {
+    const layout = createRectRoomLayout("lobby", "Lobby", 2, 2, { x: 0, y: 0 }, [
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+    ]);
+
+    expect(findPath(layout, { x: 0, y: 0 }, { x: 1, y: 1 })).toBeNull();
   });
 
   test("pathfinding rejects blocked routes", () => {

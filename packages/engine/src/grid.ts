@@ -62,8 +62,30 @@ export class TileGrid {
       { x: position.x - 1, y: position.y },
       { x: position.x, y: position.y + 1 },
       { x: position.x, y: position.y - 1 },
+      { x: position.x + 1, y: position.y + 1 },
+      { x: position.x + 1, y: position.y - 1 },
+      { x: position.x - 1, y: position.y + 1 },
+      { x: position.x - 1, y: position.y - 1 },
     ];
 
-    return candidates.filter((candidate) => this.isWalkable(candidate));
+    return candidates.filter((candidate) => this.isReachableNeighbor(position, candidate));
+  }
+
+  private isReachableNeighbor(position: TilePosition, candidate: TilePosition): boolean {
+    if (!this.isWalkable(candidate)) {
+      return false;
+    }
+
+    const deltaX = candidate.x - position.x;
+    const deltaY = candidate.y - position.y;
+
+    if (Math.abs(deltaX) !== 1 || Math.abs(deltaY) !== 1) {
+      return true;
+    }
+
+    return (
+      this.isWalkable({ x: position.x + deltaX, y: position.y }) &&
+      this.isWalkable({ x: position.x, y: position.y + deltaY })
+    );
   }
 }

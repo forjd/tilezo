@@ -72,7 +72,7 @@ Responsibilities:
 - Tile and room layout types.
 - Isometric coordinate conversion.
 - Grid walkability.
-- Cardinal tile pathfinding.
+- A* tile pathfinding with cardinal and diagonal movement.
 
 This package must stay free of browser and server runtime dependencies.
 
