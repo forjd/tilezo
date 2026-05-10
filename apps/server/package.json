@@ -1,0 +1,17 @@
+{
+  "name": "@habbo/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@habbo/engine": "workspace:*",
+    "@habbo/protocol": "workspace:*"
+  },
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  }
+}

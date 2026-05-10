@@ -1,0 +1,149 @@
+import { parseRawClientMessage, type ServerMessage } from "@habbo/protocol";
+import type { ServerWebSocket } from "bun";
+import type { RoomManager } from "../rooms/RoomManager";
+import { encodeServerMessage } from "../util/safeJson";
+import type { SocketData } from "./socketTypes";
+
+type Context = {
+  rooms: RoomManager;
+  publish: (topic: string, message: ServerMessage) => void;
+};
+
+export function handleMessage(
+  ws: ServerWebSocket<SocketData>,
+  raw: string | Buffer,
+  context: Context,
+) {
+  const parsed = parseRawClientMessage(raw);
+
+  if (!parsed.ok) {
+    sendError(ws, "INVALID_MESSAGE", parsed.error);
+    return;
+  }
+
+  switch (parsed.value.type) {
+    case "room.join": {
+      const previousRoomId = ws.data.roomId;
+
+      if (previousRoomId) {
+        context.rooms.get(previousRoomId)?.leave(ws.data.userId);
+        ws.unsubscribe(roomTopic(previousRoomId));
+        context.publish(roomTopic(previousRoomId), {
+          type: "user.left",
+          userId: ws.data.userId,
+        });
+        context.rooms.removeIfEmpty(previousRoomId);
+      }
+
+      const room = context.rooms.getOrCreate(parsed.value.roomId);
+      const user = room.join({
+        id: ws.data.userId,
+        username: parsed.value.username,
+      });
+
+      ws.data.username = user.username;
+      ws.data.roomId = room.id;
+      ws.subscribe(roomTopic(room.id));
+      send(ws, {
+        type: "room.snapshot",
+        roomId: room.id,
+        users: room.getUsers(),
+        tiles: room.getSnapshot().tiles,
+      });
+      context.publish(roomTopic(room.id), {
+        type: "user.joined",
+        user,
+      });
+      break;
+    }
+
+    case "avatar.move.request": {
+      const room = getJoinedRoom(ws, context.rooms);
+
+      if (!room) {
+        sendError(ws, "NOT_IN_ROOM", "Join a room before moving");
+        return;
+      }
+
+      const path = room.moveUser(ws.data.userId, parsed.value.target);
+
+      if (!path) {
+        sendError(ws, "INVALID_TILE", "Target tile is not walkable");
+        return;
+      }
+
+      context.publish(roomTopic(room.id), {
+        type: "avatar.moved",
+        userId: ws.data.userId,
+        path,
+      });
+      break;
+    }
+
+    case "chat.say": {
+      const room = getJoinedRoom(ws, context.rooms);
+
+      if (!room || !ws.data.username) {
+        sendError(ws, "NOT_IN_ROOM", "Join a room before chatting");
+        return;
+      }
+
+      context.publish(roomTopic(room.id), {
+        type: "chat.message",
+        userId: ws.data.userId,
+        username: ws.data.username,
+        text: parsed.value.text,
+        sentAt: new Date().toISOString(),
+      });
+      break;
+    }
+
+    case "ping":
+      send(ws, {
+        type: "pong",
+        sentAt: parsed.value.sentAt,
+      });
+      break;
+  }
+}
+
+export function handleClose(
+  ws: ServerWebSocket<SocketData>,
+  rooms: RoomManager,
+  publish: Context["publish"],
+) {
+  const { roomId, userId } = ws.data;
+
+  if (!roomId) {
+    return;
+  }
+
+  const room = rooms.get(roomId);
+  room?.leave(userId);
+  ws.unsubscribe(roomTopic(roomId));
+  publish(roomTopic(roomId), {
+    type: "user.left",
+    userId,
+  });
+  rooms.removeIfEmpty(roomId);
+}
+
+function getJoinedRoom(ws: ServerWebSocket<SocketData>, rooms: RoomManager) {
+  return ws.data.roomId ? rooms.get(ws.data.roomId) : undefined;
+}
+
+function roomTopic(roomId: string): string {
+  return `room:${roomId}`;
+}
+
+function send(ws: ServerWebSocket<SocketData>, message: ServerMessage): void {
+  ws.send(encodeServerMessage(message));
+}
+
+function sendError(ws: ServerWebSocket<SocketData>, code: string, message: string): void {
+  send(ws, {
+    type: "error",
+    code,
+    message,
+  });
+}

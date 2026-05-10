@@ -1,0 +1,11 @@
+{
+  "id": "lobby",
+  "name": "Lobby",
+  "width": 10,
+  "height": 10,
+  "spawn": {
+    "x": 2,
+    "y": 2
+  },
+  "blocked": [{ "x": 4, "y": 4 }, { "x": 4, "y": 5 }, { "x": 5, "y": 4 }]
+}
