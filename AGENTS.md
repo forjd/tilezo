@@ -21,6 +21,13 @@ chore: configure biome
 - Prefer repository scripts that call `biome` instead of one-off formatter commands.
 - Keep formatting-only changes separate from behavior changes when practical.
 
+## Testing and Coverage
+
+- Use Bun test tooling and repository scripts for verification.
+- Run `bun run test:coverage` before `bun run coverage:check` when validating coverage locally, because the coverage check reads `coverage/lcov.info`.
+- Preserve the adjusted coverage gate in `scripts/check-coverage.ts`: CI requires adjusted line coverage to stay at or above `COVERAGE_THRESHOLD` and treats executable source files missing from LCOV as uncovered.
+- Do not lower the coverage threshold or exclude executable product code from coverage accounting to make CI pass. Add focused tests for real behavior instead; only exclude entrypoints, config, type-only modules, or re-export shims when they do not contain meaningful executable logic.
+
 ## Runtime and Dependencies
 
 - Use Bun-native APIs where possible.

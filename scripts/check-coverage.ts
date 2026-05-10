@@ -98,7 +98,34 @@ function listSourceFiles(directories: string[]): string[] {
     .filter((file) => file.endsWith(".ts"))
     .filter((file) => !file.endsWith(".test.ts"))
     .filter((file) => !file.endsWith(".d.ts"))
+    .filter(isCoverageTarget)
     .sort();
+}
+
+function isCoverageTarget(file: string): boolean {
+  if (
+    file.endsWith(".config.ts") ||
+    file.endsWith("/main.ts") ||
+    file.endsWith("/index.ts") ||
+    file.endsWith("/types.ts") ||
+    file.endsWith("Types.ts")
+  ) {
+    return false;
+  }
+
+  const significantLines = readFileSync(file, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(
+      (line) => line && !line.startsWith("//") && !line.startsWith("/*") && !line.startsWith("*"),
+    );
+
+  return !significantLines.every(
+    (line) =>
+      line.startsWith("import type ") ||
+      line.startsWith("export type ") ||
+      /^export \{[^}]+} from /.test(line),
+  );
 }
 
 function walk(directory: string): string[] {
