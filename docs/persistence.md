@@ -37,11 +37,7 @@ Live avatar position should remain server-authoritative in memory for now.
 }
 ```
 
-When using Docker Compose, run migrations from the server container so Drizzle uses the Compose network database URL:
-
-```sh
-docker compose exec server bun run --cwd apps/server db:migrate
-```
+When using Docker Compose, the `migrate` service runs migrations before the server starts so Drizzle uses the Compose network database URL.
 
 ## Runtime Behavior
 

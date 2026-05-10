@@ -44,17 +44,14 @@ docker compose up --build
 Compose starts:
 
 - `deps`: a one-shot Bun install that keeps the container-owned dependency volume in sync with `bun.lock`.
+- `migrate`: a one-shot Drizzle migration run after Postgres is healthy and before the server starts.
 - `client`: Bun's browser dev server on `http://localhost:3001`.
 - `server`: Bun's WebSocket/API server on `http://localhost:3000`.
 - `db`: Postgres 17 with data stored in the `postgres_data` Docker volume.
 
 The server uses `DATABASE_URL=postgres://postgres:postgres@db:5432/tilezo` inside Compose. From the host, the same database is available at `postgres://postgres:postgres@localhost:5432/tilezo`.
 
-Run migrations after the database is healthy:
-
-```sh
-docker compose exec server bun run --cwd apps/server db:migrate
-```
+Compose runs migrations automatically before starting the server.
 
 Run project checks inside the container:
 

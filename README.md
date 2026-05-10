@@ -61,11 +61,7 @@ Docker defaults:
 - WebSocket: `ws://localhost:3000/ws`
 - Postgres: `postgres://postgres:postgres@localhost:5432/tilezo` from the host, and `postgres://postgres:postgres@db:5432/tilezo` from Compose services
 
-Run database migrations after the containers are up:
-
-```sh
-docker compose exec server bun run --cwd apps/server db:migrate
-```
+Compose runs database migrations before starting the server.
 
 Run checks inside the container when you want parity with the Docker environment:
 
