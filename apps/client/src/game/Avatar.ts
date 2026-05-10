@@ -1,7 +1,7 @@
 import { type TilePosition, tileToScreen } from "@tilezo/engine";
 import { Container, Graphics, Text } from "pixi.js";
 
-const AVATAR_COLORS = [0x65d0ff, 0xffc857, 0x93e088, 0xff7b9c, 0xb892ff, 0xff9f43];
+const AVATAR_COLORS = [0x2f9fc0, 0xf2bd3d, 0x62ad54, 0xd95763, 0x8c72c7, 0xd68036];
 
 type ScreenPosition = {
   x: number;
@@ -35,10 +35,10 @@ export class Avatar {
       style: {
         align: "center",
         fill: 0xffffff,
-        fontFamily: "Inter, Arial, sans-serif",
+        fontFamily: "Verdana, Arial, sans-serif",
         fontSize: 12,
         fontWeight: "700",
-        stroke: { color: 0x111821, width: 4 },
+        stroke: { color: 0x1d2324, width: 4 },
       },
     });
 
@@ -48,8 +48,8 @@ export class Avatar {
     const color = AVATAR_COLORS[Math.abs(hashCode(userId)) % AVATAR_COLORS.length] ?? 0x65d0ff;
     this.body.circle(0, -18, 12).fill(color);
     this.body.roundRect(-7, -18, 14, 22, 5).fill(color);
-    this.body.circle(-4, -21, 2).fill(0x102032);
-    this.body.circle(4, -21, 2).fill(0x102032);
+    this.body.circle(-4, -21, 2).fill(0x1d2324);
+    this.body.circle(4, -21, 2).fill(0x1d2324);
 
     this.view.addChild(this.body, this.label);
     this.syncViewToTile(position);

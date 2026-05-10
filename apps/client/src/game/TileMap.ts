@@ -17,8 +17,8 @@ export class TileMap {
     for (const tile of tiles) {
       const screen = tileToScreen(tile.x, tile.y);
       const graphic = drawDiamond(
-        tile.walkable ? 0x29394b : 0x202934,
-        tile.walkable ? 0x3d5167 : 0x34404f,
+        tile.walkable ? 0xc68a55 : 0x6f7560,
+        tile.walkable ? 0x8b5d35 : 0x4f5747,
       );
       graphic.x = screen.x;
       graphic.y = screen.y;
@@ -44,10 +44,10 @@ export class TileMap {
     }
 
     const screen = tileToScreen(position.x, position.y);
-    const color = this.isWalkable(position) ? 0x65d0ff : 0xff5d73;
+    const color = this.isWalkable(position) ? 0xffdc6d : 0xc73632;
     this.highlight
       .poly([0, -16, 32, 0, 0, 16, -32, 0])
-      .fill({ color, alpha: 0.22 })
+      .fill({ color, alpha: 0.32 })
       .stroke({ color, alpha: 0.85, width: 2 });
     this.highlight.x = screen.x;
     this.highlight.y = screen.y;
