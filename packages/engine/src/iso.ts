@@ -21,8 +21,10 @@ export function screenToTile(
   tileWidth = DEFAULT_TILE_WIDTH,
   tileHeight = DEFAULT_TILE_HEIGHT,
 ): TilePosition {
+  const adjustedY = screenY + tileHeight / 2;
+
   return {
-    x: Math.floor((screenY / (tileHeight / 2) + screenX / (tileWidth / 2)) / 2),
-    y: Math.floor((screenY / (tileHeight / 2) - screenX / (tileWidth / 2)) / 2),
+    x: Math.floor((adjustedY / (tileHeight / 2) + screenX / (tileWidth / 2)) / 2),
+    y: Math.floor((adjustedY / (tileHeight / 2) - screenX / (tileWidth / 2)) / 2),
   };
 }

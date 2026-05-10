@@ -13,6 +13,12 @@ describe("isometric projection", () => {
     expect(screenToTile(32, 16)).toEqual({ x: 1, y: 0 });
     expect(screenToTile(-32, 16)).toEqual({ x: 0, y: 1 });
   });
+
+  test("screenToTile maps points inside the visible diamond to that tile", () => {
+    expect(screenToTile(0, -8)).toEqual({ x: 0, y: 0 });
+    expect(screenToTile(16, -4)).toEqual({ x: 0, y: 0 });
+    expect(screenToTile(-16, -4)).toEqual({ x: 0, y: 0 });
+  });
 });
 
 describe("grid and pathfinding", () => {
