@@ -31,6 +31,7 @@ chore: configure biome
 
 ## Docker Workflow
 
+- Before running Docker or other project services, check whether the required service is already available. For Docker commands, verify the Docker daemon is running first, then start or ask the user to start it only if needed.
 - Use `docker compose up --build` for the full local stack with client, server, and Postgres.
 - Keep the Compose `deps` service in place when changing container volumes; it prevents stale container dependencies after `bun.lock` changes.
 - Run Drizzle migrations in Docker with `docker compose exec server bun run --cwd apps/server db:migrate`.
