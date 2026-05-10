@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "bun build index.html --outdir dist",
-    "dev": "bun --hot --host=0.0.0.0 --port 3001 index.html",
+    "dev": "bun --hot index.html --host=0.0.0.0 --port=3001",
     "format": "biome format --write .",
     "lint": "biome check .",
     "test": "bun test",
