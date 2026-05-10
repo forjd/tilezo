@@ -1,4 +1,5 @@
-import { createRectRoomLayout, type RoomLayout } from "@habbo/engine";
+import { createRectRoomLayout, type RoomLayout } from "@tilezo/engine";
+import { loadOrSeedDefaultRoom, type PersistenceStore } from "../db/persistence";
 import { Room } from "./Room";
 
 type RawRoomLayout = {
@@ -15,8 +16,9 @@ export class RoomManager {
 
   constructor(private readonly defaultLayout: RoomLayout) {}
 
-  static async create() {
-    return new RoomManager(await loadDefaultRoomLayout());
+  static async create(options: { persistence?: PersistenceStore } = {}) {
+    const fallbackLayout = await loadDefaultRoomLayout();
+    return new RoomManager(await loadOrSeedDefaultRoom(options.persistence, fallbackLayout));
   }
 
   get(roomId: string): Room | undefined {

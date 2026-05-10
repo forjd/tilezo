@@ -1,4 +1,4 @@
-import { findPath, type RoomLayout, TileGrid, type TilePosition } from "@habbo/engine";
+import { findPath, type RoomLayout, TileGrid, type TilePosition } from "@tilezo/engine";
 import type { RoomSnapshot, RoomUser } from "./types";
 
 export class Room {

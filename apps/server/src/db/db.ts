@@ -1,15 +1,16 @@
+import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
+import * as schema from "./schema";
+
+export type TilezoDatabase = BunSQLDatabase<typeof schema>;
+
 export function getDatabaseUrl(env = Bun.env): string | undefined {
   return env.DATABASE_URL;
 }
 
-export function createDatabaseClient(databaseUrl = getDatabaseUrl()): unknown | undefined {
+export function createDatabase(databaseUrl = getDatabaseUrl()): TilezoDatabase | undefined {
   if (!databaseUrl) {
     return undefined;
   }
 
-  const BunWithSql = Bun as unknown as {
-    SQL?: new (url: string) => unknown;
-  };
-
-  return BunWithSql.SQL ? new BunWithSql.SQL(databaseUrl) : undefined;
+  return drizzle(databaseUrl, { schema });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createRectRoomLayout } from "@habbo/engine";
+import { createRectRoomLayout } from "@tilezo/engine";
 import { Room } from "./Room";
 
 describe("Room", () => {

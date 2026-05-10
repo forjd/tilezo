@@ -1,11 +1,11 @@
 {
-  "name": "@habbo/client",
+  "name": "@tilezo/client",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@habbo/engine": "workspace:*",
-    "@habbo/protocol": "workspace:*",
+    "@tilezo/engine": "workspace:*",
+    "@tilezo/protocol": "workspace:*",
     "pixi.js": "^8.9.2"
   },
   "scripts": {

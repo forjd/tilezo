@@ -1,4 +1,4 @@
-# Habbo-Like Multiplayer Room
+# Tilezo Multiplayer Room
 
 A Bun and TypeScript browser multiplayer prototype for an isometric social room loop.
 
@@ -14,7 +14,7 @@ A Bun and TypeScript browser multiplayer prototype for an isometric social room 
 ## Requirements
 
 - Bun
-- PostgreSQL is optional until persistence is wired. The current SQL foundation is available at `apps/server/src/db/schema.sql`.
+- PostgreSQL is optional for local realtime development. Drizzle schema and migrations live under `apps/server/src/db`.
 
 ## Install
 
@@ -59,7 +59,7 @@ Server:
 
 ```txt
 PORT=3000
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/habbo_mvp
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/tilezo
 NODE_ENV=development
 ```
 

@@ -1,4 +1,4 @@
-import { type TilePosition, tileToScreen } from "@habbo/engine";
+import { type TilePosition, tileToScreen } from "@tilezo/engine";
 import { Container, Graphics, Text } from "pixi.js";
 
 const AVATAR_COLORS = [0x65d0ff, 0xffc857, 0x93e088, 0xff7b9c, 0xb892ff, 0xff9f43];

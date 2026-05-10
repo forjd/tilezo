@@ -11,8 +11,8 @@
     "noEmit": true,
     "noUncheckedIndexedAccess": true,
     "paths": {
-      "@habbo/engine": ["./packages/engine/src/index.ts"],
-      "@habbo/protocol": ["./packages/protocol/src/index.ts"]
+      "@tilezo/engine": ["./packages/engine/src/index.ts"],
+      "@tilezo/protocol": ["./packages/protocol/src/index.ts"]
     },
     "skipLibCheck": true,
     "strict": true,

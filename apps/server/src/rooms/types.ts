@@ -1,5 +1,5 @@
-import type { RoomLayout, TilePosition } from "@habbo/engine";
-import type { RoomUserSnapshot } from "@habbo/protocol";
+import type { RoomLayout, TilePosition } from "@tilezo/engine";
+import type { RoomUserSnapshot } from "@tilezo/protocol";
 
 export type RoomUser = {
   id: string;

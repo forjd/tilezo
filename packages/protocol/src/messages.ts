@@ -1,4 +1,4 @@
-import type { RoomTile, TilePosition } from "@habbo/engine";
+import type { RoomTile, TilePosition } from "@tilezo/engine";
 
 export type RoomJoinMessage = {
   type: "room.join";

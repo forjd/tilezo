@@ -1,5 +1,6 @@
-import { parseRawClientMessage, type ServerMessage } from "@habbo/protocol";
+import { parseRawClientMessage, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
+import { type PersistenceStore, persistJoinedUser } from "../db/persistence";
 import type { RoomManager } from "../rooms/RoomManager";
 import { encodeServerMessage } from "../util/safeJson";
 import type { SocketData } from "./socketTypes";
@@ -7,6 +8,7 @@ import type { SocketData } from "./socketTypes";
 type Context = {
   rooms: RoomManager;
   publish: (topic: string, message: ServerMessage) => void;
+  persistence?: PersistenceStore;
 };
 
 export function handleMessage(
@@ -39,6 +41,10 @@ export function handleMessage(
       const user = room.join({
         id: ws.data.userId,
         username: parsed.value.username,
+      });
+      void persistJoinedUser(context.persistence, {
+        id: user.id,
+        username: user.username,
       });
 
       ws.data.username = user.username;

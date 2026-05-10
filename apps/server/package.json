@@ -1,17 +1,24 @@
 {
-  "name": "@habbo/server",
+  "name": "@tilezo/server",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@habbo/engine": "workspace:*",
-    "@habbo/protocol": "workspace:*"
+    "@tilezo/engine": "workspace:*",
+    "@tilezo/protocol": "workspace:*",
+    "drizzle-orm": "^0.45.2"
   },
   "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
     "dev": "bun --watch src/index.ts",
     "format": "biome format --write .",
     "lint": "biome check .",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
   }
 }

@@ -1,4 +1,4 @@
-import { type RoomTile, type TilePosition, tileToScreen } from "@habbo/engine";
+import { type RoomTile, type TilePosition, tileToScreen } from "@tilezo/engine";
 import { Container, Graphics } from "pixi.js";
 
 export class TileMap {

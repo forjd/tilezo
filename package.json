@@ -1,5 +1,5 @@
 {
-  "name": "habbo-like-mvp",
+  "name": "tilezo",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -7,9 +7,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --filter '@habbo/server' --filter '@habbo/client' --parallel dev",
-    "dev:client": "bun run --filter '@habbo/client' dev",
-    "dev:server": "bun run --filter '@habbo/server' dev",
+    "dev": "bun run --filter '@tilezo/server' --filter '@tilezo/client' --parallel dev",
+    "dev:client": "bun run --filter '@tilezo/client' dev",
+    "dev:server": "bun run --filter '@tilezo/server' dev",
     "format": "biome format --write .",
     "lint": "biome check .",
     "test": "bun test",

@@ -42,13 +42,22 @@ bun run format
 bun run lint
 ```
 
+## Database
+
+The server uses Drizzle for Postgres schema and migrations. `DATABASE_URL` is optional for local realtime development; when it is present, the server loads or seeds the default room and upserts joined users.
+
+```sh
+bun run --cwd apps/server db:generate
+bun run --cwd apps/server db:migrate
+```
+
 ## Environment
 
 Server:
 
 ```txt
 PORT=3000
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/habbo_mvp
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/tilezo
 NODE_ENV=development
 ```
 

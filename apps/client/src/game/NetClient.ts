@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from "@habbo/protocol";
+import type { ClientMessage, ServerMessage } from "@tilezo/protocol";
 import { DEFAULT_WS_URL } from "../assets";
 
 type MessageHandler = (message: ServerMessage) => void;

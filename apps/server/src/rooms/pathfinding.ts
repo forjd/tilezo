@@ -1,1 +1,1 @@
-export { findPath } from "@habbo/engine";
+export { findPath } from "@tilezo/engine";

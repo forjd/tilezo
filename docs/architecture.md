@@ -46,7 +46,8 @@ Responsibilities:
 - Join and leave users.
 - Calculate and validate movement paths.
 - Broadcast room snapshots, joins, leaves, movement, and chat.
-- Provide database schema and future persistence entry points.
+- Load or seed durable room layout data when `DATABASE_URL` is configured.
+- Upsert joined users without persisting transient movement or chat history.
 
 ### `packages/protocol`
 

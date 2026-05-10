@@ -1,5 +1,7 @@
-import type { ServerMessage } from "@habbo/protocol";
+import type { ServerMessage } from "@tilezo/protocol";
 import { getConfig } from "./config";
+import { createDatabase } from "./db/db";
+import { DrizzlePersistenceStore } from "./db/persistence";
 import { handleClose, handleMessage } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { RoomManager } from "./rooms/RoomManager";
@@ -7,7 +9,9 @@ import { createId } from "./util/ids";
 import { encodeServerMessage } from "./util/safeJson";
 
 const config = getConfig();
-const rooms = await RoomManager.create();
+const database = createDatabase(config.databaseUrl);
+const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
+const rooms = await RoomManager.create({ persistence });
 
 const server = Bun.serve<SocketData>({
   port: config.port,
@@ -30,7 +34,7 @@ const server = Bun.serve<SocketData>({
       return Response.json({ ok: true });
     }
 
-    return new Response("Habbo-like room server", {
+    return new Response("Tilezo room server", {
       headers: {
         "content-type": "text/plain;charset=utf-8",
       },
@@ -50,6 +54,7 @@ const server = Bun.serve<SocketData>({
         handleMessage(ws, message, {
           rooms,
           publish,
+          persistence,
         });
         return;
       }

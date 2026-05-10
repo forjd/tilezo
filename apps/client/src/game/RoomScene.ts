@@ -1,5 +1,5 @@
-import { screenToTile, type TilePosition } from "@habbo/engine";
-import type { RoomSnapshotMessage, ServerMessage } from "@habbo/protocol";
+import { screenToTile, type TilePosition } from "@tilezo/engine";
+import type { RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol";
 import { type Application, Container } from "pixi.js";
 import { Avatar } from "./Avatar";
 import { TileMap } from "./TileMap";
