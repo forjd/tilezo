@@ -40,14 +40,15 @@ Owns the realtime authority.
 Responsibilities:
 
 - Accept WebSocket connections with `Bun.serve`.
-- Assign temporary user IDs.
+- Create and log in users with case-insensitive unique usernames and hashed passwords.
+- Verify authenticated WebSocket tokens.
 - Validate every inbound client message.
 - Manage in-memory room instances.
 - Join and leave users.
 - Calculate and validate movement paths.
 - Broadcast room snapshots, joins, leaves, movement, and chat.
 - Load or seed durable room layout data when `DATABASE_URL` is configured.
-- Upsert joined users without persisting transient movement or chat history.
+- Avoid persisting transient movement or chat history.
 
 ### `packages/protocol`
 
@@ -85,7 +86,10 @@ sequenceDiagram
   participant Server
   participant Room
 
-  Browser->>Client: submit username and room
+  Browser->>Client: submit username, password, and room
+  Client->>Server: auth login/register
+  Server->>Client: auth token
+  Client->>Server: connect ws with token
   Client->>Server: room.join
   Server->>Room: add user at spawn
   Server->>Client: room.snapshot

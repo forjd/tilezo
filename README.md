@@ -15,7 +15,7 @@ A Bun and TypeScript browser multiplayer prototype for an isometric social room 
 
 - Bun
 - Docker and Docker Compose, for containerized development
-- PostgreSQL is optional for local realtime development. Drizzle schema and migrations live under `apps/server/src/db`.
+- PostgreSQL is required for account creation and login. Drizzle schema and migrations live under `apps/server/src/db`.
 
 ## Install
 
@@ -44,7 +44,7 @@ Defaults:
 - WebSocket: `ws://localhost:3000/ws`
 - Client: `http://localhost:3001`
 
-Open the client in two browser tabs, enter different temporary usernames, and join room `lobby`.
+Open the client in two browser tabs, create or log in with different usernames, and join room `lobby`.
 
 ## Run With Docker
 
@@ -96,13 +96,15 @@ Server:
 HOST=0.0.0.0
 PORT=3000
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/tilezo
+AUTH_SECRET=change-me-in-production
 NODE_ENV=development
 ```
 
 Client:
 
 ```txt
+PUBLIC_API_URL=http://localhost:3000
 PUBLIC_WS_URL=ws://localhost:3000/ws
 ```
 
-If `PUBLIC_WS_URL` is omitted, the client uses `ws://localhost:3000/ws`.
+If `PUBLIC_API_URL` or `PUBLIC_WS_URL` is omitted, the client uses the local server defaults.

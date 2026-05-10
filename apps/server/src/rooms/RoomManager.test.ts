@@ -37,7 +37,6 @@ describe("RoomManager", () => {
       async seedRoom(layout) {
         this.seededRoomIds.push(layout.id);
       },
-      async upsertUser() {},
     } satisfies PersistenceStore & { seededRoomIds: string[] };
 
     const manager = await RoomManager.create({ persistence: store });

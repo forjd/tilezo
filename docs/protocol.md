@@ -2,23 +2,22 @@
 
 The realtime protocol uses JSON messages over WebSocket.
 
-Default endpoint:
+Default endpoint after login or account creation:
 
 ```txt
-ws://localhost:3000/ws
+ws://localhost:3000/ws?token=<auth-token>
 ```
 
 ## Client Messages
 
 ### `room.join`
 
-Join a room with a temporary username.
+Join a room as the authenticated WebSocket user.
 
 ```json
 {
   "type": "room.join",
-  "roomId": "lobby",
-  "username": "Tom"
+  "roomId": "lobby"
 }
 ```
 
@@ -178,9 +177,8 @@ Inbound client messages are validated by `packages/protocol`.
 Current limits:
 
 - Raw WebSocket payload: 8 KB.
-- Username: 1 to 24 trimmed characters.
 - Room ID: 1 to 64 trimmed characters.
 - Chat text: 1 to 240 trimmed characters.
 - Tile coordinates: integers only.
 
-Malformed JSON, unknown message types, invalid payloads, movement before joining, chat before joining, and invalid tiles are rejected without crashing the server.
+Malformed JSON, unknown message types, invalid payloads, unauthenticated room joins, movement before joining, chat before joining, and invalid tiles are rejected without crashing the server.

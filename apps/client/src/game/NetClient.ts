@@ -9,8 +9,8 @@ export class NetClient {
   private readonly messageHandlers = new Set<MessageHandler>();
   private readonly statusHandlers = new Set<StatusHandler>();
 
-  async connect(): Promise<void> {
-    const wsUrl = getWebSocketUrl();
+  async connect(token: string): Promise<void> {
+    const wsUrl = getWebSocketUrl(token);
     this.emitStatus(`connecting to ${wsUrl}`);
 
     await new Promise<void>((resolve, reject) => {
@@ -80,18 +80,15 @@ export class NetClient {
   }
 }
 
-function getWebSocketUrl(): string {
+function getWebSocketUrl(token: string): string {
   const configured = getPublicEnv("PUBLIC_WS_URL");
+  const baseUrl =
+    configured ??
+    (location.protocol === "https:" ? DEFAULT_WS_URL.replace("ws://", "wss://") : DEFAULT_WS_URL);
+  const url = new URL(baseUrl);
+  url.searchParams.set("token", token);
 
-  if (configured) {
-    return configured;
-  }
-
-  if (location.protocol === "https:") {
-    return DEFAULT_WS_URL.replace("ws://", "wss://");
-  }
-
-  return DEFAULT_WS_URL;
+  return url.toString();
 }
 
 function getPublicEnv(key: string): string | undefined {

@@ -24,7 +24,7 @@ describe("NetClient", () => {
     const statuses: string[] = [];
     client.onStatus((status) => statuses.push(status));
 
-    const connected = client.connect();
+    const connected = client.connect("session-token");
     const socket = currentSocket();
     socket.open();
     await connected;
@@ -32,8 +32,11 @@ describe("NetClient", () => {
     const message: ClientMessage = { type: "ping", sentAt: "now" };
     client.send(message);
 
-    expect(socket.url).toBe("ws://localhost:3000/ws");
-    expect(statuses).toEqual(["connecting to ws://localhost:3000/ws", "connected"]);
+    expect(socket.url).toBe("ws://localhost:3000/ws?token=session-token");
+    expect(statuses).toEqual([
+      "connecting to ws://localhost:3000/ws?token=session-token",
+      "connected",
+    ]);
     expect(socket.sent).toEqual([JSON.stringify(message)]);
   });
 
@@ -41,12 +44,12 @@ describe("NetClient", () => {
     installBrowserFakes("https:");
     const client = new NetClient();
 
-    const connected = client.connect();
+    const connected = client.connect("session-token");
     const socket = currentSocket();
     socket.open();
     await connected;
 
-    expect(socket.url).toBe("wss://localhost:3000/ws");
+    expect(socket.url).toBe("wss://localhost:3000/ws?token=session-token");
   });
 
   test("emits parsed server messages and ignores unsubscribed handlers", () => {
@@ -55,7 +58,7 @@ describe("NetClient", () => {
     const received: unknown[] = [];
     const unsubscribe = client.onMessage((message) => received.push(message));
 
-    void client.connect();
+    void client.connect("session-token");
     const socket = currentSocket();
     socket.message(JSON.stringify({ type: "connected", userId: "user_1" }));
     unsubscribe();
@@ -70,7 +73,7 @@ describe("NetClient", () => {
     const statuses: string[] = [];
     client.onStatus((status) => statuses.push(status));
 
-    const connected = client.connect();
+    const connected = client.connect("session-token");
     const socket = currentSocket();
     socket.message("{");
     socket.error();
@@ -79,7 +82,7 @@ describe("NetClient", () => {
     socket.close();
 
     expect(statuses).toEqual([
-      "connecting to ws://localhost:3000/ws",
+      "connecting to ws://localhost:3000/ws?token=session-token",
       "received invalid server message",
       "connection error",
       "disconnected",

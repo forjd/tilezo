@@ -12,46 +12,79 @@ describe("LoginForm", () => {
   test("renders default fields and hides on request", () => {
     installDocument();
     const form = new LoginForm(() => {});
-    const { username, roomId } = getFields(form);
+    const { username, password, roomId, loginModeButton, registerModeButton, button } =
+      getFields(form);
 
     expect(form.element.className).toBe("login-panel");
     expect(username.maxLength).toBe(24);
     expect(username.required).toBe(true);
     expect(username.placeholder).toBe("dan");
+    expect(password.required).toBe(true);
+    expect(password.type).toBe("password");
     expect(roomId.maxLength).toBe(64);
     expect(roomId.required).toBe(true);
     expect(roomId.value).toBe(DEFAULT_ROOM_ID);
+    expect(loginModeButton.classList.contains("active")).toBe(true);
+    expect(registerModeButton.classList.contains("active")).toBe(false);
+    expect(button.textContent).toBe("Enter room");
 
     form.hide();
 
     expect(form.element.classList.contains("hidden")).toBe(true);
   });
 
-  test("submits trimmed login values", () => {
+  test("submits trimmed login values with password and mode", () => {
     installDocument();
     const submissions: unknown[] = [];
     const form = new LoginForm((values) => submissions.push(values));
-    const { element, username, roomId } = getFields(form);
+    const { element, username, password, roomId, registerModeButton, button } = getFields(form);
     const event = new FakeSubmitEvent();
 
     username.value = "  Dan  ";
+    password.value = "  secret phrase  ";
     roomId.value = "  studio  ";
+    registerModeButton.dispatch("click", {});
     element.dispatch("submit", event);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(submissions).toEqual([{ username: "Dan", roomId: "studio" }]);
+    expect(button.textContent).toBe("Create and enter");
+    expect(submissions).toEqual([
+      { mode: "register", username: "Dan", password: "secret phrase", roomId: "studio" },
+    ]);
   });
 
-  test("ignores blank usernames and room IDs", () => {
+  test("shows and clears inline errors", () => {
+    installDocument();
+    const form = new LoginForm(() => {});
+    const { message } = getFields(form);
+
+    form.showError("Invalid username or password");
+
+    expect(message.textContent).toBe("Invalid username or password");
+    expect(message.classList.contains("visible")).toBe(true);
+
+    form.clearError();
+
+    expect(message.textContent).toBe("");
+    expect(message.classList.contains("visible")).toBe(false);
+  });
+
+  test("ignores blank usernames, passwords, and room IDs", () => {
     installDocument();
     const submissions: unknown[] = [];
     const form = new LoginForm((values) => submissions.push(values));
-    const { element, username, roomId } = getFields(form);
+    const { element, username, password, roomId } = getFields(form);
 
     username.value = " ";
+    password.value = "password";
     roomId.value = "lobby";
     element.dispatch("submit", new FakeSubmitEvent());
     username.value = "Dan";
+    password.value = " ";
+    roomId.value = "lobby";
+    element.dispatch("submit", new FakeSubmitEvent());
+    username.value = "Dan";
+    password.value = "password";
     roomId.value = " ";
     element.dispatch("submit", new FakeSubmitEvent());
 
@@ -62,16 +95,28 @@ describe("LoginForm", () => {
 function getFields(form: LoginForm): {
   element: FakeElement;
   username: FakeElement;
+  password: FakeElement;
   roomId: FakeElement;
+  loginModeButton: FakeElement;
+  registerModeButton: FakeElement;
+  button: FakeElement;
+  message: FakeElement;
 } {
   const element = form.element.children[2] as unknown as FakeElement;
-  const usernameLabel = element.children[0];
-  const roomLabel = element.children[1];
+  const modeGroup = element.children[0];
+  const usernameLabel = element.children[1];
+  const passwordLabel = element.children[2];
+  const roomLabel = element.children[3];
 
   return {
     element,
     username: usernameLabel?.children[1] as FakeElement,
+    password: passwordLabel?.children[1] as FakeElement,
     roomId: roomLabel?.children[1] as FakeElement,
+    loginModeButton: modeGroup?.children[0] as FakeElement,
+    registerModeButton: modeGroup?.children[1] as FakeElement,
+    button: element.children[4] as FakeElement,
+    message: form.element.children[1] as unknown as FakeElement,
   };
 }
 
@@ -118,6 +163,7 @@ class FakeElement {
   textContent = "";
   type = "";
   value = "";
+  ariaPressed = "";
 
   constructor(readonly tagName: string) {}
 
@@ -136,6 +182,12 @@ class FakeElement {
       listener(event);
     }
   }
+
+  setAttribute(name: string, value: string): void {
+    if (name === "aria-pressed") {
+      this.ariaPressed = value;
+    }
+  }
 }
 
 class FakeClassList {
@@ -143,6 +195,10 @@ class FakeClassList {
 
   add(className: string): void {
     this.setClasses([...this.getClasses(), className]);
+  }
+
+  remove(className: string): void {
+    this.setClasses(this.getClasses().filter((value) => value !== className));
   }
 
   contains(className: string): boolean {

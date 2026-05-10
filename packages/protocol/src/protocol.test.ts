@@ -6,7 +6,6 @@ describe("protocol parser", () => {
     const result = parseClientMessage({
       type: "room.join",
       roomId: " lobby ",
-      username: " dan ",
     });
 
     expect(result).toEqual({
@@ -14,7 +13,6 @@ describe("protocol parser", () => {
       value: {
         type: "room.join",
         roomId: "lobby",
-        username: "dan",
       },
     });
   });

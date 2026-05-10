@@ -1,7 +1,9 @@
 import { DEFAULT_ROOM_ID } from "../assets";
 
 type LoginValues = {
+  mode: "login" | "register";
   username: string;
+  password: string;
   roomId: string;
 };
 
@@ -9,53 +11,105 @@ export class LoginForm {
   readonly element = document.createElement("section");
 
   private readonly username = document.createElement("input");
+  private readonly password = document.createElement("input");
   private readonly roomId = document.createElement("input");
+  private readonly message = document.createElement("p");
+  private readonly loginModeButton = document.createElement("button");
+  private readonly registerModeButton = document.createElement("button");
+  private readonly submitButton = document.createElement("button");
+  private mode: LoginValues["mode"] = "login";
 
   constructor(private readonly onSubmit: (values: LoginValues) => void) {
     this.element.className = "login-panel";
     this.element.innerHTML = "";
 
+    const header = document.createElement("header");
     const title = document.createElement("h1");
-    title.textContent = "Join a room";
-
     const intro = document.createElement("p");
-    intro.textContent = "Pick a temporary name and enter the shared lobby.";
+    header.className = "login-header";
+    title.textContent = "Enter Tilezo";
+    intro.textContent = "Sign in or create a room identity.";
+    header.append(title, intro);
+
+    this.message.className = "login-message";
 
     const form = document.createElement("form");
-    form.append(this.createField("Username", this.username), this.createField("Room", this.roomId));
+    const modeGroup = document.createElement("div");
+    modeGroup.className = "mode-toggle";
+    this.loginModeButton.type = "button";
+    this.loginModeButton.textContent = "Log in";
+    this.registerModeButton.type = "button";
+    this.registerModeButton.textContent = "Create";
+    modeGroup.append(this.loginModeButton, this.registerModeButton);
 
-    const button = document.createElement("button");
-    button.className = "primary-button";
-    button.type = "submit";
-    button.textContent = "Join";
-    form.append(button);
+    form.append(
+      modeGroup,
+      this.createField("Username", this.username),
+      this.createField("Password", this.password),
+      this.createField("Room", this.roomId),
+    );
+
+    this.submitButton.className = "primary-button";
+    this.submitButton.type = "submit";
+    form.append(this.submitButton);
 
     this.username.maxLength = 24;
     this.username.required = true;
     this.username.autocomplete = "off";
     this.username.placeholder = "dan";
 
+    this.password.required = true;
+    this.password.type = "password";
+    this.password.autocomplete = "current-password";
+
     this.roomId.maxLength = 64;
     this.roomId.required = true;
     this.roomId.value = DEFAULT_ROOM_ID;
 
+    this.loginModeButton.addEventListener("click", () => this.setMode("login"));
+    this.registerModeButton.addEventListener("click", () => this.setMode("register"));
+    this.setMode("login");
+
     form.addEventListener("submit", (event) => {
       event.preventDefault();
+      this.clearError();
       const username = this.username.value.trim();
+      const password = this.password.value.trim();
       const roomId = this.roomId.value.trim();
 
-      if (!username || !roomId) {
+      if (!username || !password || !roomId) {
         return;
       }
 
-      this.onSubmit({ username, roomId });
+      this.onSubmit({ mode: this.mode, username, password, roomId });
     });
 
-    this.element.append(title, intro, form);
+    this.element.append(header, this.message, form);
   }
 
   hide(): void {
     this.element.classList.add("hidden");
+  }
+
+  showError(message: string): void {
+    this.message.textContent = message;
+    this.message.classList.add("visible");
+  }
+
+  clearError(): void {
+    this.message.textContent = "";
+    this.message.classList.remove("visible");
+  }
+
+  private setMode(mode: LoginValues["mode"]): void {
+    this.mode = mode;
+    this.submitButton.textContent = mode === "register" ? "Create and enter" : "Enter room";
+    this.password.autocomplete = mode === "register" ? "new-password" : "current-password";
+    this.loginModeButton.classList[mode === "login" ? "add" : "remove"]("active");
+    this.registerModeButton.classList[mode === "register" ? "add" : "remove"]("active");
+    this.loginModeButton.setAttribute("aria-pressed", String(mode === "login"));
+    this.registerModeButton.setAttribute("aria-pressed", String(mode === "register"));
+    this.clearError();
   }
 
   private createField(labelText: string, input: HTMLInputElement): HTMLLabelElement {

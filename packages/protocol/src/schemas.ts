@@ -21,7 +21,6 @@ export const tilePositionSchema = z.object({
 export const roomJoinMessageSchema = z.object({
   type: z.literal("room.join"),
   roomId: trimmedString(ROOM_ID_MAX_LENGTH),
-  username: trimmedString(USERNAME_MAX_LENGTH),
 });
 
 export const avatarMoveRequestMessageSchema = z.object({

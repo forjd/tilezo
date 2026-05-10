@@ -1,6 +1,6 @@
 import { parseRawClientMessage, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
-import { type PersistenceStore, persistJoinedUser } from "../db/persistence";
+import type { PersistenceStore } from "../db/persistence";
 import type { RoomManager } from "../rooms/RoomManager";
 import { encodeServerMessage } from "../util/safeJson";
 import type { SocketData } from "./socketTypes";
@@ -25,6 +25,11 @@ export function handleMessage(
 
   switch (parsed.value.type) {
     case "room.join": {
+      if (!ws.data.username) {
+        sendError(ws, "UNAUTHENTICATED", "Log in before joining a room");
+        return;
+      }
+
       const previousRoomId = ws.data.roomId;
 
       if (previousRoomId) {
@@ -40,14 +45,9 @@ export function handleMessage(
       const room = context.rooms.getOrCreate(parsed.value.roomId);
       const user = room.join({
         id: ws.data.userId,
-        username: parsed.value.username,
-      });
-      void persistJoinedUser(context.persistence, {
-        id: user.id,
-        username: user.username,
+        username: ws.data.username,
       });
 
-      ws.data.username = user.username;
       ws.data.roomId = room.id;
       ws.subscribe(roomTopic(room.id));
       send(ws, {

@@ -1,32 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
-import type { PersistenceStore } from "../db/persistence";
 import { RoomManager } from "../rooms/RoomManager";
 import { handleClose, handleMessage } from "./handleMessage";
 import type { SocketData } from "./socketTypes";
-
-describe("handleMessage persistence", () => {
-  test("persists joined users but not chat messages", async () => {
-    const rooms = await RoomManager.create();
-    const persistence = createPersistenceStore();
-    const ws = createSocket();
-
-    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby", username: "Dan" }), {
-      rooms,
-      persistence,
-      publish() {},
-    });
-    handleMessage(ws, JSON.stringify({ type: "chat.say", text: "hello" }), {
-      rooms,
-      persistence,
-      publish() {},
-    });
-
-    expect(persistence.users).toEqual([{ id: "user_1", username: "Dan" }]);
-    expect(persistence.calls).toEqual(["upsertUser"]);
-  });
-});
 
 describe("handleMessage", () => {
   test("sends parser errors for invalid messages", async () => {
@@ -40,16 +17,16 @@ describe("handleMessage", () => {
 
   test("leaves the previous room before joining a new room", async () => {
     const rooms = await RoomManager.create();
-    const ws = createSocket();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
     const published: { topic: string; message: ServerMessage }[] = [];
 
-    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby", username: "Dan" }), {
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
       rooms,
       publish(topic, message) {
         published.push({ topic, message });
       },
     });
-    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "studio", username: "Dan" }), {
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "studio" }), {
       rooms,
       publish(topic, message) {
         published.push({ topic, message });
@@ -59,11 +36,11 @@ describe("handleMessage", () => {
     expect(ws.unsubscribed).toEqual(["room:lobby"]);
     expect(rooms.get("lobby")).toBeUndefined();
     expect(rooms.get("studio")?.getUsers()).toEqual([
-      { id: "user_1", username: "Dan", position: { x: 2, y: 2 } },
+      { id: "user_db_1", username: "Dan", position: { x: 2, y: 2 } },
     ]);
     expect(published).toContainEqual({
       topic: "room:lobby",
-      message: { type: "user.left", userId: "user_1" },
+      message: { type: "user.left", userId: "user_db_1" },
     });
   });
 
@@ -86,12 +63,26 @@ describe("handleMessage", () => {
     ]);
   });
 
-  test("publishes valid movement and rejects blocked targets", async () => {
+  test("rejects room joins before socket authentication", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket();
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.sent).toEqual([
+      { type: "error", code: "UNAUTHENTICATED", message: "Log in before joining a room" },
+    ]);
+  });
+
+  test("publishes valid movement and rejects blocked targets", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
     const published: ServerMessage[] = [];
 
-    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby", username: "Dan" }), {
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
       rooms,
       publish() {},
     });
@@ -108,7 +99,7 @@ describe("handleMessage", () => {
       publish() {},
     });
 
-    expect(published[0]).toMatchObject({ type: "avatar.moved", userId: "user_1" });
+    expect(published[0]).toMatchObject({ type: "avatar.moved", userId: "user_db_1" });
     expect(ws.sent).toEqual([
       { type: "error", code: "INVALID_TILE", message: "Target tile is not walkable" },
     ]);
@@ -116,10 +107,10 @@ describe("handleMessage", () => {
 
   test("publishes chat and responds to ping", async () => {
     const rooms = await RoomManager.create();
-    const ws = createSocket();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
     const published: ServerMessage[] = [];
 
-    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby", username: "Dan" }), {
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
       rooms,
       publish() {},
     });
@@ -137,7 +128,7 @@ describe("handleMessage", () => {
 
     expect(published[0]).toMatchObject({
       type: "chat.message",
-      userId: "user_1",
+      userId: "user_db_1",
       username: "Dan",
       text: "hello",
     });
@@ -148,10 +139,10 @@ describe("handleMessage", () => {
 describe("handleClose", () => {
   test("removes joined users and publishes leave notifications", async () => {
     const rooms = await RoomManager.create();
-    const ws = createSocket();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
     const published: { topic: string; message: ServerMessage }[] = [];
 
-    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby", username: "Dan" }), {
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
       rooms,
       publish() {},
     });
@@ -160,7 +151,7 @@ describe("handleClose", () => {
     expect(ws.unsubscribed).toEqual(["room:lobby"]);
     expect(rooms.get("lobby")).toBeUndefined();
     expect(published).toEqual([
-      { topic: "room:lobby", message: { type: "user.left", userId: "user_1" } },
+      { topic: "room:lobby", message: { type: "user.left", userId: "user_db_1" } },
     ]);
   });
 
@@ -176,13 +167,13 @@ describe("handleClose", () => {
   });
 });
 
-function createSocket() {
+function createSocket(data: SocketData = { userId: "user_1" }) {
   const sent: ServerMessage[] = [];
   const subscribed: string[] = [];
   const unsubscribed: string[] = [];
 
   return {
-    data: { userId: "user_1" },
+    data,
     sent,
     subscribed,
     unsubscribed,
@@ -199,23 +190,5 @@ function createSocket() {
     sent: ServerMessage[];
     subscribed: string[];
     unsubscribed: string[];
-  };
-}
-
-function createPersistenceStore() {
-  return {
-    calls: [] as string[],
-    users: [] as { id: string; username: string }[],
-    async getRoom() {
-      return undefined;
-    },
-    async seedRoom() {},
-    async upsertUser(user: { id: string; username: string }) {
-      this.calls.push("upsertUser");
-      this.users.push(user);
-    },
-  } satisfies PersistenceStore & {
-    calls: string[];
-    users: { id: string; username: string }[];
   };
 }

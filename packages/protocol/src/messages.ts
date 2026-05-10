@@ -3,7 +3,6 @@ import type { RoomTile, TilePosition } from "@tilezo/engine";
 export type RoomJoinMessage = {
   type: "room.join";
   roomId: string;
-  username: string;
 };
 
 export type AvatarMoveRequestMessage = {

@@ -16,7 +16,7 @@ export class Game {
 
   constructor(private readonly options: GameOptions) {}
 
-  async start(username: string, roomId: string): Promise<void> {
+  async start(token: string, roomId: string): Promise<void> {
     await this.app.init({
       antialias: true,
       autoDensity: true,
@@ -50,11 +50,10 @@ export class Game {
       this.scene?.handleServerMessage(message);
     });
 
-    await this.net.connect();
+    await this.net.connect(token);
     this.net.send({
       type: "room.join",
       roomId,
-      username,
     });
 
     this.options.chat.onSend((text) => {

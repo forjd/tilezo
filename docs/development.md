@@ -90,7 +90,7 @@ bun run lint
 
 ## Database
 
-The server uses Drizzle for Postgres schema and migrations. `DATABASE_URL` is optional for local realtime development; when it is present, the server loads or seeds the default room and upserts joined users.
+The server uses Drizzle for Postgres schema and migrations. `DATABASE_URL` is required for account creation and login; when it is present, the server also loads or seeds the default room.
 
 ```sh
 bun run --cwd apps/server db:generate
@@ -105,16 +105,18 @@ Server:
 HOST=0.0.0.0
 PORT=3000
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/tilezo
+AUTH_SECRET=change-me-in-production
 NODE_ENV=development
 ```
 
 Client:
 
 ```txt
+PUBLIC_API_URL=http://localhost:3000
 PUBLIC_WS_URL=ws://localhost:3000/ws
 ```
 
-If `PUBLIC_WS_URL` is omitted, the client uses `ws://localhost:3000/ws`.
+If `PUBLIC_API_URL` or `PUBLIC_WS_URL` is omitted, the client uses the local server defaults.
 
 ## Deployment Notes
 
@@ -127,9 +129,9 @@ docker build --target client -t tilezo-client .
 
 The `server` target runs the Bun WebSocket server on `PORT` with `HOST=0.0.0.0`. The `client` target builds static browser assets and serves them with Caddy.
 
-For a production deployment, use a managed Postgres database when possible, set `DATABASE_URL` on the server service, and route `/ws` plus `/health` to the server. Route the browser app to the client service. Use `wss://.../ws` for `PUBLIC_WS_URL` when serving over HTTPS.
+For a production deployment, use a managed Postgres database when possible, set `DATABASE_URL` and `AUTH_SECRET` on the server service, and route `/auth/*`, `/ws`, and `/health` to the server. Route the browser app to the client service. Use `https://...` for `PUBLIC_API_URL` and `wss://.../ws` for `PUBLIC_WS_URL` when serving over HTTPS.
 
-`PUBLIC_WS_URL` is baked into the static client build. If the same client image needs to move between environments, add a runtime client config file or config endpoint before promoting one image across staging and production.
+`PUBLIC_API_URL` and `PUBLIC_WS_URL` are baked into the static client build. If the same client image needs to move between environments, add a runtime client config file or config endpoint before promoting one image across staging and production.
 
 ## Testing Notes
 

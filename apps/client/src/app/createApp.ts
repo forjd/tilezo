@@ -1,3 +1,4 @@
+import { authenticate } from "../auth/AuthClient";
 import { Game } from "../game/Game";
 import { ChatPanel } from "../ui/ChatPanel";
 import { LoginForm } from "../ui/LoginForm";
@@ -32,15 +33,18 @@ export function createApp(root: HTMLElement): void {
     },
   });
 
-  const login = new LoginForm(async ({ username, roomId }) => {
+  const login = new LoginForm(async ({ mode, username, password, roomId }) => {
     login.hide();
     chat.show();
-    status.textContent = "connecting";
+    status.textContent = mode === "register" ? "creating account" : "logging in";
 
     try {
-      await game.start(username, roomId);
+      const session = await authenticate({ mode, username, password });
+      status.textContent = "connecting";
+      await game.start(session.token, roomId);
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "connection failed";
+      login.showError(status.textContent);
       login.element.classList.remove("hidden");
       chat.element.classList.add("hidden");
     }

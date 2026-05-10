@@ -4,10 +4,12 @@ This document describes the implemented multiplayer loop.
 
 ## Connection
 
-When a browser opens `ws://localhost:3000/ws`, the server:
+The browser first creates an account or logs in through `/auth/register` or `/auth/login`. Usernames are unique case-insensitively, and passwords are stored as hashes.
 
-1. Generates a temporary user ID.
-2. Stores socket metadata.
+When a browser opens `ws://localhost:3000/ws?token=<auth-token>`, the server:
+
+1. Verifies the auth token.
+2. Stores socket metadata from the authenticated database user.
 3. Sends a `connected` message.
 
 Socket metadata currently includes:
@@ -20,7 +22,7 @@ Socket metadata currently includes:
 
 When the client sends `room.join`, the server:
 
-1. Validates and trims the username and room ID.
+1. Confirms the socket is authenticated and validates the room ID.
 2. Leaves the previous room if the socket had already joined one.
 3. Creates or retrieves the requested room.
 4. Adds the user at the room spawn position.
