@@ -14,6 +14,7 @@ const persistence = database ? new DrizzlePersistenceStore(database) : undefined
 const rooms = await RoomManager.create({ persistence });
 
 const server = Bun.serve<SocketData>({
+  hostname: config.host,
   port: config.port,
   fetch(request, server) {
     const url = new URL(request.url);
@@ -77,4 +78,4 @@ function publish(topic: string, message: ServerMessage): void {
   server.publish(topic, encodeServerMessage(message));
 }
 
-console.log(`Server listening on http://localhost:${server.port}`);
+console.log(`Server listening on http://${config.host}:${server.port}`);

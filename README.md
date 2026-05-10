@@ -14,6 +14,7 @@ A Bun and TypeScript browser multiplayer prototype for an isometric social room 
 ## Requirements
 
 - Bun
+- Docker and Docker Compose, for containerized development
 - PostgreSQL is optional for local realtime development. Drizzle schema and migrations live under `apps/server/src/db`.
 
 ## Install
@@ -45,6 +46,44 @@ Defaults:
 
 Open the client in two browser tabs, enter different temporary usernames, and join room `lobby`.
 
+## Run With Docker
+
+Start the client, server, and Postgres together:
+
+```sh
+docker compose up --build
+```
+
+Docker defaults:
+
+- Client: `http://localhost:3001`
+- Server: `http://localhost:3000`
+- WebSocket: `ws://localhost:3000/ws`
+- Postgres: `postgres://postgres:postgres@localhost:5432/tilezo` from the host, and `postgres://postgres:postgres@db:5432/tilezo` from Compose services
+
+Run database migrations after the containers are up:
+
+```sh
+docker compose exec server bun run --cwd apps/server db:migrate
+```
+
+Run checks inside the container when you want parity with the Docker environment:
+
+```sh
+docker compose exec server bun run typecheck
+docker compose exec server bun run lint
+docker compose exec server bun test
+```
+
+The Docker setup uses one shared Bun image for development and separate Dockerfile targets for later deployment:
+
+```sh
+docker build --target server -t tilezo-server .
+docker build --target client -t tilezo-client .
+```
+
+Compose runs a one-shot `deps` service before the app services so the container-owned Bun dependency volume stays in sync with `bun.lock`.
+
 ## Checks
 
 ```sh
@@ -58,6 +97,7 @@ bun test
 Server:
 
 ```txt
+HOST=0.0.0.0
 PORT=3000
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/tilezo
 NODE_ENV=development

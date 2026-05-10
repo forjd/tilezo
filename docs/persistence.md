@@ -37,6 +37,12 @@ Live avatar position should remain server-authoritative in memory for now.
 }
 ```
 
+When using Docker Compose, run migrations from the server container so Drizzle uses the Compose network database URL:
+
+```sh
+docker compose exec server bun run --cwd apps/server db:migrate
+```
+
 ## Runtime Behavior
 
 1. Connect to Postgres through Drizzle when `DATABASE_URL` is present.
@@ -49,3 +55,4 @@ Live avatar position should remain server-authoritative in memory for now.
 - Database failure should not crash the realtime prototype during local development unless persistence is explicitly required.
 - Do not introduce authentication as part of the first persistence pass.
 - Do not store movement spam in Postgres.
+- Keep Docker Compose database credentials development-only; production should inject `DATABASE_URL` through the deployment platform.
