@@ -25,9 +25,10 @@ chore: configure biome
 
 - Use Bun-native APIs where possible.
 - Prefer `Bun.serve`, Bun WebSocket support, Bun workspace/package management, and Bun test tooling before adding Node-specific alternatives.
-- Add dependencies only when they solve a real MVP requirement and fit the existing TypeScript/Bun stack.
+- Add dependencies only when they solve a real product requirement and fit the existing TypeScript/Bun stack.
 
-## MVP Discipline
+## Product Scope
 
-- Keep implementation focused on the browser multiplayer room loop described in [MVP.md](MVP.md).
-- If a feature is listed as a non-goal in the MVP, add a TODO instead of implementing it.
+- Keep implementation focused on the browser multiplayer room loop described in [docs/overview.md](docs/overview.md) and [docs/realtime-room-loop.md](docs/realtime-room-loop.md).
+- Use [docs/persistence.md](docs/persistence.md) as the source of truth for the next database and migration pass.
+- If a feature is outside the current room, presence, movement, chat, or persistence foundations, add a TODO instead of implementing it.

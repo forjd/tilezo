@@ -17,7 +17,7 @@ export function createApp(root: HTMLElement): void {
   topBar.className = "top-bar";
   brand.className = "brand";
   status.className = "status";
-  brandTitle.textContent = "Room MVP";
+  brandTitle.textContent = "Room";
   brandSubtitle.textContent = "server-authoritative isometric multiplayer";
   status.textContent = "idle";
 

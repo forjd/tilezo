@@ -30,7 +30,7 @@ const server = Bun.serve<SocketData>({
       return Response.json({ ok: true });
     }
 
-    return new Response("Habbo-like MVP server", {
+    return new Response("Habbo-like room server", {
       headers: {
         "content-type": "text/plain;charset=utf-8",
       },

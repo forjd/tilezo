@@ -1,11 +1,20 @@
-# Habbo-Like Multiplayer MVP
+# Habbo-Like Multiplayer Room
 
 A Bun and TypeScript browser multiplayer prototype for an isometric social room loop.
+
+## Documentation
+
+- [Project overview](docs/overview.md)
+- [Architecture](docs/architecture.md)
+- [WebSocket protocol](docs/protocol.md)
+- [Realtime room loop](docs/realtime-room-loop.md)
+- [Persistence plan](docs/persistence.md)
+- [Development workflow](docs/development.md)
 
 ## Requirements
 
 - Bun
-- PostgreSQL is optional for the realtime MVP. The schema is available at `apps/server/src/db/schema.sql`.
+- PostgreSQL is optional until persistence is wired. The current SQL foundation is available at `apps/server/src/db/schema.sql`.
 
 ## Install
 
