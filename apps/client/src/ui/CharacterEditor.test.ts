@@ -70,17 +70,33 @@ describe("CharacterEditor", () => {
 
     expect(preview.className).toBe("character-preview");
     const previewAvatar = preview.children[0]?.children[0] as FakeElement;
-    const previewBody = previewAvatar.children[0] as FakeElement;
+    const previewBody = previewAvatar.children[1] as FakeElement;
 
     expect(preview.children[0]?.className).toBe("character-preview-views");
     expect(previewAvatar.className).toBe("character-preview-avatar");
-    expect(previewAvatar.children[1]?.textContent).toBe("Preview");
+    expect(previewAvatar.children[0]?.className).toBe("character-preview-controls");
+    expect(previewAvatar.children[2]?.className).toBe("character-preview-controls");
+    expect(previewAvatar.children[3]?.textContent).toBe("Preview");
     expect(previewBody.className).toBe("avatar-preview-sprite");
     expect(previewBody.children.map((child) => child.className)).toContain("avatar-preview-layer");
     expect(
       previewBody.children.some(
         (child) => child.style.getPropertyValue("--layer-tint") === "#8b4a24",
       ),
+    ).toBe(true);
+    expect(previewAvatar.children[2]?.children[0]?.className).toBe("character-preview-swatch");
+    expect(
+      previewAvatar.children[2]?.children[0]?.style.getPropertyValue("--preview-swatch-color"),
+    ).toBe("#8b4a24");
+
+    const previousHair = previewAvatar.children[0]?.children[0]?.children[0] as FakeElement;
+    previousHair.dispatch("click", {});
+
+    expect(hairColor.value).toBe("#8b4a24");
+    const hair = form.children[0]?.children[1] as FakeElement;
+    expect(hair.value).toBe("bob");
+    expect(
+      previewBody.children.some((child) => child.getAttribute("data-layer-id") === "bob"),
     ).toBe(true);
   });
 });
@@ -125,6 +141,7 @@ class FakeElement {
   textContent = "";
   type = "";
   value = "";
+  selectedIndex = 0;
 
   constructor(
     readonly tagName: string,
@@ -143,6 +160,10 @@ class FakeElement {
 
   add(option: FakeElement): void {
     this.children.push(option);
+  }
+
+  get options(): FakeElement[] {
+    return this.children;
   }
 
   addEventListener(type: string, listener: (event: FakeEvent) => void): void {
@@ -169,6 +190,15 @@ class FakeElement {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event);
     }
+  }
+
+  dispatchEvent(event: Event): boolean {
+    this.dispatch(event.type, event);
+    return true;
+  }
+
+  click(): void {
+    this.dispatch("click", {});
   }
 }
 

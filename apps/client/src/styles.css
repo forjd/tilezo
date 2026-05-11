@@ -219,15 +219,16 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-self: start;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
-  padding: 10px;
-  border: 2px solid #6f6a60;
-  border-radius: 6px;
-  background: #d9d3c5;
+  padding: 14px 16px 16px;
+  border: 3px solid #716d64;
+  border-radius: 8px;
+  background: #d5d0c2;
   box-shadow:
-    inset 1px 1px 0 #ffffff,
-    inset -1px -1px 0 #aca697;
+    inset 0 0 0 2px #f7f4e8,
+    inset -2px -2px 0 #aaa496,
+    2px 2px 0 rgba(31, 45, 47, 0.18);
   color: #5f5a51;
   font-size: 12px;
   font-weight: 700;
@@ -240,38 +241,98 @@ select {
 }
 
 .character-preview-avatar {
+  position: relative;
   display: grid;
-  min-height: 102px;
-  grid-template-columns: minmax(0, 1fr) 52px;
-  grid-template-rows: 1fr;
-  align-items: end;
+  min-height: 214px;
+  grid-template-columns: 56px minmax(104px, 1fr) 46px;
+  align-items: center;
   justify-items: center;
-  padding: 8px 10px 6px;
-  border: 2px solid #6f6a60;
-  border-radius: 5px;
+  column-gap: 12px;
+  padding: 14px 18px;
+  overflow: hidden;
+  border: 3px solid #716d64;
+  border-radius: 8px;
   background:
-    linear-gradient(90deg, rgba(111, 106, 96, 0.16) 1px, transparent 1px) 0 0 / 12px 12px,
-    linear-gradient(rgba(111, 106, 96, 0.16) 1px, transparent 1px) 0 0 / 12px 12px,
+    linear-gradient(90deg, rgba(111, 106, 96, 0.18) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(rgba(111, 106, 96, 0.18) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(111, 106, 96, 0.1) 1px, transparent 1px) 0 0 / 12px 12px,
+    linear-gradient(rgba(111, 106, 96, 0.1) 1px, transparent 1px) 0 0 / 12px 12px,
     #fbfaf0;
-  box-shadow: inset 1px 1px 0 #ffffff;
+  box-shadow: inset 0 0 0 2px #f7f4e8;
+}
+
+.character-preview-controls {
+  display: grid;
+  gap: 8px;
+  justify-self: stretch;
+}
+
+.character-preview-stepper {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  height: 30px;
+}
+
+.character-preview-stepper button {
+  min-width: 0;
+  border: 2px solid #716d64;
+  border-radius: 4px;
+  background: #e5e1d5;
+  color: #4f493f;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    1px 1px 0 rgba(31, 45, 47, 0.18);
+}
+
+.character-preview-stepper button:hover {
+  background: #f3efe3;
+}
+
+.character-preview-stepper button:active {
+  transform: translate(1px, 1px);
+  box-shadow: inset 1px 1px 0 #aaa496;
+}
+
+.character-preview-swatch {
+  width: 34px;
+  height: 34px;
+  justify-self: end;
+  border: 2px solid #716d64;
+  border-radius: 4px;
+  background: var(--preview-swatch-color, #fbfaf0);
+  cursor: pointer;
+  box-shadow:
+    inset 0 0 0 2px #f7f4e8,
+    1px 1px 0 rgba(31, 45, 47, 0.18);
 }
 
 .character-preview-avatar span {
   align-self: center;
   justify-self: end;
+  position: absolute;
+  right: 18px;
+  top: 50%;
   color: #5f5a51;
-  font-size: 11px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1;
+  transform: translateY(-50%);
 }
 
 .avatar-preview-sprite {
   position: relative;
   width: var(--avatar-frame-width, 64px);
   height: var(--avatar-frame-height, 96px);
-  transform: scale(1.1);
+  margin: 0 58px 0 4px;
+  transform: scale(1.72);
   transform-origin: bottom center;
   image-rendering: pixelated;
+  filter: drop-shadow(0 3px 0 rgba(31, 45, 47, 0.2));
 }
 
 .avatar-preview-layer {
@@ -287,8 +348,9 @@ select {
 .character-preview p {
   margin: 0;
   color: #5f5a51;
-  font-size: 11px;
-  line-height: 1.25;
+  font-size: 20px;
+  line-height: 1.18;
+  font-weight: 800;
 }
 
 .mode-toggle {
@@ -478,13 +540,33 @@ select {
   }
 
   .character-preview-avatar {
-    min-height: 112px;
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 196px;
+    grid-template-columns: 48px minmax(92px, 1fr) 40px;
+    column-gap: 8px;
+    padding: 12px;
   }
 
   .character-preview-avatar span {
-    justify-self: center;
+    right: 14px;
+    font-size: 14px;
+  }
+
+  .character-preview-stepper {
+    height: 28px;
+  }
+
+  .character-preview-swatch {
+    width: 30px;
+    height: 30px;
+  }
+
+  .avatar-preview-sprite {
+    margin-right: 40px;
+    transform: scale(1.48);
+  }
+
+  .character-preview p {
+    font-size: 17px;
   }
 
   .character-form {

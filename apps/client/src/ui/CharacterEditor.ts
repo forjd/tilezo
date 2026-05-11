@@ -26,6 +26,7 @@ export class CharacterEditor {
   private readonly shoes = this.createSelect(AVATAR_SHOE_STYLES);
   private readonly shoesColor = this.createColorInput();
   private readonly previewBody = createAvatarPreview(document);
+  private readonly previewSwatches = new Map<HTMLInputElement, HTMLButtonElement>();
   private readonly submitButton = document.createElement("button");
   private readonly cancelButton = document.createElement("button");
 
@@ -50,9 +51,26 @@ export class CharacterEditor {
 
     const previewAvatar = document.createElement("div");
     const caption = document.createElement("span");
+    const leftControls = document.createElement("div");
+    const rightControls = document.createElement("div");
     previewAvatar.className = "character-preview-avatar";
+    leftControls.className = "character-preview-controls";
+    rightControls.className = "character-preview-controls";
     caption.textContent = "Preview";
-    previewAvatar.append(this.previewBody, caption);
+    leftControls.append(
+      this.createPreviewStepper("Hair", this.hair),
+      this.createPreviewStepper("Top", this.shirt),
+      this.createPreviewStepper("Bottoms", this.pants),
+      this.createPreviewStepper("Shoes", this.shoes),
+    );
+    rightControls.append(
+      this.createPreviewSwatch("Hair color", this.hairColor),
+      this.createPreviewSwatch("Skin tone", this.skinTone),
+      this.createPreviewSwatch("Top color", this.shirtColor),
+      this.createPreviewSwatch("Bottoms color", this.pantsColor),
+      this.createPreviewSwatch("Shoe color", this.shoesColor),
+    );
+    previewAvatar.append(leftControls, this.previewBody, rightControls, caption);
     previewViews.append(previewAvatar);
 
     preview.append(previewViews, previewLabel);
@@ -139,6 +157,10 @@ export class CharacterEditor {
 
   private updatePreview(): void {
     updateAvatarPreview(this.previewBody, this.readAppearance());
+
+    for (const [input, swatch] of this.previewSwatches) {
+      swatch.style.setProperty("--preview-swatch-color", input.value);
+    }
   }
 
   private createField(
@@ -172,6 +194,49 @@ export class CharacterEditor {
     input.type = "color";
     input.required = true;
     return input;
+  }
+
+  private createPreviewStepper(label: string, select: HTMLSelectElement): HTMLDivElement {
+    const control = document.createElement("div");
+    const previous = document.createElement("button");
+    const next = document.createElement("button");
+
+    control.className = "character-preview-stepper";
+    previous.type = "button";
+    next.type = "button";
+    previous.setAttribute("aria-label", `Previous ${label}`);
+    next.setAttribute("aria-label", `Next ${label}`);
+    previous.textContent = "<";
+    next.textContent = ">";
+    previous.addEventListener("click", () => this.cycleSelect(select, -1));
+    next.addEventListener("click", () => this.cycleSelect(select, 1));
+    control.append(previous, next);
+
+    return control;
+  }
+
+  private createPreviewSwatch(label: string, input: HTMLInputElement): HTMLButtonElement {
+    const swatch = document.createElement("button");
+    swatch.className = "character-preview-swatch";
+    swatch.type = "button";
+    swatch.setAttribute("aria-label", `Change ${label}`);
+    swatch.addEventListener("click", () => input.click());
+    this.previewSwatches.set(input, swatch);
+
+    return swatch;
+  }
+
+  private cycleSelect(select: HTMLSelectElement, direction: -1 | 1): void {
+    const optionCount = select.options.length;
+
+    if (optionCount === 0) {
+      return;
+    }
+
+    select.selectedIndex = (select.selectedIndex + direction + optionCount) % optionCount;
+    select.value = select.options[select.selectedIndex]?.value ?? select.value;
+    this.updatePreview();
+    select.dispatchEvent(new Event("change", { bubbles: true }));
   }
 }
 
