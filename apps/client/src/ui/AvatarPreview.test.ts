@@ -5,7 +5,9 @@ import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
 describe("AvatarPreview", () => {
   test("renders manifest layers for a selected appearance", () => {
     const documentRef = new FakeDocument();
-    const preview = createAvatarPreview(documentRef as unknown as Document) as unknown as FakeElement;
+    const preview = createAvatarPreview(
+      documentRef as unknown as Document,
+    ) as unknown as FakeElement;
 
     updateAvatarPreview(preview as unknown as HTMLElement, {
       ...DEFAULT_AVATAR_APPEARANCE,
