@@ -39,6 +39,9 @@ chore: configure biome
 ## Docker Workflow
 
 - Before running Docker or other project services, check whether the required service is already available. For Docker commands, verify the Docker daemon is running first, then start or ask the user to start it only if needed.
+- For normal git worktree development, prefer native Bun for client/server and Docker only for Postgres: run `bun install`, `bun run worktree:setup`, `bun run db:up`, and `bun run db:migrate` after creating the worktree.
+- Do not run `bun run dev` as part of automated worktree setup unless the user explicitly asks to start the app; it is a long-running dev server command.
+- Keep each active worktree isolated with its generated `.env`, `COMPOSE_PROJECT_NAME`, app ports, database port, and Postgres volume. Use `bun run db:reset` only when intentionally deleting that worktree's database data.
 - Use `docker compose up --build` for the full local stack with client, server, and Postgres.
 - Keep the Compose `deps` service in place when changing container volumes; it prevents stale container dependencies after `bun.lock` changes.
 - Run Drizzle migrations in Docker with `docker compose exec server bun run --cwd apps/server db:migrate`.

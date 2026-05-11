@@ -33,9 +33,73 @@ Default local URLs:
 - Server: `http://localhost:3000`
 - WebSocket: `ws://localhost:3000/ws`
 
+## Worktree Development
+
+Use native Bun for the client and server, with Docker only for Postgres. Each worktree should have
+its own `.env`, Compose project name, ports, containers, and database volume.
+
+Create a worktree:
+
+```sh
+git worktree add ../tilezo-wt/room-state -b feat/room-state main
+cd ../tilezo-wt/room-state
+bun install
+```
+
+Generate a worktree-local `.env`:
+
+```sh
+bun run worktree:setup
+```
+
+The generated `.env` is ignored by Git, read automatically by Bun and Docker Compose, and includes:
+
+- `COMPOSE_PROJECT_NAME` for Docker Compose isolation.
+- `SERVER_PORT` and `CLIENT_PORT` for browser-facing ports.
+- `DB_PORT` for the host Postgres port.
+- `PORT`, `DATABASE_URL`, `PUBLIC_API_URL`, and `PUBLIC_WS_URL` for native Bun development.
+
+Start only Postgres:
+
+```sh
+bun run db:up
+```
+
+Run migrations against that worktree database:
+
+```sh
+bun run db:migrate
+```
+
+Start the native app:
+
+```sh
+bun run dev
+```
+
+The setup command prints the exact client, server, and database ports for the worktree. If you
+already copied `.env.example`, or you need to regenerate the worktree values, run:
+
+```sh
+bun run worktree:setup -- --force
+```
+
+Stop the worktree database without deleting data:
+
+```sh
+bun run db:down
+```
+
+Delete that worktree database volume when you need a clean database:
+
+```sh
+bun run db:reset
+```
+
 ## Docker Development
 
-Use Docker Compose when you want the full local stack, including Postgres:
+Use the full Docker Compose stack when you want container parity for the client, server, and
+Postgres:
 
 ```sh
 docker compose up --build
@@ -52,6 +116,10 @@ Compose starts:
 The server uses `DATABASE_URL=postgres://postgres:postgres@db:5432/tilezo` inside Compose. From the host, the same database is available at `postgres://postgres:postgres@localhost:5432/tilezo`.
 
 Compose runs migrations automatically before starting the server.
+
+For concurrent worktrees, set or generate unique values for `COMPOSE_PROJECT_NAME`, `SERVER_PORT`,
+`CLIENT_PORT`, and `DB_PORT` before running Compose. The `bun run worktree:setup` command writes
+those values to `.env`, which Docker Compose reads automatically.
 
 Run project checks inside the container:
 

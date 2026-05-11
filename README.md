@@ -47,6 +47,28 @@ Defaults:
 
 Open the client in two browser tabs, create or log in with different usernames, and join room `lobby`.
 
+## Worktree Development
+
+For normal Codex worktrees, run the client and server natively with Bun and use Docker only for
+Postgres:
+
+```sh
+bun install
+bun run worktree:setup
+bun run db:up
+bun run db:migrate
+```
+
+Then start the native dev servers when you are ready to use that worktree:
+
+```sh
+bun run dev
+```
+
+`worktree:setup` writes an ignored `.env` with an isolated Compose project name and available
+client, server, and database ports. Use `bun run db:reset` to delete that worktree's Postgres
+volume.
+
 ## Run With Docker
 
 Start the client, server, and Postgres together:

@@ -8,6 +8,12 @@
   ],
   "scripts": {
     "build": "bun run --filter '@tilezo/client' build",
+    "db:down": "docker compose -f compose.db.yml down",
+    "db:generate": "bun run --cwd apps/server db:generate",
+    "db:migrate": "bun run --cwd apps/server db:migrate",
+    "db:reset": "docker compose -f compose.db.yml down -v",
+    "db:studio": "bun run --cwd apps/server db:studio",
+    "db:up": "docker compose -f compose.db.yml up -d",
     "dev": "bun run --filter '@tilezo/server' --filter '@tilezo/client' --parallel dev",
     "dev:client": "bun run --filter '@tilezo/client' dev",
     "dev:server": "bun run --filter '@tilezo/server' dev",
@@ -16,7 +22,8 @@
     "test": "bun test",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
     "coverage:check": "bun run scripts/check-coverage.ts",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "worktree:setup": "bun run scripts/setup-worktree.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
