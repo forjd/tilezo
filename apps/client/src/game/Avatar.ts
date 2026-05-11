@@ -1,10 +1,11 @@
 import { type TilePosition, tileToScreen } from "@tilezo/engine";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import avatarManifest from "../../../../assets/avatars/avatar-manifest.json";
 import {
   type AvatarManifest,
   parseAvatarManifest,
+  type ResolvedAvatarLayer,
   resolveAvatarAssetUrl,
   resolveAvatarLayers,
   toPixiColor,
@@ -30,6 +31,7 @@ export class Avatar {
   private fromScreen: ScreenPosition;
   private to?: TilePosition;
   private progress = 0;
+  private bodyVersion = 0;
   private readonly secondsPerTile = 0.36;
 
   constructor(
@@ -144,6 +146,7 @@ export class Avatar {
   private rebuildBody(): void {
     this.spriteLayer.removeChildren();
     this.fallbackBody.clear();
+    this.bodyVersion += 1;
 
     const manifest = getBundledAvatarManifest();
 
@@ -159,8 +162,41 @@ export class Avatar {
       return;
     }
 
-    for (const layer of layers) {
-      const texture = Texture.from(resolveAvatarAssetUrl(layer.src));
+    const assetUrls = layers.map((layer) => resolveAvatarAssetUrl(layer.src));
+    this.composeSpriteLayers(
+      manifest,
+      layers,
+      assetUrls.map((url) => Texture.from(url)),
+    );
+
+    const version = this.bodyVersion;
+    void Promise.all(assetUrls.map((url) => Assets.load<Texture>(url)))
+      .then((textures) => {
+        if (version !== this.bodyVersion) {
+          return;
+        }
+
+        this.composeSpriteLayers(manifest, layers, textures);
+      })
+      .catch(() => {
+        if (version !== this.bodyVersion || this.spriteLayer.children.length > 0) {
+          return;
+        }
+
+        this.drawFallbackBody();
+      });
+  }
+
+  private composeSpriteLayers(
+    manifest: AvatarManifest,
+    layers: ResolvedAvatarLayer[],
+    textures: Texture[],
+  ): void {
+    this.spriteLayer.removeChildren();
+    this.fallbackBody.clear();
+
+    for (const [index, layer] of layers.entries()) {
+      const texture = textures[index] ?? Texture.EMPTY;
       const sprite = new Sprite(texture);
       sprite.x = -manifest.frame.anchorX;
       sprite.y = -manifest.frame.anchorY;

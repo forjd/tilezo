@@ -38,6 +38,31 @@ export type ResolvedAvatarLayer = AvatarLayerDefinition & {
   tintColor?: number;
 };
 
+const AVATAR_ASSET_URLS: Readonly<Record<string, string>> = {
+  "layers/body/base.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAq0lEQVR42u3YOQ6AMAwAwfz/0yYVLQUOOPFsD5JH4ojHkCRJkn4pZu0Gfqrt4MdCxItaD789QiTWevgtEVoDxMIAAADQd3gIHgEAAPwJAnAatA+wEQLgEag/3IqXYDkkAADqBAAAAAAAAAAAAAAAAIchAACKAGSvxLYEyFyK+gqcAvD1PcuhrLweAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACBJkiRJknR3AcfARBxa7TW8AAAAAElFTkSuQmCC",
+  "layers/bottoms/straight.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAUElEQVR42u3QIQ4AAAjEsPv/p8GTkCCQrZ9ZAgAAAAAAAAAAAAAAAABs6ui7NcAAAwwwwAADDDDAAAMMMMAAAwwwwAADDDDAAAMMAAAAAJga/PTImrjz3OgAAAAASUVORK5CYII=",
+  "layers/bottoms/wide.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAT0lEQVR42u3QIRIAAAjDsP3/0+AnOWTia5oAAAAAAAAAAAAAAAAAAG0OPnsDDDDAAAMMMMAAAwwwwAADDDDAAAMMMMAAAwwwwAADAAAAgLaBtYYHbP5P9AAAAABJRU5ErkJggg==",
+  "layers/face/default.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAS0lEQVR42u3QsQkAIBAEQRsx0lpsw8qs9cUCBEEMhBnY7KJLCQAAAACAN3KpsbrdOAAA/jZ6i10OAAAAAAAAAAAAAAAAAAAAAODcBAk+KqeXxLI9AAAAAElFTkSuQmCC",
+  "layers/hair/bob.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAjElEQVR42u3Z0Q2AMAhAwe6/NDqCUVQodwtQXtKfdi0A4C9xGrXsVWMX3y5EJBi7eNsQ8SIBJi/fIsLoAPEhAQQQYO7yIrgCAsT4+18qxOgAUYAAAgggQNkAGa/C7QM8/RfYJsDdn6GtA1SZIYAAAgggQPYBu80QIOuQ3WcAAAAAAAAAAAAAAAAAtHUAeqSIIRZNOpIAAAAASUVORK5CYII=",
+  "layers/hair/short.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAZUlEQVR42u3YsRGAQAwDwe+/aUEHBPAwRrsd6CKP1wIAvpJT3eArtcN/GyI3VI8fHyEPEqB5/MgIAghQHCAbVY8fEUEAAQQQQAABBEj1MeQn6CsMAAAAAAAAAAAAAAAAAAAAwGsOWOXFj6Wm6tEAAAAASUVORK5CYII=",
+  "layers/hair/side-part.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAaklEQVR42u3YwQHAIAwDMfZfOu0G/VAIWNrA9/QYAMAO9Yob/CV2+JUhaoLo8cdGqB8IkDz+qAgCCBAYoBaKD9AyiAACCCCAAAIIMH1YZICI9+e6Vzjy8AQAAAAAAAAAAAAAAAAAAADo4gG7uXABy2hrMQAAAABJRU5ErkJggg==",
+  "layers/shoes/boots.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAATklEQVR42u3VwQkAMAgEMPdful2goA8pgskAhyeCEQAAAAAAAAAAAAAAAAAAAAAAAAAsdwp+5owqXinQlWMB08u/hu/KcQEW4AsAAAC5CzC7pXeluY0sAAAAAElFTkSuQmCC",
+  "layers/shoes/sneakers.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAVElEQVR42u3TOQoAIBADQP//aW2tFoTggTO1hE3A1gAAAAAAAAAAAAAAAAAAAAAAAAD4WF+wI+fK4lWBVI4BXik/H5/KMYAvYICzQyTepXIAAKA2AFP8VNbkXBVxAAAAAElFTkSuQmCC",
+  "layers/tops/crew.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAXklEQVR42u3ZuQ0AMAgEQfpvGudO/UjoZjpgw6MKAAAAAAAAAOCCPhB59PgY/VD08SMiCJAcoD8SQAABBBBAAAEEEEAAAQQQQAB7gAACWIX9BXyGAAAAAAAAAAAA2Cx4bHoT6rB8GAAAAABJRU5ErkJggg==",
+  "layers/tops/hoodie.png":
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAdUlEQVR42u3ZyQGAQAwDsfTfdGgAXrDsYakDzzOpAgAAAAAAYKy+ETn6Sezw40L0B6LHbx0hOkAPIEDy+G0i9A+ixy8dQYDkAD2BAAIIIIAAAggggAACCCCAAAII4CAigADO4h4jXmOnxSgAAAAAAAAAAOCNCwKMyuwcTvu6AAAAAElFTkSuQmCC",
+};
+
 export function parseAvatarManifest(value: unknown): AvatarManifest {
   if (!isRecord(value)) {
     throw new Error("avatar manifest must be an object");
@@ -87,6 +112,12 @@ export function resolveAvatarLayers(
 }
 
 export function resolveAvatarAssetUrl(src: string): string {
+  const bundledUrl = AVATAR_ASSET_URLS[src];
+
+  if (bundledUrl) {
+    return bundledUrl;
+  }
+
   return new URL(`/assets/avatars/${src}`, globalThis.location?.origin ?? "http://localhost").href;
 }
 
