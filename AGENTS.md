@@ -49,4 +49,5 @@ chore: configure biome
 
 - Keep implementation focused on the browser multiplayer room loop described in [docs/overview.md](docs/overview.md) and [docs/realtime-room-loop.md](docs/realtime-room-loop.md).
 - Use [docs/persistence.md](docs/persistence.md) as the source of truth for the next database and migration pass.
+- Use [docs/art-design-principles.md](docs/art-design-principles.md) as the source of truth for Tilezo's pixel-art direction, asset review, and Habbo-inspired-but-original visual constraints.
 - If a feature is outside the current room, presence, movement, chat, or persistence foundations, add a TODO instead of implementing it.

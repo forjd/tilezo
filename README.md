@@ -9,6 +9,7 @@ A Bun and TypeScript browser multiplayer prototype for an isometric social room 
 - [WebSocket protocol](docs/protocol.md)
 - [Realtime room loop](docs/realtime-room-loop.md)
 - [Persistence plan](docs/persistence.md)
+- [Art design principles](docs/art-design-principles.md)
 - [Development workflow](docs/development.md)
 
 ## Requirements
