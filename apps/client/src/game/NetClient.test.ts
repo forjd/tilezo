@@ -4,6 +4,7 @@ import { NetClient } from "./NetClient";
 
 const originalWebSocket = globalThis.WebSocket;
 const originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+const originalProcess = Object.getOwnPropertyDescriptor(globalThis, "process");
 const originalPublicWsUrl = Bun.env.PUBLIC_WS_URL;
 
 describe("NetClient", () => {
@@ -16,6 +17,7 @@ describe("NetClient", () => {
       Reflect.deleteProperty(globalThis, "location");
     }
 
+    restoreProcess();
     restorePublicWsUrl();
     FakeWebSocket.instances.length = 0;
   });
@@ -65,6 +67,19 @@ describe("NetClient", () => {
     await connected;
 
     expect(socket.url).toBe("ws://localhost:4567/ws?token=session-token");
+  });
+
+  test("falls back to the default websocket URL when process is unavailable", async () => {
+    installBrowserFakes("http:");
+    Reflect.deleteProperty(globalThis, "process");
+    const client = new NetClient();
+
+    const connected = client.connect("session-token");
+    const socket = currentSocket();
+    socket.open();
+    await connected;
+
+    expect(socket.url).toBe("ws://localhost:3000/ws?token=session-token");
   });
 
   test("emits parsed server messages and ignores unsubscribed handlers", () => {
@@ -126,6 +141,12 @@ function restorePublicWsUrl(): void {
     delete Bun.env.PUBLIC_WS_URL;
   } else {
     Bun.env.PUBLIC_WS_URL = originalPublicWsUrl;
+  }
+}
+
+function restoreProcess(): void {
+  if (originalProcess) {
+    Object.defineProperty(globalThis, "process", originalProcess);
   }
 }
 

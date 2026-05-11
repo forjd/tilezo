@@ -4,12 +4,14 @@ import { DEFAULT_API_URL } from "../assets";
 import { authenticate, updateAppearance } from "./AuthClient";
 
 const originalFetch = globalThis.fetch;
+const originalProcess = Object.getOwnPropertyDescriptor(globalThis, "process");
 const originalPublicApiUrl = Bun.env.PUBLIC_API_URL;
 type FetchArgs = Parameters<typeof fetch>;
 
 describe("authenticate", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    restoreProcess();
     restorePublicApiUrl();
   });
 
@@ -81,6 +83,23 @@ describe("authenticate", () => {
 
     expect(requests[0]?.url).toBe("http://localhost:4567/auth/login");
   });
+
+  test("falls back to the default API URL when process is unavailable", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    Reflect.deleteProperty(globalThis, "process");
+    const requests: string[] = [];
+    globalThis.fetch = (async (url: FetchArgs[0]) => {
+      requests.push(String(url));
+      return Response.json({
+        user: { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE },
+        token: "session-token",
+      });
+    }) as unknown as typeof fetch;
+
+    await authenticate({ mode: "login", username: "dan", password: "secret" });
+
+    expect(requests).toEqual([`${DEFAULT_API_URL}/auth/login`]);
+  });
 });
 
 describe("updateAppearance", () => {
@@ -125,5 +144,11 @@ function restorePublicApiUrl(): void {
     delete Bun.env.PUBLIC_API_URL;
   } else {
     Bun.env.PUBLIC_API_URL = originalPublicApiUrl;
+  }
+}
+
+function restoreProcess(): void {
+  if (originalProcess) {
+    Object.defineProperty(globalThis, "process", originalProcess);
   }
 }

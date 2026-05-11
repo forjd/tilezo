@@ -62,6 +62,6 @@ export async function updateAppearance(
 }
 
 function getApiUrl(): string {
-  const configured = process.env.PUBLIC_API_URL;
+  const configured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
   return configured ?? DEFAULT_API_URL;
 }

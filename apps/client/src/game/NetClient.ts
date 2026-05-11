@@ -81,7 +81,7 @@ export class NetClient {
 }
 
 function getWebSocketUrl(token: string): string {
-  const configured = process.env.PUBLIC_WS_URL;
+  const configured = typeof process === "undefined" ? undefined : process.env.PUBLIC_WS_URL;
   const baseUrl =
     configured ??
     (location.protocol === "https:" ? DEFAULT_WS_URL.replace("ws://", "wss://") : DEFAULT_WS_URL);
