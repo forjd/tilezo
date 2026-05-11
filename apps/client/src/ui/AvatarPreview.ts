@@ -22,11 +22,17 @@ export function updateAvatarPreview(preview: HTMLElement, appearance: AvatarAppe
 
   for (const layer of resolveAvatarLayers(manifest, appearance)) {
     const documentRef = preview.ownerDocument ?? document;
-    const layerElement = documentRef.createElement("span");
+    const layerElement = documentRef.createElement("img");
+    const layerUrl = layer.tint
+      ? createTintedLayerUrl(resolveAvatarAssetUrl(layer.src), appearance[layer.tint])
+      : resolveAvatarAssetUrl(layer.src);
+
     layerElement.className = "avatar-preview-layer";
+    layerElement.setAttribute("alt", "");
+    layerElement.setAttribute("aria-hidden", "true");
+    layerElement.setAttribute("src", layerUrl);
     layerElement.setAttribute("data-slot", layer.slot);
     layerElement.setAttribute("data-layer-id", layer.id);
-    layerElement.style.setProperty("--layer-image", `url("${resolveAvatarAssetUrl(layer.src)}")`);
 
     if (layer.tint) {
       layerElement.style.setProperty("--layer-tint", appearance[layer.tint]);
@@ -38,4 +44,10 @@ export function updateAvatarPreview(preview: HTMLElement, appearance: AvatarAppe
 
 export function getAvatarPreviewManifest(): AvatarManifest {
   return manifest;
+}
+
+function createTintedLayerUrl(maskUrl: string, color: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.frame.width}" height="${manifest.frame.height}" viewBox="0 0 ${manifest.frame.width} ${manifest.frame.height}"><defs><mask id="layer-mask" maskUnits="userSpaceOnUse"><image href="${maskUrl}" width="${manifest.frame.width}" height="${manifest.frame.height}"/></mask></defs><rect width="${manifest.frame.width}" height="${manifest.frame.height}" fill="${color}" mask="url(#layer-mask)"/></svg>`;
+
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
