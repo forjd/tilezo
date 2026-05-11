@@ -55,7 +55,7 @@ describe("CharacterEditor", () => {
     expect(pantsColor.value).toBe("#6f5b2a");
   });
 
-  test("renders front, side, and back previews and updates them when controls change", () => {
+  test("renders a manifest-driven preview and updates it when controls change", () => {
     installDocument();
     const editor = new CharacterEditor({
       initialAppearance: DEFAULT_AVATAR_APPEARANCE,
@@ -69,27 +69,19 @@ describe("CharacterEditor", () => {
     form.dispatch("input", {});
 
     expect(preview.className).toBe("character-preview");
-    const previews = preview.children[0]?.children ?? [];
+    const previewAvatar = preview.children[0]?.children[0] as FakeElement;
+    const previewBody = previewAvatar.children[0] as FakeElement;
 
     expect(preview.children[0]?.className).toBe("character-preview-views");
-    expect(previews.map((child) => child.className)).toEqual([
-      "character-preview-avatar",
-      "character-preview-avatar",
-      "character-preview-avatar",
-    ]);
-    expect(previews.map((child) => child.children[1]?.textContent)).toEqual([
-      "Front",
-      "Side",
-      "Back",
-    ]);
-    expect(previews.map((child) => child.children[0]?.className)).toEqual([
-      "character-preview-body view-front hair-short shirt-crew pants-straight shoes-boots",
-      "character-preview-body view-side hair-short shirt-crew pants-straight shoes-boots",
-      "character-preview-body view-back hair-short shirt-crew pants-straight shoes-boots",
-    ]);
+    expect(previewAvatar.className).toBe("character-preview-avatar");
+    expect(previewAvatar.children[1]?.textContent).toBe("Preview");
+    expect(previewBody.className).toBe("avatar-preview-sprite");
+    expect(previewBody.children.map((child) => child.className)).toContain("avatar-preview-layer");
     expect(
-      previews.map((child) => child.children[0]?.style.getPropertyValue("--hair-color")),
-    ).toEqual(["#8b4a24", "#8b4a24", "#8b4a24"]);
+      previewBody.children.some(
+        (child) => child.style.getPropertyValue("--layer-tint") === "#8b4a24",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -98,7 +90,7 @@ function installDocument() {
     configurable: true,
     value: {
       createElement(tagName: string) {
-        return new FakeElement(tagName);
+        return new FakeElement(tagName, globalThis.document as Document);
       },
     } as unknown as Document,
   });
@@ -122,11 +114,11 @@ class FakeSubmitEvent {
 
 class FakeElement {
   readonly children: FakeElement[] = [];
+  readonly dataset: Record<string, string> = {};
   readonly listeners = new Map<string, Set<(event: FakeEvent) => void>>();
   readonly classList = new FakeClassList(this);
   readonly style = new FakeStyle();
   className = "";
-  innerHTML = "";
   maxLength = 0;
   name = "";
   required = false;
@@ -134,7 +126,16 @@ class FakeElement {
   type = "";
   value = "";
 
-  constructor(readonly tagName: string) {}
+  constructor(
+    readonly tagName: string,
+    readonly ownerDocument: Document,
+  ) {}
+
+  set innerHTML(value: string) {
+    if (value === "") {
+      this.children.length = 0;
+    }
+  }
 
   append(...children: FakeElement[]): void {
     this.children.push(...children);
@@ -150,11 +151,29 @@ class FakeElement {
     this.listeners.set(type, listeners);
   }
 
+  setAttribute(name: string, value: string): void {
+    if (name.startsWith("data-")) {
+      this.dataset[dataName(name)] = value;
+    }
+  }
+
+  getAttribute(name: string): string | undefined {
+    if (name.startsWith("data-")) {
+      return this.dataset[dataName(name)];
+    }
+
+    return undefined;
+  }
+
   dispatch(type: string, event: FakeEvent): void {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event);
     }
   }
+}
+
+function dataName(name: string): string {
+  return name.slice(5).replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
 class FakeStyle {
