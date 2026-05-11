@@ -7,6 +7,8 @@ import {
 } from "@tilezo/protocol";
 import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
 
+const PREVIEW_DIRECTIONS = ["south", "south-east", "east", "north-east", "north"] as const;
+
 type CharacterEditorOptions = {
   initialAppearance: AvatarAppearance;
   onSubmit: (appearance: AvatarAppearance) => void;
@@ -29,6 +31,7 @@ export class CharacterEditor {
   private readonly previewSwatches = new Map<HTMLInputElement, HTMLButtonElement>();
   private readonly submitButton = document.createElement("button");
   private readonly cancelButton = document.createElement("button");
+  private previewDirectionIndex = 0;
 
   constructor(private readonly options: CharacterEditorOptions) {
     this.element.className = "character-panel hidden";
@@ -62,6 +65,7 @@ export class CharacterEditor {
       this.createPreviewStepper("Top", this.shirt),
       this.createPreviewStepper("Bottoms", this.pants),
       this.createPreviewStepper("Shoes", this.shoes),
+      this.createPreviewDirectionStepper(),
     );
     rightControls.append(
       this.createPreviewSwatch("Hair color", this.hairColor),
@@ -156,7 +160,9 @@ export class CharacterEditor {
   }
 
   private updatePreview(): void {
-    updateAvatarPreview(this.previewBody, this.readAppearance());
+    updateAvatarPreview(this.previewBody, this.readAppearance(), {
+      direction: PREVIEW_DIRECTIONS[this.previewDirectionIndex] ?? "south",
+    });
 
     for (const [input, swatch] of this.previewSwatches) {
       swatch.style.setProperty("--preview-swatch-color", input.value);
@@ -215,6 +221,25 @@ export class CharacterEditor {
     return control;
   }
 
+  private createPreviewDirectionStepper(): HTMLDivElement {
+    const control = document.createElement("div");
+    const previous = document.createElement("button");
+    const next = document.createElement("button");
+
+    control.className = "character-preview-stepper";
+    previous.type = "button";
+    next.type = "button";
+    previous.setAttribute("aria-label", "Previous view");
+    next.setAttribute("aria-label", "Next view");
+    previous.textContent = "<";
+    next.textContent = ">";
+    previous.addEventListener("click", () => this.cyclePreviewDirection(-1));
+    next.addEventListener("click", () => this.cyclePreviewDirection(1));
+    control.append(previous, next);
+
+    return control;
+  }
+
   private createPreviewSwatch(label: string, input: HTMLInputElement): HTMLButtonElement {
     const swatch = document.createElement("button");
     swatch.className = "character-preview-swatch";
@@ -237,6 +262,13 @@ export class CharacterEditor {
     select.value = select.options[select.selectedIndex]?.value ?? select.value;
     this.updatePreview();
     select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  private cyclePreviewDirection(direction: -1 | 1): void {
+    this.previewDirectionIndex =
+      (this.previewDirectionIndex + direction + PREVIEW_DIRECTIONS.length) %
+      PREVIEW_DIRECTIONS.length;
+    this.updatePreview();
   }
 }
 

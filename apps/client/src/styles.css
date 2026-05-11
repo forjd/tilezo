@@ -248,6 +248,7 @@ select {
   align-items: center;
   justify-items: center;
   column-gap: 12px;
+  row-gap: 8px;
   padding: 14px 18px;
   overflow: hidden;
   border: 3px solid #716d64;
@@ -312,16 +313,13 @@ select {
 }
 
 .character-preview-avatar span {
-  align-self: center;
-  justify-self: end;
-  position: absolute;
-  right: 18px;
-  top: 50%;
+  grid-column: 1 / -1;
+  align-self: end;
+  justify-self: center;
   color: #5f5a51;
   font-size: 16px;
   font-weight: 800;
   line-height: 1;
-  transform: translateY(-50%);
 }
 
 .avatar-preview-sprite {
@@ -343,6 +341,7 @@ select {
   height: 100%;
   object-fit: contain;
   pointer-events: none;
+  transform: scaleX(var(--layer-scale-x, 1));
 }
 
 .character-preview p {
@@ -547,7 +546,6 @@ select {
   }
 
   .character-preview-avatar span {
-    right: 14px;
     font-size: 14px;
   }
 

@@ -3,7 +3,9 @@ import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import {
   AVATAR_LAYER_DRAW_ORDER,
   parseAvatarManifest,
+  resolveAvatarFrame,
   resolveAvatarLayers,
+  resolveLayerFrameIndex,
   toPixiColor,
 } from "./avatarAssets";
 
@@ -11,19 +13,23 @@ const manifest = {
   frame: { width: 64, height: 96, anchorX: 32, anchorY: 84 },
   states: ["idle", "walk"],
   directions: ["south", "south-east", "east", "north-east", "north"],
+  animations: {
+    idle: { start: 0, framesPerDirection: 1, frameDuration: 0.5 },
+    walk: { start: 5, framesPerDirection: 4, frameDuration: 0.12 },
+  },
   layers: [
-    { slot: "hair", id: "short", tint: "hairColor", src: "layers/hair/short.png", frames: 1 },
-    { slot: "body", id: "base", tint: "skinTone", src: "layers/body/base.png", frames: 1 },
-    { slot: "top", id: "crew", tint: "shirtColor", src: "layers/tops/crew.png", frames: 1 },
+    { slot: "hair", id: "short", tint: "hairColor", src: "layers/hair/short.png", frames: 25 },
+    { slot: "body", id: "base", tint: "skinTone", src: "layers/body/base.png", frames: 25 },
+    { slot: "top", id: "crew", tint: "shirtColor", src: "layers/tops/crew.png", frames: 25 },
     {
       slot: "bottoms",
       id: "straight",
       tint: "pantsColor",
       src: "layers/bottoms/straight.png",
-      frames: 1,
+      frames: 25,
     },
-    { slot: "shoes", id: "boots", tint: "shoesColor", src: "layers/shoes/boots.png", frames: 1 },
-    { slot: "face", id: "default", src: "layers/face/default.png", frames: 1 },
+    { slot: "shoes", id: "boots", tint: "shoesColor", src: "layers/shoes/boots.png", frames: 25 },
+    { slot: "face", id: "default", src: "layers/face/default.png", frames: 25 },
   ],
 };
 
@@ -79,6 +85,27 @@ describe("avatarAssets", () => {
 
   test("converts css hex colors for pixi tint", () => {
     expect(toPixiColor("#f2c097")).toBe(0xf2c097);
+  });
+
+  test("resolves animation frames and mirrors unsupported west-facing directions", () => {
+    const parsed = parseAvatarManifest(manifest);
+    const frame = resolveAvatarFrame(parsed, "walk", "south-west", 0.25);
+
+    expect(frame).toEqual({
+      index: 11,
+      direction: "south-east",
+      mirrored: true,
+      animationFrame: 2,
+    });
+
+    const [layer] = parsed.layers;
+
+    if (!layer) {
+      throw new Error("expected test layer");
+    }
+
+    expect(resolveLayerFrameIndex(layer, frame.index)).toBe(11);
+    expect(resolveLayerFrameIndex({ ...layer, frames: 1 }, frame.index)).toBe(0);
   });
 
   test("keeps layer draw order stable", () => {

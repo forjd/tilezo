@@ -9,13 +9,17 @@ describe("AvatarPreview", () => {
       documentRef as unknown as Document,
     ) as unknown as FakeElement;
 
-    updateAvatarPreview(preview as unknown as HTMLElement, {
-      ...DEFAULT_AVATAR_APPEARANCE,
-      hair: "bob",
-      hairColor: "#111111",
-      shirt: "hoodie",
-      shirtColor: "#222222",
-    });
+    updateAvatarPreview(
+      preview as unknown as HTMLElement,
+      {
+        ...DEFAULT_AVATAR_APPEARANCE,
+        hair: "bob",
+        hairColor: "#111111",
+        shirt: "hoodie",
+        shirtColor: "#222222",
+      },
+      { state: "walk", direction: "east", elapsedSeconds: 0.13 },
+    );
 
     expect(preview.children.length).toBeGreaterThanOrEqual(6);
     expect(preview.children.map((layer) => layer.getAttribute("data-slot"))).toEqual([
@@ -32,6 +36,9 @@ describe("AvatarPreview", () => {
     expect(
       preview.children.some((layer) => layer.style.getPropertyValue("--layer-tint") === "#222222"),
     ).toBe(true);
+    expect(preview.children.every((layer) => layer.getAttribute("data-frame-index") === "14")).toBe(
+      true,
+    );
   });
 });
 

@@ -1,13 +1,17 @@
 import { type TilePosition, tileToScreen } from "@tilezo/engine";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import { Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import avatarManifest from "../../../../assets/avatars/avatar-manifest.json";
 import {
+  type AvatarAnimationState,
   type AvatarManifest,
+  type AvatarRenderDirection,
   parseAvatarManifest,
   type ResolvedAvatarLayer,
   resolveAvatarAssetUrl,
+  resolveAvatarFrame,
   resolveAvatarLayers,
+  resolveLayerFrameIndex,
   toPixiColor,
 } from "./avatarAssets";
 
@@ -26,12 +30,18 @@ export class Avatar {
   private readonly spriteLayer = new Container();
   private readonly fallbackBody = new Graphics();
   private readonly label: Text;
+  private spriteManifest?: AvatarManifest;
+  private spriteLayers: ResolvedAvatarLayer[] = [];
+  private spriteTextures: Texture[] = [];
   private path: TilePosition[] = [];
-  private from: TilePosition;
   private fromScreen: ScreenPosition;
   private to?: TilePosition;
   private progress = 0;
   private bodyVersion = 0;
+  private animationState: AvatarAnimationState = "idle";
+  private direction: AvatarRenderDirection = "south";
+  private animationSeconds = 0;
+  private renderedFrameKey = "";
   private readonly secondsPerTile = 0.36;
 
   constructor(
@@ -44,7 +54,6 @@ export class Avatar {
     this.username = username;
     this.position = { ...position };
     this.appearance = { ...appearance };
-    this.from = { ...position };
     this.fromScreen = tileToScreen(position.x, position.y);
 
     this.label = new Text({
@@ -60,7 +69,7 @@ export class Avatar {
     });
 
     this.label.anchor.set(0.5, 1);
-    this.label.y = -34;
+    this.label.y = -70;
 
     this.view.addChild(this.spriteLayer, this.fallbackBody, this.label);
     this.rebuildBody();
@@ -98,10 +107,7 @@ export class Avatar {
 
       if (next) {
         this.path = nextPath;
-        this.from = { ...this.position };
-        this.fromScreen = { x: this.view.x, y: this.view.y };
-        this.to = next;
-        this.progress = 0;
+        this.beginSegment(next, { x: this.view.x, y: this.view.y });
         return;
       }
     }
@@ -116,24 +122,37 @@ export class Avatar {
       const next = this.path.shift();
 
       if (!next) {
+        this.setAnimationState("idle");
+        this.refreshSpriteFrame();
         return;
       }
 
-      this.from = { ...this.position };
-      this.fromScreen = tileToScreen(this.from.x, this.from.y);
-      this.to = next;
-      this.progress = 0;
+      this.beginSegment(next, tileToScreen(this.position.x, this.position.y));
     }
 
+    const target = this.to;
+
+    if (!target) {
+      return;
+    }
+
+    this.setAnimationState("walk");
+    this.animationSeconds += Math.max(0, deltaSeconds);
     this.progress = Math.min(1, this.progress + deltaSeconds / this.secondsPerTile);
-    const screenTo = tileToScreen(this.to.x, this.to.y);
+    const screenTo = tileToScreen(target.x, target.y);
 
     this.view.x = lerp(this.fromScreen.x, screenTo.x, this.progress);
     this.view.y = lerp(this.fromScreen.y, screenTo.y, this.progress);
+    this.refreshSpriteFrame();
 
     if (this.progress >= 1) {
-      this.position = { ...this.to };
+      this.position = { ...target };
       this.to = undefined;
+
+      if (this.path.length === 0) {
+        this.setAnimationState("idle");
+        this.refreshSpriteFrame();
+      }
     }
   }
 
@@ -146,6 +165,10 @@ export class Avatar {
   private rebuildBody(): void {
     this.spriteLayer.removeChildren();
     this.fallbackBody.clear();
+    this.spriteManifest = undefined;
+    this.spriteLayers = [];
+    this.spriteTextures = [];
+    this.renderedFrameKey = "";
     this.bodyVersion += 1;
 
     const manifest = getBundledAvatarManifest();
@@ -163,11 +186,10 @@ export class Avatar {
     }
 
     const assetUrls = layers.map((layer) => resolveAvatarAssetUrl(layer.src));
-    this.composeSpriteLayers(
-      manifest,
-      layers,
-      assetUrls.map((url) => Texture.from(url)),
-    );
+    this.spriteManifest = manifest;
+    this.spriteLayers = layers;
+    this.spriteTextures = layers.map(() => Texture.EMPTY);
+    this.refreshSpriteFrame();
 
     const version = this.bodyVersion;
     void Promise.all(assetUrls.map((url) => Assets.load<Texture>(url)))
@@ -176,10 +198,12 @@ export class Avatar {
           return;
         }
 
-        this.composeSpriteLayers(manifest, layers, textures);
+        this.spriteTextures = textures.map((texture) => texture ?? Texture.EMPTY);
+        this.renderedFrameKey = "";
+        this.refreshSpriteFrame();
       })
       .catch(() => {
-        if (version !== this.bodyVersion || this.spriteLayer.children.length > 0) {
+        if (version !== this.bodyVersion) {
           return;
         }
 
@@ -187,19 +211,54 @@ export class Avatar {
       });
   }
 
-  private composeSpriteLayers(
-    manifest: AvatarManifest,
-    layers: ResolvedAvatarLayer[],
-    textures: Texture[],
-  ): void {
+  private refreshSpriteFrame(): void {
+    if (
+      !this.spriteManifest ||
+      this.spriteLayers.length === 0 ||
+      this.spriteTextures.length === 0
+    ) {
+      return;
+    }
+
+    const frame = resolveAvatarFrame(
+      this.spriteManifest,
+      this.animationState,
+      this.direction,
+      this.animationSeconds,
+    );
+    const textureKey = this.spriteTextures.map((texture) => texture?.uid ?? "empty").join(",");
+    const frameKey = `${frame.index}:${frame.mirrored}:${textureKey}`;
+
+    if (frameKey === this.renderedFrameKey) {
+      return;
+    }
+
+    this.renderedFrameKey = frameKey;
+    this.composeSpriteLayers(frame);
+  }
+
+  private composeSpriteLayers(frame: ReturnType<typeof resolveAvatarFrame>): void {
+    const manifest = this.spriteManifest;
+
+    if (!manifest) {
+      return;
+    }
+
     this.spriteLayer.removeChildren();
     this.fallbackBody.clear();
 
-    for (const [index, layer] of layers.entries()) {
-      const texture = textures[index] ?? Texture.EMPTY;
+    for (const [index, layer] of this.spriteLayers.entries()) {
+      const texture = createFrameTexture(
+        this.spriteTextures[index] ?? Texture.EMPTY,
+        manifest,
+        resolveLayerFrameIndex(layer, frame.index),
+      );
       const sprite = new Sprite(texture);
-      sprite.x = -manifest.frame.anchorX;
-      sprite.y = -manifest.frame.anchorY;
+      sprite.anchor.set(
+        manifest.frame.anchorX / manifest.frame.width,
+        manifest.frame.anchorY / manifest.frame.height,
+      );
+      sprite.scale.x = frame.mirrored ? -1 : 1;
 
       if (layer.tintColor !== undefined) {
         sprite.tint = layer.tintColor;
@@ -207,6 +266,25 @@ export class Avatar {
 
       this.spriteLayer.addChild(sprite);
     }
+  }
+
+  private beginSegment(next: TilePosition, fromScreen: ScreenPosition): void {
+    this.fromScreen = { ...fromScreen };
+    this.to = next;
+    this.progress = 0;
+    this.direction = directionBetween(fromScreen, tileToScreen(next.x, next.y));
+    this.setAnimationState("walk");
+    this.refreshSpriteFrame();
+  }
+
+  private setAnimationState(state: AvatarAnimationState): void {
+    if (this.animationState === state) {
+      return;
+    }
+
+    this.animationState = state;
+    this.animationSeconds = 0;
+    this.renderedFrameKey = "";
   }
 
   private drawFallbackBody(): void {
@@ -256,6 +334,69 @@ function lerp(start: number, end: number, progress: number): number {
 
 function sameTile(a: TilePosition, b: TilePosition): boolean {
   return a.x === b.x && a.y === b.y;
+}
+
+function directionBetween(from: ScreenPosition, to: ScreenPosition): AvatarRenderDirection {
+  const dx = Math.sign(to.x - from.x);
+  const dy = Math.sign(to.y - from.y);
+
+  if (dx === 0 && dy > 0) {
+    return "south";
+  }
+
+  if (dx === 0 && dy < 0) {
+    return "north";
+  }
+
+  if (dx > 0 && dy === 0) {
+    return "east";
+  }
+
+  if (dx < 0 && dy === 0) {
+    return "west";
+  }
+
+  if (dx > 0 && dy > 0) {
+    return "south-east";
+  }
+
+  if (dx < 0 && dy > 0) {
+    return "south-west";
+  }
+
+  if (dx > 0 && dy < 0) {
+    return "north-east";
+  }
+
+  if (dx < 0 && dy < 0) {
+    return "north-west";
+  }
+
+  return "south";
+}
+
+function createFrameTexture(
+  texture: Texture,
+  manifest: AvatarManifest,
+  frameIndex: number,
+): Texture {
+  if (
+    texture === Texture.EMPTY ||
+    texture.source.width < manifest.frame.width * (frameIndex + 1) ||
+    texture.source.height < manifest.frame.height
+  ) {
+    return texture;
+  }
+
+  return new Texture({
+    source: texture.source,
+    frame: new Rectangle(
+      manifest.frame.width * frameIndex,
+      0,
+      manifest.frame.width,
+      manifest.frame.height,
+    ),
+  });
 }
 
 function getBundledAvatarManifest(): AvatarManifest | undefined {

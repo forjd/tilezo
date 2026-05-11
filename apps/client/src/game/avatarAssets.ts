@@ -1,4 +1,5 @@
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import avatarAssetUrls from "../../../../assets/avatars/avatar-asset-urls.json";
 
 export const AVATAR_LAYER_DRAW_ORDER = [
   "body",
@@ -10,7 +11,23 @@ export const AVATAR_LAYER_DRAW_ORDER = [
   "accessory",
 ] as const;
 
+export const AVATAR_DIRECTIONS = ["south", "south-east", "east", "north-east", "north"] as const;
+
+export const AVATAR_RENDER_DIRECTIONS = [
+  "south",
+  "south-east",
+  "east",
+  "north-east",
+  "north",
+  "north-west",
+  "west",
+  "south-west",
+] as const;
+
 export type AvatarLayerSlot = (typeof AVATAR_LAYER_DRAW_ORDER)[number];
+export type AvatarDirection = (typeof AVATAR_DIRECTIONS)[number];
+export type AvatarRenderDirection = (typeof AVATAR_RENDER_DIRECTIONS)[number];
+export type AvatarAnimationState = "idle" | "walk";
 export type AvatarTintKey = "skinTone" | "hairColor" | "shirtColor" | "pantsColor" | "shoesColor";
 
 export type AvatarManifest = {
@@ -21,8 +38,15 @@ export type AvatarManifest = {
     anchorY: number;
   };
   states: string[];
-  directions: string[];
+  directions: AvatarDirection[];
+  animations: Record<string, AvatarAnimationDefinition>;
   layers: AvatarLayerDefinition[];
+};
+
+export type AvatarAnimationDefinition = {
+  start: number;
+  framesPerDirection: number;
+  frameDuration: number;
 };
 
 export type AvatarLayerDefinition = {
@@ -38,29 +62,23 @@ export type ResolvedAvatarLayer = AvatarLayerDefinition & {
   tintColor?: number;
 };
 
-const AVATAR_ASSET_URLS: Readonly<Record<string, string>> = {
-  "layers/body/base.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAq0lEQVR42u3YOQ6AMAwAwfz/0yYVLQUOOPFsD5JH4ojHkCRJkn4pZu0Gfqrt4MdCxItaD789QiTWevgtEVoDxMIAAADQd3gIHgEAAPwJAnAatA+wEQLgEag/3IqXYDkkAADqBAAAAAAAAAAAAAAAAIchAACKAGSvxLYEyFyK+gqcAvD1PcuhrLweAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACBJkiRJknR3AcfARBxa7TW8AAAAAElFTkSuQmCC",
-  "layers/bottoms/straight.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAUElEQVR42u3QIQ4AAAjEsPv/p8GTkCCQrZ9ZAgAAAAAAAAAAAAAAAABs6ui7NcAAAwwwwAADDDDAAAMMMMAAAwwwwAADDDDAAAMMAAAAAJga/PTImrjz3OgAAAAASUVORK5CYII=",
-  "layers/bottoms/wide.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAT0lEQVR42u3QIRIAAAjDsP3/0+AnOWTia5oAAAAAAAAAAAAAAAAAAG0OPnsDDDDAAAMMMMAAAwwwwAADDDDAAAMMMMAAAwwwwAADAAAAgLaBtYYHbP5P9AAAAABJRU5ErkJggg==",
-  "layers/face/default.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAS0lEQVR42u3QsQkAIBAEQRsx0lpsw8qs9cUCBEEMhBnY7KJLCQAAAACAN3KpsbrdOAAA/jZ6i10OAAAAAAAAAAAAAAAAAAAAAODcBAk+KqeXxLI9AAAAAElFTkSuQmCC",
-  "layers/hair/bob.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAjElEQVR42u3Z0Q2AMAhAwe6/NDqCUVQodwtQXtKfdi0A4C9xGrXsVWMX3y5EJBi7eNsQ8SIBJi/fIsLoAPEhAQQQYO7yIrgCAsT4+18qxOgAUYAAAgggQNkAGa/C7QM8/RfYJsDdn6GtA1SZIYAAAgggQPYBu80QIOuQ3WcAAAAAAAAAAAAAAAAAtHUAeqSIIRZNOpIAAAAASUVORK5CYII=",
-  "layers/hair/short.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAZUlEQVR42u3YsRGAQAwDwe+/aUEHBPAwRrsd6CKP1wIAvpJT3eArtcN/GyI3VI8fHyEPEqB5/MgIAghQHCAbVY8fEUEAAQQQQAABBEj1MeQn6CsMAAAAAAAAAAAAAAAAAAAAwGsOWOXFj6Wm6tEAAAAASUVORK5CYII=",
-  "layers/hair/side-part.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAaklEQVR42u3YwQHAIAwDMfZfOu0G/VAIWNrA9/QYAMAO9Yob/CV2+JUhaoLo8cdGqB8IkDz+qAgCCBAYoBaKD9AyiAACCCCAAAIIMH1YZICI9+e6Vzjy8AQAAAAAAAAAAAAAAAAAAADo4gG7uXABy2hrMQAAAABJRU5ErkJggg==",
-  "layers/shoes/boots.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAATklEQVR42u3VwQkAMAgEMPdful2goA8pgskAhyeCEQAAAAAAAAAAAAAAAAAAAAAAAAAsdwp+5owqXinQlWMB08u/hu/KcQEW4AsAAAC5CzC7pXeluY0sAAAAAElFTkSuQmCC",
-  "layers/shoes/sneakers.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAVElEQVR42u3TOQoAIBADQP//aW2tFoTggTO1hE3A1gAAAAAAAAAAAAAAAAAAAAAAAAD4WF+wI+fK4lWBVI4BXik/H5/KMYAvYICzQyTepXIAAKA2AFP8VNbkXBVxAAAAAElFTkSuQmCC",
-  "layers/tops/crew.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAXklEQVR42u3ZuQ0AMAgEQfpvGudO/UjoZjpgw6MKAAAAAAAAAOCCPhB59PgY/VD08SMiCJAcoD8SQAABBBBAAAEEEEAAAQQQQAB7gAACWIX9BXyGAAAAAAAAAAAA2Cx4bHoT6rB8GAAAAABJRU5ErkJggg==",
-  "layers/tops/hoodie.png":
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABgCAYAAACtxXToAAAAdUlEQVR42u3ZyQGAQAwDsfTfdGgAXrDsYakDzzOpAgAAAAAAYKy+ETn6Sezw40L0B6LHbx0hOkAPIEDy+G0i9A+ixy8dQYDkAD2BAAIIIIAAAggggAACCCCAAAII4CAigADO4h4jXmOnxSgAAAAAAAAAAOCNCwKMyuwcTvu6AAAAAElFTkSuQmCC",
+export type AvatarFrameSelection = {
+  index: number;
+  direction: AvatarDirection;
+  mirrored: boolean;
+  animationFrame: number;
+};
+
+const FALLBACK_ANIMATION: AvatarAnimationDefinition = {
+  start: 0,
+  framesPerDirection: 1,
+  frameDuration: 1,
+};
+
+const MIRRORED_DIRECTIONS: Partial<Record<AvatarRenderDirection, AvatarDirection>> = {
+  "south-west": "south-east",
+  west: "east",
+  "north-west": "north-east",
 };
 
 export function parseAvatarManifest(value: unknown): AvatarManifest {
@@ -70,10 +88,11 @@ export function parseAvatarManifest(value: unknown): AvatarManifest {
 
   const frame = parseFrame(value.frame);
   const states = parseStringArray(value.states, "states");
-  const directions = parseStringArray(value.directions, "directions");
+  const directions = parseDirections(value.directions);
+  const animations = parseAnimations(value.animations);
   const layers = parseLayers(value.layers);
 
-  return { frame, states, directions, layers };
+  return { frame, states, directions, animations, layers };
 }
 
 export function resolveAvatarLayers(
@@ -97,7 +116,7 @@ export function resolveAvatarLayers(
       return [];
     }
 
-    const layer = findLayer(manifest, slot, id);
+    const layer = findLayer(manifest, slot, id) ?? findLayer(manifest, slot, defaultLayerId(slot));
     if (!layer) {
       return [];
     }
@@ -111,8 +130,33 @@ export function resolveAvatarLayers(
   });
 }
 
+export function resolveAvatarFrame(
+  manifest: AvatarManifest,
+  state: AvatarAnimationState,
+  direction: AvatarRenderDirection,
+  elapsedSeconds: number,
+): AvatarFrameSelection {
+  const normalized = normalizeAvatarDirection(manifest, direction);
+  const animation = manifest.animations[state] ?? manifest.animations.idle ?? FALLBACK_ANIMATION;
+  const directionIndex = Math.max(0, manifest.directions.indexOf(normalized.direction));
+  const frameCount = Math.max(1, Math.floor(animation.framesPerDirection));
+  const frameDuration = Math.max(0.01, animation.frameDuration);
+  const animationFrame = Math.floor(elapsedSeconds / frameDuration) % frameCount;
+
+  return {
+    index: animation.start + directionIndex * frameCount + animationFrame,
+    direction: normalized.direction,
+    mirrored: normalized.mirrored,
+    animationFrame,
+  };
+}
+
+export function resolveLayerFrameIndex(layer: AvatarLayerDefinition, frameIndex: number): number {
+  return Math.max(0, Math.min(layer.frames - 1, frameIndex));
+}
+
 export function resolveAvatarAssetUrl(src: string): string {
-  const bundledUrl = AVATAR_ASSET_URLS[src];
+  const bundledUrl = (avatarAssetUrls as Readonly<Record<string, string>>)[src];
 
   if (bundledUrl) {
     return bundledUrl;
@@ -127,6 +171,23 @@ export function toPixiColor(value: string): number {
   }
 
   return Number.parseInt(value.slice(1), 16);
+}
+
+function normalizeAvatarDirection(
+  manifest: AvatarManifest,
+  direction: AvatarRenderDirection,
+): { direction: AvatarDirection; mirrored: boolean } {
+  const mirroredDirection = MIRRORED_DIRECTIONS[direction];
+
+  if (mirroredDirection && manifest.directions.includes(mirroredDirection)) {
+    return { direction: mirroredDirection, mirrored: true };
+  }
+
+  if (manifest.directions.includes(direction as AvatarDirection)) {
+    return { direction: direction as AvatarDirection, mirrored: false };
+  }
+
+  return { direction: manifest.directions[0] ?? "south", mirrored: false };
 }
 
 function parseFrame(value: unknown): AvatarManifest["frame"] {
@@ -163,12 +224,76 @@ function parseLayers(value: unknown): AvatarLayerDefinition[] {
   });
 }
 
+function parseAnimations(value: unknown): Record<string, AvatarAnimationDefinition> {
+  if (value === undefined) {
+    return { idle: FALLBACK_ANIMATION, walk: FALLBACK_ANIMATION };
+  }
+
+  if (!isRecord(value)) {
+    throw new Error("avatar manifest animations must be an object");
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([state, animation]) => {
+      if (!isRecord(animation)) {
+        throw new Error(`avatar manifest animations.${state} must be an object`);
+      }
+
+      return [
+        state,
+        {
+          start: nonNegativeNumber(animation.start, `animations.${state}.start`),
+          framesPerDirection: positiveNumber(
+            animation.framesPerDirection,
+            `animations.${state}.framesPerDirection`,
+          ),
+          frameDuration: positiveNumber(
+            animation.frameDuration,
+            `animations.${state}.frameDuration`,
+          ),
+        },
+      ];
+    }),
+  );
+}
+
+function parseDirections(value: unknown): AvatarDirection[] {
+  const directions = parseStringArray(value, "directions");
+
+  for (const [index, direction] of directions.entries()) {
+    if (!AVATAR_DIRECTIONS.includes(direction as AvatarDirection)) {
+      throw new Error(`avatar manifest directions[${index}] is invalid`);
+    }
+  }
+
+  return directions as AvatarDirection[];
+}
+
 function findLayer(
   manifest: AvatarManifest,
   slot: AvatarLayerSlot,
   id: string,
 ): AvatarLayerDefinition | undefined {
   return manifest.layers.find((layer) => layer.slot === slot && layer.id === id);
+}
+
+function defaultLayerId(slot: AvatarLayerSlot): string {
+  switch (slot) {
+    case "body":
+      return "base";
+    case "shoes":
+      return DEFAULT_AVATAR_APPEARANCE.shoes;
+    case "bottoms":
+      return DEFAULT_AVATAR_APPEARANCE.pants;
+    case "top":
+      return DEFAULT_AVATAR_APPEARANCE.shirt;
+    case "face":
+      return "default";
+    case "hair":
+      return DEFAULT_AVATAR_APPEARANCE.hair;
+    case "accessory":
+      return "";
+  }
 }
 
 function parseStringArray(value: unknown, key: string): string[] {
@@ -211,6 +336,14 @@ function positiveNumber(value: unknown, key: string): number {
   }
 
   throw new Error(`avatar manifest ${key} must be a positive number`);
+}
+
+function nonNegativeNumber(value: unknown, key: string): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  throw new Error(`avatar manifest ${key} must be a non-negative number`);
 }
 
 function stringValue(value: unknown, key: string): string {
