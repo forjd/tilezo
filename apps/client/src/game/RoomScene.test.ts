@@ -43,6 +43,27 @@ describe("RoomScene", () => {
     expect(world?.x).toBe(500);
   });
 
+  test("shows chat messages above the matching avatar", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.handleServerMessage(
+      snapshot([user("user_1", "Dan", { x: 0, y: 0 }), user("user_2", "Ada", { x: 1, y: 0 })]),
+    );
+    scene.handleServerMessage({
+      type: "chat.message",
+      userId: "user_2",
+      username: "Ada",
+      text: "hi there",
+      sentAt: "2026-05-11T12:00:00.000Z",
+    });
+
+    const avatars = sceneState(scene).avatars;
+    expect(avatarState(avatars.get("user_1")).chatBubble.visible).toBe(false);
+    expect(avatarState(avatars.get("user_2")).chatBubble.visible).toBe(true);
+    expect(avatarState(avatars.get("user_2")).chatBubbleText.text).toBe("hi there");
+  });
+
   test("requests movement only when clicking walkable tiles", () => {
     const app = createApp();
     const moves: unknown[] = [];
@@ -115,6 +136,16 @@ function sceneState(scene: RoomScene): {
   return scene as unknown as {
     avatars: Map<string, { view: Container }>;
     hover?: unknown;
+  };
+}
+
+function avatarState(avatar?: { view: Container }): {
+  chatBubble: { visible: boolean };
+  chatBubbleText: { text: string };
+} {
+  return avatar as unknown as {
+    chatBubble: { visible: boolean };
+    chatBubbleText: { text: string };
   };
 }
 

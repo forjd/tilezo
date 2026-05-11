@@ -85,4 +85,38 @@ describe("Avatar", () => {
     expect(state.spriteLayer?.children.some((child) => child.tint === 0x111111)).toBe(true);
     expect(state.spriteLayer?.children.some((child) => child.tint === 0x222222)).toBe(true);
   });
+
+  test("shows chat bubbles briefly above the avatar", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubble: { visible: boolean };
+      chatBubbleText: { text: string };
+      label: { visible: boolean };
+    };
+
+    avatar.say("hello room");
+
+    expect(state.chatBubble.visible).toBe(true);
+    expect(state.chatBubbleText.text).toBe("hello room");
+    expect(state.label.visible).toBe(true);
+
+    avatar.update(5);
+
+    expect(state.chatBubble.visible).toBe(false);
+    expect(state.label.visible).toBe(true);
+  });
+
+  test("keeps long unbroken chat messages inside the bubble line budget", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubbleText: { text: string };
+    };
+
+    avatar.say("123123123123123123123123123123123123123123123123123123123123123123");
+
+    const lines = state.chatBubbleText.text.split("\n");
+    expect(lines).toHaveLength(4);
+    expect(lines.every((line) => line.length <= 16)).toBe(true);
+    expect(lines.at(-1)?.endsWith("...")).toBe(true);
+  });
 });

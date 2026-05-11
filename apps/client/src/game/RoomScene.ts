@@ -55,6 +55,9 @@ export class RoomScene {
       case "avatar.appearance.updated":
         this.avatars.get(message.userId)?.setAppearance(message.appearance);
         break;
+      case "chat.message":
+        this.avatars.get(message.userId)?.say(message.text);
+        break;
     }
   }
 

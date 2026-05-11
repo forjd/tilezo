@@ -29,6 +29,9 @@ export class Avatar {
 
   private readonly spriteLayer = new Container();
   private readonly fallbackBody = new Graphics();
+  private readonly chatBubble = new Container();
+  private readonly chatBubbleBackground = new Graphics();
+  private readonly chatBubbleText: Text;
   private readonly label: Text;
   private spriteManifest?: AvatarManifest;
   private spriteLayers: ResolvedAvatarLayer[] = [];
@@ -42,7 +45,9 @@ export class Avatar {
   private direction: AvatarRenderDirection = "south";
   private animationSeconds = 0;
   private renderedFrameKey = "";
+  private chatBubbleSecondsRemaining = 0;
   private readonly secondsPerTile = 0.36;
+  private readonly chatBubbleDurationSeconds = 4.5;
 
   constructor(
     userId: string,
@@ -71,7 +76,26 @@ export class Avatar {
     this.label.anchor.set(0.5, 1);
     this.label.y = -70;
 
-    this.view.addChild(this.spriteLayer, this.fallbackBody, this.label);
+    this.chatBubbleText = new Text({
+      text: "",
+      style: {
+        align: "center",
+        breakWords: true,
+        fill: 0x1d2324,
+        fontFamily: "Verdana, Arial, sans-serif",
+        fontSize: 12,
+        fontWeight: "700",
+        lineHeight: 15,
+        padding: 2,
+        wordWrap: false,
+      },
+    });
+    this.chatBubbleText.anchor.set(0.5, 1);
+    this.chatBubbleText.y = -102;
+    this.chatBubble.visible = false;
+    this.chatBubble.addChild(this.chatBubbleBackground, this.chatBubbleText);
+
+    this.view.addChild(this.spriteLayer, this.fallbackBody, this.label, this.chatBubble);
     this.rebuildBody();
     this.syncViewToTile(position);
   }
@@ -79,6 +103,20 @@ export class Avatar {
   setAppearance(appearance: AvatarAppearance): void {
     this.appearance = { ...appearance };
     this.rebuildBody();
+  }
+
+  say(text: string): void {
+    const message = text.trim();
+
+    if (message.length === 0) {
+      return;
+    }
+
+    const lines = wrapChatBubbleMessage(message);
+    this.chatBubbleText.text = lines.join("\n");
+    this.chatBubbleSecondsRemaining = this.chatBubbleDurationSeconds;
+    this.chatBubble.visible = true;
+    this.drawChatBubble(lines);
   }
 
   setPath(path: TilePosition[]): void {
@@ -118,6 +156,8 @@ export class Avatar {
   }
 
   update(deltaSeconds: number): void {
+    this.updateChatBubble(deltaSeconds);
+
     if (!this.to) {
       const next = this.path.shift();
 
@@ -160,6 +200,40 @@ export class Avatar {
     const screen = tileToScreen(position.x, position.y);
     this.view.x = screen.x;
     this.view.y = screen.y;
+  }
+
+  private updateChatBubble(deltaSeconds: number): void {
+    if (this.chatBubbleSecondsRemaining <= 0) {
+      return;
+    }
+
+    this.chatBubbleSecondsRemaining = Math.max(
+      0,
+      this.chatBubbleSecondsRemaining - Math.max(0, deltaSeconds),
+    );
+
+    if (this.chatBubbleSecondsRemaining === 0) {
+      this.chatBubble.visible = false;
+    }
+  }
+
+  private drawChatBubble(lines: string[]): void {
+    const horizontalPadding = 14;
+    const verticalPadding = 7;
+    const longestLineLength = Math.max(...lines.map((line) => line.length));
+    const textWidth = longestLineLength * 9;
+    const textHeight = lines.length * 15;
+    const width = Math.min(178, Math.max(48, textWidth + horizontalPadding * 2));
+    const height = Math.max(28, textHeight + verticalPadding * 2);
+    const x = -width / 2;
+    const y = this.chatBubbleText.y - textHeight - verticalPadding;
+
+    this.chatBubbleBackground.clear();
+    this.chatBubbleBackground.roundRect(x, y, width, height, 12).fill(0xffffff);
+    this.chatBubbleBackground.roundRect(x, y, width, height, 12).stroke({
+      color: 0x442f24,
+      width: 2,
+    });
   }
 
   private rebuildBody(): void {
@@ -373,6 +447,59 @@ function directionBetween(from: ScreenPosition, to: ScreenPosition): AvatarRende
   }
 
   return "south";
+}
+
+function wrapChatBubbleMessage(message: string): string[] {
+  const maxLineLength = 16;
+  const maxLines = 4;
+  const words = message.replace(/\s+/g, " ").split(" ");
+  const lines: string[] = [];
+
+  for (const word of words) {
+    const chunks = chunkLongWord(word, maxLineLength);
+
+    for (const chunk of chunks) {
+      const current = lines.at(-1);
+
+      if (!current) {
+        lines.push(chunk);
+        continue;
+      }
+
+      if (`${current} ${chunk}`.length <= maxLineLength) {
+        lines[lines.length - 1] = `${current} ${chunk}`;
+        continue;
+      }
+
+      lines.push(chunk);
+    }
+  }
+
+  if (lines.length <= maxLines) {
+    return lines;
+  }
+
+  const visibleLines = lines.slice(0, maxLines);
+  const lastLine = visibleLines[maxLines - 1] ?? "";
+  visibleLines[maxLines - 1] =
+    lastLine.length >= maxLineLength
+      ? `${lastLine.slice(0, maxLineLength - 3)}...`
+      : `${lastLine}...`;
+  return visibleLines;
+}
+
+function chunkLongWord(word: string, maxLength: number): string[] {
+  if (word.length <= maxLength) {
+    return [word];
+  }
+
+  const chunks: string[] = [];
+
+  for (let index = 0; index < word.length; index += maxLength) {
+    chunks.push(word.slice(index, index + maxLength));
+  }
+
+  return chunks;
 }
 
 function createFrameTexture(
