@@ -1,0 +1,88 @@
+{
+  "frame": {
+    "width": 64,
+    "height": 96,
+    "anchorX": 32,
+    "anchorY": 84
+  },
+  "states": ["idle"],
+  "directions": ["south"],
+  "layers": [
+    {
+      "slot": "body",
+      "id": "base",
+      "tint": "skinTone",
+      "src": "layers/body/base.png",
+      "frames": 1
+    },
+    {
+      "slot": "shoes",
+      "id": "boots",
+      "tint": "shoesColor",
+      "src": "layers/shoes/boots.png",
+      "frames": 1
+    },
+    {
+      "slot": "shoes",
+      "id": "sneakers",
+      "tint": "shoesColor",
+      "src": "layers/shoes/sneakers.png",
+      "frames": 1
+    },
+    {
+      "slot": "bottoms",
+      "id": "straight",
+      "tint": "pantsColor",
+      "src": "layers/bottoms/straight.png",
+      "frames": 1
+    },
+    {
+      "slot": "bottoms",
+      "id": "wide",
+      "tint": "pantsColor",
+      "src": "layers/bottoms/wide.png",
+      "frames": 1
+    },
+    {
+      "slot": "top",
+      "id": "crew",
+      "tint": "shirtColor",
+      "src": "layers/tops/crew.png",
+      "frames": 1
+    },
+    {
+      "slot": "top",
+      "id": "hoodie",
+      "tint": "shirtColor",
+      "src": "layers/tops/hoodie.png",
+      "frames": 1
+    },
+    {
+      "slot": "face",
+      "id": "default",
+      "src": "layers/face/default.png",
+      "frames": 1
+    },
+    {
+      "slot": "hair",
+      "id": "short",
+      "tint": "hairColor",
+      "src": "layers/hair/short.png",
+      "frames": 1
+    },
+    {
+      "slot": "hair",
+      "id": "side-part",
+      "tint": "hairColor",
+      "src": "layers/hair/side-part.png",
+      "frames": 1
+    },
+    {
+      "slot": "hair",
+      "id": "bob",
+      "tint": "hairColor",
+      "src": "layers/hair/bob.png",
+      "frames": 1
+    }
+  ]
+}

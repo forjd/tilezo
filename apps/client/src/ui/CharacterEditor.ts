@@ -5,6 +5,7 @@ import {
   AVATAR_SHOE_STYLES,
   type AvatarAppearance,
 } from "@tilezo/protocol";
+import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
 
 type CharacterEditorOptions = {
   initialAppearance: AvatarAppearance;
@@ -24,11 +25,7 @@ export class CharacterEditor {
   private readonly pantsColor = this.createColorInput();
   private readonly shoes = this.createSelect(AVATAR_SHOE_STYLES);
   private readonly shoesColor = this.createColorInput();
-  private readonly previewBodies = [
-    this.createPreviewBody("front"),
-    this.createPreviewBody("side"),
-    this.createPreviewBody("back"),
-  ];
+  private readonly previewBody = createAvatarPreview(document);
   private readonly submitButton = document.createElement("button");
   private readonly cancelButton = document.createElement("button");
 
@@ -51,14 +48,12 @@ export class CharacterEditor {
     previewViews.className = "character-preview-views";
     previewLabel.textContent = "Live room avatars use these layers and colors.";
 
-    for (const { body, label } of this.previewBodies) {
-      const previewAvatar = document.createElement("div");
-      const caption = document.createElement("span");
-      previewAvatar.className = "character-preview-avatar";
-      caption.textContent = label;
-      previewAvatar.append(body, caption);
-      previewViews.append(previewAvatar);
-    }
+    const previewAvatar = document.createElement("div");
+    const caption = document.createElement("span");
+    previewAvatar.className = "character-preview-avatar";
+    caption.textContent = "Preview";
+    previewAvatar.append(this.previewBody, caption);
+    previewViews.append(previewAvatar);
 
     preview.append(previewViews, previewLabel);
 
@@ -143,30 +138,7 @@ export class CharacterEditor {
   }
 
   private updatePreview(): void {
-    const appearance = this.readAppearance();
-
-    for (const { body, view } of this.previewBodies) {
-      body.style.setProperty("--hair-color", appearance.hairColor);
-      body.style.setProperty("--skin-tone", appearance.skinTone);
-      body.style.setProperty("--shirt-color", appearance.shirtColor);
-      body.style.setProperty("--pants-color", appearance.pantsColor);
-      body.style.setProperty("--shoes-color", appearance.shoesColor);
-      body.className = `character-preview-body view-${view} hair-${appearance.hair} shirt-${appearance.shirt} pants-${appearance.pants} shoes-${appearance.shoes}`;
-    }
-  }
-
-  private createPreviewBody(view: "front" | "side" | "back"): {
-    body: HTMLDivElement;
-    label: string;
-    view: "front" | "side" | "back";
-  } {
-    const body = document.createElement("div");
-    body.className = `character-preview-body view-${view}`;
-    return {
-      body,
-      label: titleCase(view),
-      view,
-    };
+    updateAvatarPreview(this.previewBody, this.readAppearance());
   }
 
   private createField(

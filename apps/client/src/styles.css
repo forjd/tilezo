@@ -265,186 +265,23 @@ select {
   line-height: 1;
 }
 
-.character-preview-body {
+.avatar-preview-sprite {
   position: relative;
-  width: 42px;
-  height: 78px;
-  margin-bottom: 6px;
+  width: var(--avatar-frame-width, 64px);
+  height: var(--avatar-frame-height, 96px);
+  transform: scale(1.1);
+  transform-origin: bottom center;
   image-rendering: pixelated;
 }
 
-.character-preview-body::before,
-.character-preview-body::after {
+.avatar-preview-layer {
   position: absolute;
-  content: "";
-}
-
-.character-preview-body.view-side {
-  width: 42px;
-  background:
-    linear-gradient(var(--shoes-color), var(--shoes-color)) 16px 68px / 18px 7px no-repeat,
-    linear-gradient(var(--pants-color), var(--pants-color)) 16px 53px / 13px 17px no-repeat,
-    linear-gradient(var(--pants-color), var(--pants-color)) 24px 55px / 8px 15px no-repeat;
-}
-
-.character-preview-body.view-side::before {
-  top: 4px;
-  left: 12px;
-  width: 20px;
-  height: 23px;
-  border-radius: 9px 13px 8px 8px;
-  background:
-    radial-gradient(circle at 77% 43%, #1d2324 0 1.5px, transparent 1.75px),
-    linear-gradient(90deg, var(--hair-color) 0 25%, transparent 25%), var(--skin-tone);
-  box-shadow:
-    0 -5px 0 1px var(--hair-color),
-    -5px 2px 0 -1px var(--hair-color),
-    8px 7px 0 -5px var(--skin-tone),
-    1px 20px 0 -6px var(--skin-tone);
-}
-
-.character-preview-body.view-side::after {
-  top: 28px;
-  left: 13px;
-  width: 19px;
-  height: 27px;
-  border-radius: 8px 10px 7px 7px;
-  background: var(--shirt-color);
-  box-shadow:
-    -5px 4px 0 -2px var(--skin-tone),
-    7px 4px 0 -3px var(--skin-tone);
-}
-
-.character-preview-body.view-back::before {
-  box-shadow:
-    0 -5px 0 1px var(--hair-color),
-    -5px -1px 0 -1px var(--hair-color),
-    5px -1px 0 -1px var(--hair-color),
-    0 28px 0 8px var(--shirt-color),
-    -12px 30px 0 -3px var(--skin-tone),
-    12px 30px 0 -3px var(--skin-tone),
-    -5px 53px 0 -2px var(--pants-color),
-    5px 53px 0 -2px var(--pants-color),
-    -7px 66px 0 -3px var(--shoes-color),
-    7px 66px 0 -3px var(--shoes-color);
-}
-
-.character-preview-body::before {
-  top: 2px;
-  left: 10px;
-  width: 22px;
-  height: 22px;
-  border-radius: 8px 8px 7px 7px;
-  background: var(--skin-tone);
-  box-shadow:
-    0 -5px 0 1px var(--hair-color),
-    -5px -1px 0 -1px var(--hair-color),
-    5px -1px 0 -1px var(--hair-color),
-    -4px 8px 0 -3px #1d2324,
-    4px 8px 0 -3px #1d2324,
-    0 14px 0 -8px #9d5f46,
-    0 28px 0 8px var(--shirt-color),
-    -12px 30px 0 -3px var(--skin-tone),
-    12px 30px 0 -3px var(--skin-tone),
-    -5px 53px 0 -2px var(--pants-color),
-    5px 53px 0 -2px var(--pants-color),
-    -7px 66px 0 -3px var(--shoes-color),
-    7px 66px 0 -3px var(--shoes-color);
-}
-
-.character-preview-body::after {
-  top: 33px;
-  left: 12px;
-  width: 18px;
-  height: 22px;
-  border-radius: 5px 5px 3px 3px;
-  background: var(--shirt-color);
-}
-
-.character-preview-body.hair-side-part::before {
-  box-shadow:
-    -3px -6px 0 2px var(--hair-color),
-    -9px -1px 0 -2px var(--hair-color),
-    8px 1px 0 -3px var(--hair-color),
-    -4px 8px 0 -3px #1d2324,
-    4px 8px 0 -3px #1d2324,
-    0 14px 0 -8px #9d5f46,
-    0 28px 0 8px var(--shirt-color),
-    -12px 30px 0 -3px var(--skin-tone),
-    12px 30px 0 -3px var(--skin-tone),
-    -5px 53px 0 -2px var(--pants-color),
-    5px 53px 0 -2px var(--pants-color),
-    -7px 66px 0 -3px var(--shoes-color),
-    7px 66px 0 -3px var(--shoes-color);
-}
-
-.character-preview-body.view-side.hair-side-part::before {
-  background:
-    radial-gradient(circle at 77% 43%, #1d2324 0 1.5px, transparent 1.75px),
-    linear-gradient(90deg, var(--hair-color) 0 25%, transparent 25%), var(--skin-tone);
-  box-shadow:
-    -2px -6px 0 2px var(--hair-color),
-    -6px 2px 0 -1px var(--hair-color),
-    5px -1px 0 -3px var(--hair-color),
-    8px 7px 0 -5px var(--skin-tone),
-    1px 20px 0 -6px var(--skin-tone);
-}
-
-.character-preview-body.view-back.hair-side-part::before {
-  box-shadow:
-    -3px -6px 0 2px var(--hair-color),
-    -9px -1px 0 -2px var(--hair-color),
-    8px 1px 0 -3px var(--hair-color),
-    0 28px 0 8px var(--shirt-color),
-    -12px 30px 0 -3px var(--skin-tone),
-    12px 30px 0 -3px var(--skin-tone),
-    -5px 53px 0 -2px var(--pants-color),
-    5px 53px 0 -2px var(--pants-color),
-    -7px 66px 0 -3px var(--shoes-color),
-    7px 66px 0 -3px var(--shoes-color);
-}
-
-.character-preview-body.hair-bob::before {
-  box-shadow:
-    0 -4px 0 2px var(--hair-color),
-    -8px 5px 0 -2px var(--hair-color),
-    8px 5px 0 -2px var(--hair-color),
-    -4px 8px 0 -3px #1d2324,
-    4px 8px 0 -3px #1d2324,
-    0 14px 0 -8px #9d5f46,
-    0 28px 0 8px var(--shirt-color),
-    -12px 30px 0 -3px var(--skin-tone),
-    12px 30px 0 -3px var(--skin-tone),
-    -5px 53px 0 -2px var(--pants-color),
-    5px 53px 0 -2px var(--pants-color),
-    -7px 66px 0 -3px var(--shoes-color),
-    7px 66px 0 -3px var(--shoes-color);
-}
-
-.character-preview-body.view-side.hair-bob::before {
-  background:
-    radial-gradient(circle at 77% 43%, #1d2324 0 1.5px, transparent 1.75px),
-    linear-gradient(90deg, var(--hair-color) 0 32%, transparent 32%), var(--skin-tone);
-  box-shadow:
-    0 -4px 0 2px var(--hair-color),
-    -6px 7px 0 -1px var(--hair-color),
-    2px 9px 0 -2px var(--hair-color),
-    8px 7px 0 -5px var(--skin-tone),
-    1px 20px 0 -6px var(--skin-tone);
-}
-
-.character-preview-body.view-back.hair-bob::before {
-  box-shadow:
-    0 -4px 0 2px var(--hair-color),
-    -8px 5px 0 -2px var(--hair-color),
-    8px 5px 0 -2px var(--hair-color),
-    0 28px 0 8px var(--shirt-color),
-    -12px 30px 0 -3px var(--skin-tone),
-    12px 30px 0 -3px var(--skin-tone),
-    -5px 53px 0 -2px var(--pants-color),
-    5px 53px 0 -2px var(--pants-color),
-    -7px 66px 0 -3px var(--shoes-color),
-    7px 66px 0 -3px var(--shoes-color);
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .character-preview p {
@@ -638,10 +475,6 @@ select {
 
   .character-panel h1 {
     font-size: 22px;
-  }
-
-  .character-preview-views {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .character-preview-avatar {

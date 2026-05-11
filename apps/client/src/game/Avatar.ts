@@ -1,6 +1,15 @@
 import { type TilePosition, tileToScreen } from "@tilezo/engine";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { Container, Graphics, Text } from "pixi.js";
+import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import avatarManifest from "../../../../assets/avatars/avatar-manifest.json";
+import {
+  type AvatarManifest,
+  parseAvatarManifest,
+  type ResolvedAvatarLayer,
+  resolveAvatarAssetUrl,
+  resolveAvatarLayers,
+  toPixiColor,
+} from "./avatarAssets";
 
 type ScreenPosition = {
   x: number;
@@ -14,13 +23,15 @@ export class Avatar {
   position: TilePosition;
   appearance: AvatarAppearance;
 
-  private readonly body = new Graphics();
+  private readonly spriteLayer = new Container();
+  private readonly fallbackBody = new Graphics();
   private readonly label: Text;
   private path: TilePosition[] = [];
   private from: TilePosition;
   private fromScreen: ScreenPosition;
   private to?: TilePosition;
   private progress = 0;
+  private bodyVersion = 0;
   private readonly secondsPerTile = 0.36;
 
   constructor(
@@ -51,14 +62,14 @@ export class Avatar {
     this.label.anchor.set(0.5, 1);
     this.label.y = -34;
 
-    this.view.addChild(this.body, this.label);
-    this.drawBody();
+    this.view.addChild(this.spriteLayer, this.fallbackBody, this.label);
+    this.rebuildBody();
     this.syncViewToTile(position);
   }
 
   setAppearance(appearance: AvatarAppearance): void {
     this.appearance = { ...appearance };
-    this.drawBody();
+    this.rebuildBody();
   }
 
   setPath(path: TilePosition[]): void {
@@ -132,45 +143,110 @@ export class Avatar {
     this.view.y = screen.y;
   }
 
-  private drawBody(): void {
+  private rebuildBody(): void {
+    this.spriteLayer.removeChildren();
+    this.fallbackBody.clear();
+    this.bodyVersion += 1;
+
+    const manifest = getBundledAvatarManifest();
+
+    if (!manifest) {
+      this.drawFallbackBody();
+      return;
+    }
+
+    const layers = resolveAvatarLayers(manifest, this.appearance);
+
+    if (layers.length === 0) {
+      this.drawFallbackBody();
+      return;
+    }
+
+    const assetUrls = layers.map((layer) => resolveAvatarAssetUrl(layer.src));
+    this.composeSpriteLayers(
+      manifest,
+      layers,
+      assetUrls.map((url) => Texture.from(url)),
+    );
+
+    const version = this.bodyVersion;
+    void Promise.all(assetUrls.map((url) => Assets.load<Texture>(url)))
+      .then((textures) => {
+        if (version !== this.bodyVersion) {
+          return;
+        }
+
+        this.composeSpriteLayers(manifest, layers, textures);
+      })
+      .catch(() => {
+        if (version !== this.bodyVersion || this.spriteLayer.children.length > 0) {
+          return;
+        }
+
+        this.drawFallbackBody();
+      });
+  }
+
+  private composeSpriteLayers(
+    manifest: AvatarManifest,
+    layers: ResolvedAvatarLayer[],
+    textures: Texture[],
+  ): void {
+    this.spriteLayer.removeChildren();
+    this.fallbackBody.clear();
+
+    for (const [index, layer] of layers.entries()) {
+      const texture = textures[index] ?? Texture.EMPTY;
+      const sprite = new Sprite(texture);
+      sprite.x = -manifest.frame.anchorX;
+      sprite.y = -manifest.frame.anchorY;
+
+      if (layer.tintColor !== undefined) {
+        sprite.tint = layer.tintColor;
+      }
+
+      this.spriteLayer.addChild(sprite);
+    }
+  }
+
+  private drawFallbackBody(): void {
     const skinTone = toPixiColor(this.appearance.skinTone);
     const hairColor = toPixiColor(this.appearance.hairColor);
     const shirtColor = toPixiColor(this.appearance.shirtColor);
     const pantsColor = toPixiColor(this.appearance.pantsColor);
     const shoesColor = toPixiColor(this.appearance.shoesColor);
 
-    this.body.clear();
-    this.body.rect(-5, -10, 4, 10).fill(pantsColor);
-    this.body.rect(2, -10, 4, 10).fill(pantsColor);
-    this.body.roundRect(-8, -1, 8, 4, 2).fill(shoesColor);
-    this.body.roundRect(1, -1, 8, 4, 2).fill(shoesColor);
-    this.body.roundRect(-8, -28, 16, 20, 4).fill(shirtColor);
-    this.body.rect(-11, -25, 4, 13).fill(skinTone);
-    this.body.rect(8, -25, 4, 13).fill(skinTone);
-    this.body.circle(0, -34, 10).fill(skinTone);
+    this.fallbackBody.rect(-5, -10, 4, 10).fill(pantsColor);
+    this.fallbackBody.rect(2, -10, 4, 10).fill(pantsColor);
+    this.fallbackBody.roundRect(-8, -1, 8, 4, 2).fill(shoesColor);
+    this.fallbackBody.roundRect(1, -1, 8, 4, 2).fill(shoesColor);
+    this.fallbackBody.roundRect(-8, -28, 16, 20, 4).fill(shirtColor);
+    this.fallbackBody.rect(-11, -25, 4, 13).fill(skinTone);
+    this.fallbackBody.rect(8, -25, 4, 13).fill(skinTone);
+    this.fallbackBody.circle(0, -34, 10).fill(skinTone);
     this.drawHair(hairColor);
-    this.body.circle(-4, -35, 1.5).fill(0x1d2324);
-    this.body.circle(4, -35, 1.5).fill(0x1d2324);
-    this.body.rect(-2, -30, 4, 1).fill(0x9d5f46);
+    this.fallbackBody.circle(-4, -35, 1.5).fill(0x1d2324);
+    this.fallbackBody.circle(4, -35, 1.5).fill(0x1d2324);
+    this.fallbackBody.rect(-2, -30, 4, 1).fill(0x9d5f46);
   }
 
   private drawHair(color: number): void {
     if (this.appearance.hair === "side-part") {
-      this.body.circle(-2, -39, 9).fill(color);
-      this.body.rect(-11, -38, 8, 8).fill(color);
-      this.body.rect(6, -36, 6, 5).fill(color);
+      this.fallbackBody.circle(-2, -39, 9).fill(color);
+      this.fallbackBody.rect(-11, -38, 8, 8).fill(color);
+      this.fallbackBody.rect(6, -36, 6, 5).fill(color);
       return;
     }
 
     if (this.appearance.hair === "bob") {
-      this.body.circle(0, -38, 10).fill(color);
-      this.body.roundRect(-11, -36, 5, 13, 2).fill(color);
-      this.body.roundRect(6, -36, 5, 13, 2).fill(color);
+      this.fallbackBody.circle(0, -38, 10).fill(color);
+      this.fallbackBody.roundRect(-11, -36, 5, 13, 2).fill(color);
+      this.fallbackBody.roundRect(6, -36, 5, 13, 2).fill(color);
       return;
     }
 
-    this.body.circle(0, -39, 9).fill(color);
-    this.body.rect(-9, -38, 18, 7).fill(color);
+    this.fallbackBody.circle(0, -39, 9).fill(color);
+    this.fallbackBody.rect(-9, -38, 18, 7).fill(color);
   }
 }
 
@@ -182,6 +258,10 @@ function sameTile(a: TilePosition, b: TilePosition): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
-function toPixiColor(value: string): number {
-  return Number.parseInt(value.slice(1), 16);
+function getBundledAvatarManifest(): AvatarManifest | undefined {
+  try {
+    return parseAvatarManifest(avatarManifest);
+  } catch {
+    return undefined;
+  }
 }
