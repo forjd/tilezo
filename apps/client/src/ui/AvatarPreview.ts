@@ -77,10 +77,12 @@ export function getAvatarPreviewManifest(): AvatarManifest {
   return manifest;
 }
 
-function createTintedLayerUrl(maskUrl: string, color: string, frameIndex: number): string {
+function createTintedLayerUrl(src: string, color: string, frameIndex: number): string {
   const frameX = manifest.frame.width * frameIndex;
   const stripWidth = manifest.frame.width * getMaxFrames();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.frame.width}" height="${manifest.frame.height}" viewBox="0 0 ${manifest.frame.width} ${manifest.frame.height}"><defs><mask id="layer-mask" maskUnits="userSpaceOnUse"><image href="${maskUrl}" x="${-frameX}" y="0" width="${stripWidth}" height="${manifest.frame.height}"/></mask></defs><rect width="${manifest.frame.width}" height="${manifest.frame.height}" fill="${color}" mask="url(#layer-mask)"/></svg>`;
+  const frameImage = `<image href="${src}" x="${-frameX}" y="0" width="${stripWidth}" height="${manifest.frame.height}" style="image-rendering:pixelated"/>`;
+  const shadedFrameImage = `<image href="${src}" x="${-frameX}" y="0" width="${stripWidth}" height="${manifest.frame.height}" style="image-rendering:pixelated;mix-blend-mode:multiply"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.frame.width}" height="${manifest.frame.height}" viewBox="0 0 ${manifest.frame.width} ${manifest.frame.height}" shape-rendering="crispEdges" style="image-rendering:pixelated"><defs><mask id="layer-mask" maskUnits="userSpaceOnUse">${frameImage}</mask></defs><g mask="url(#layer-mask)"><rect width="${manifest.frame.width}" height="${manifest.frame.height}" fill="${color}"/>${shadedFrameImage}</g></svg>`;
 
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
@@ -88,7 +90,7 @@ function createTintedLayerUrl(maskUrl: string, color: string, frameIndex: number
 function createLayerFrameUrl(src: string, frameIndex: number): string {
   const frameX = manifest.frame.width * frameIndex;
   const stripWidth = manifest.frame.width * getMaxFrames();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.frame.width}" height="${manifest.frame.height}" viewBox="0 0 ${manifest.frame.width} ${manifest.frame.height}"><image href="${src}" x="${-frameX}" y="0" width="${stripWidth}" height="${manifest.frame.height}"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.frame.width}" height="${manifest.frame.height}" viewBox="0 0 ${manifest.frame.width} ${manifest.frame.height}" shape-rendering="crispEdges" style="image-rendering:pixelated"><image href="${src}" x="${-frameX}" y="0" width="${stripWidth}" height="${manifest.frame.height}" style="image-rendering:pixelated"/></svg>`;
 
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }

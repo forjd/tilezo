@@ -255,16 +255,16 @@ function createPose({ direction, state, step }: FrameDescriptor) {
     north: 0,
   }[direction];
   const head = {
-    x: 32 + directionShift,
-    y: 28 + bob,
-    width: direction === "east" ? 17 : direction.includes("east") ? 19 : 21,
-    height: 24,
+    x: 32 + directionShift + (direction === "south-east" ? 1 : 0),
+    y: 29 + bob,
+    width: direction === "east" ? 16 : direction.includes("east") ? 19 : 20,
+    height: direction.includes("east") ? 24 : 23,
   };
   const torso = {
-    x: 32 + Math.round(directionShift / 2),
-    y: 51 + bob,
-    width: direction === "east" ? 15 : 19,
-    height: 24,
+    x: 32 + Math.round(directionShift / 2) + (direction === "south-east" ? 1 : 0),
+    y: 56 + bob,
+    width: direction === "east" ? 14 : direction.includes("east") ? 18 : 19,
+    height: 26,
   };
   const feet = footPositions(direction, cycle);
 
@@ -284,28 +284,28 @@ function footPositions(direction: Direction, cycle: number): [Point, Point] {
   switch (direction) {
     case "south":
       return [
-        { x: 27 - cycle, y: 81 + Math.max(cycle, 0) },
-        { x: 37 + cycle, y: 81 + Math.max(-cycle, 0) },
+        { x: 28 - cycle, y: 83 + Math.max(cycle, 0) },
+        { x: 36 + cycle, y: 83 + Math.max(-cycle, 0) },
       ];
     case "south-east":
       return [
-        { x: 29 + cycle, y: 80 + Math.max(cycle, 0) },
-        { x: 39 - cycle, y: 82 + Math.max(-cycle, 0) },
+        { x: 30 + cycle, y: 82 + Math.max(cycle, 0) },
+        { x: 38 - cycle, y: 83 + Math.max(-cycle, 0) },
       ];
     case "east":
       return [
-        { x: 31 + cycle * 2, y: 80 + Math.max(cycle, 0) },
-        { x: 40 - cycle, y: 82 + Math.max(-cycle, 0) },
+        { x: 33 + cycle * 2, y: 82 + Math.max(cycle, 0) },
+        { x: 39 - cycle, y: 83 + Math.max(-cycle, 0) },
       ];
     case "north-east":
       return [
-        { x: 30 + cycle, y: 81 + Math.max(cycle, 0) },
-        { x: 39 - cycle, y: 79 + Math.max(-cycle, 0) },
+        { x: 30 + cycle, y: 83 + Math.max(cycle, 0) },
+        { x: 38 - cycle, y: 82 + Math.max(-cycle, 0) },
       ];
     case "north":
       return [
-        { x: 28 - cycle, y: 80 + Math.max(cycle, 0) },
-        { x: 36 + cycle, y: 80 + Math.max(-cycle, 0) },
+        { x: 28 - cycle, y: 83 + Math.max(cycle, 0) },
+        { x: 36 + cycle, y: 83 + Math.max(-cycle, 0) },
       ];
   }
 }
@@ -314,67 +314,72 @@ function handPositions(direction: Direction, cycle: number, bob: number): [Point
   switch (direction) {
     case "east":
       return [
-        { x: 28 - cycle, y: 62 + bob },
-        { x: 42 + cycle, y: 62 + bob },
+        { x: 30 - cycle, y: 66 + bob },
+        { x: 42 + cycle, y: 65 + bob },
       ];
     case "south-east":
       return [
-        { x: 23 - cycle, y: 62 + bob },
-        { x: 43 + cycle, y: 63 + bob },
+        { x: 24 - cycle, y: 66 + bob },
+        { x: 42 + cycle, y: 66 + bob },
       ];
     case "north-east":
       return [
-        { x: 25 - cycle, y: 62 + bob },
-        { x: 42 + cycle, y: 61 + bob },
+        { x: 25 - cycle, y: 65 + bob },
+        { x: 41 + cycle, y: 65 + bob },
       ];
     case "north":
       return [
-        { x: 25 - cycle, y: 61 + bob },
-        { x: 39 + cycle, y: 61 + bob },
+        { x: 25 - cycle, y: 65 + bob },
+        { x: 39 + cycle, y: 65 + bob },
       ];
     case "south":
       return [
-        { x: 22 - cycle, y: 63 + bob },
-        { x: 42 + cycle, y: 63 + bob },
+        { x: 23 - cycle, y: 66 + bob },
+        { x: 41 + cycle, y: 66 + bob },
       ];
   }
 }
 
 function drawBody(canvas: FrameCanvas, pose: ReturnType<typeof createPose>): void {
   const { head, hands, direction } = pose;
+  const headLeft = head.x - Math.floor(head.width / 2);
+  const headTop = head.y - Math.floor(head.height / 2);
+  const backView = direction === "north" || direction === "north-east";
+  const angledFront = direction === "south-east" || direction === "east";
 
   if (direction !== "east") {
-    canvas.ellipse(head.x - 11, head.y + 1, 3, 4, SHADE.outline);
-    canvas.ellipse(head.x + 11, head.y + 1, 3, 4, SHADE.outline);
-    canvas.ellipse(head.x - 11, head.y + 1, 2, 3, SHADE.shadow);
-    canvas.ellipse(head.x + 11, head.y + 1, 2, 3, SHADE.shadow);
+    canvas.roundRect(headLeft - 2, head.y - 1, 3, 5, 2, SHADE.outline);
+    canvas.roundRect(headLeft - 1, head.y, 2, 3, 1, SHADE.shadow);
+
+    if (!backView && direction !== "south-east") {
+      canvas.roundRect(headLeft + head.width - 1, head.y - 1, 3, 5, 2, SHADE.outline);
+      canvas.roundRect(headLeft + head.width - 1, head.y, 2, 3, 1, SHADE.shadow);
+    }
   } else {
-    canvas.ellipse(head.x + 9, head.y + 1, 3, 4, SHADE.outline);
-    canvas.ellipse(head.x + 9, head.y + 1, 2, 3, SHADE.shadow);
+    canvas.roundRect(headLeft + head.width - 1, head.y - 1, 3, 5, 2, SHADE.outline);
+    canvas.roundRect(headLeft + head.width - 1, head.y, 2, 3, 1, SHADE.shadow);
   }
 
-  canvas.ellipse(
-    head.x,
-    head.y,
-    Math.ceil(head.width / 2),
-    Math.ceil(head.height / 2),
-    SHADE.outline,
-  );
-  canvas.ellipse(
-    head.x,
-    head.y,
-    Math.floor(head.width / 2),
-    Math.floor(head.height / 2),
-    SHADE.base,
-  );
-  canvas.ellipse(head.x - 4, head.y - 5, 4, 5, SHADE.light);
-  canvas.rect(head.x - 4, head.y + 11, 8, 8, SHADE.outline);
-  canvas.rect(head.x - 3, head.y + 11, 6, 8, SHADE.shadow);
+  canvas.roundRect(headLeft, headTop, head.width, head.height, 6, SHADE.outline);
+  canvas.roundRect(headLeft + 1, headTop + 1, head.width - 2, head.height - 2, 5, SHADE.base);
+  canvas.rect(headLeft + 3, headTop + 3, 5, 4, SHADE.light);
+  canvas.rect(headLeft + head.width - 4, headTop + 4, 2, head.height - 8, SHADE.shadow);
+
+  if (angledFront && !backView) {
+    const noseX = headLeft + head.width - 1;
+    canvas.rect(noseX, head.y - 2, 3, 5, SHADE.outline);
+    canvas.rect(noseX, head.y - 1, 2, 3, SHADE.base);
+    canvas.pixel(noseX + 1, head.y, SHADE.light);
+    canvas.rect(headLeft + 2, headTop + 5, 3, head.height - 9, SHADE.shadow);
+  }
+
+  canvas.rect(head.x - 4, headTop + head.height - 1, 8, 7, SHADE.outline);
+  canvas.rect(head.x - 3, headTop + head.height - 1, 6, 6, SHADE.shadow);
 
   for (const hand of hands) {
-    canvas.ellipse(hand.x, hand.y, 4, 5, SHADE.outline);
-    canvas.ellipse(hand.x, hand.y, 3, 4, SHADE.base);
-    canvas.pixel(hand.x - 1, hand.y - 2, SHADE.light);
+    canvas.roundRect(hand.x - 3, hand.y - 4, 6, 7, 2, SHADE.outline);
+    canvas.roundRect(hand.x - 2, hand.y - 3, 4, 5, 2, SHADE.base);
+    canvas.pixel(hand.x - 1, hand.y - 3, SHADE.light);
   }
 }
 
@@ -383,51 +388,61 @@ function drawTop(
   pose: ReturnType<typeof createPose>,
   style: "crew" | "hoodie",
 ): void {
-  const { torso, hands, direction } = pose;
+  const { torso, direction } = pose;
   const half = Math.round(torso.width / 2);
-  const shoulder = torso.y - 11;
-  const hem = torso.y + 14;
-  const skew = direction.includes("east") ? 3 : 0;
+  const shoulder = torso.y - 12;
+  const hem = torso.y + 13;
+  const skew = direction.includes("east") ? 2 : 0;
+  const shoulderLeft = torso.x - half - 2;
+  const shoulderRight = torso.x + half + 2 + skew;
+  const waistLeft = torso.x - half + 1 + skew;
+  const waistRight = torso.x + half + skew;
 
   canvas.poly(
     [
-      { x: torso.x - half - 2, y: shoulder },
-      { x: torso.x + half + skew, y: shoulder },
-      { x: torso.x + half + 2, y: hem },
-      { x: torso.x - half - 2 + skew, y: hem },
+      { x: shoulderLeft, y: shoulder + 3 },
+      { x: torso.x - half, y: shoulder },
+      { x: shoulderRight - 3, y: shoulder },
+      { x: shoulderRight, y: shoulder + 4 },
+      { x: waistRight, y: hem },
+      { x: waistLeft, y: hem },
     ],
     SHADE.outline,
   );
   canvas.poly(
     [
-      { x: torso.x - half, y: shoulder + 2 },
-      { x: torso.x + half - 1 + skew, y: shoulder + 2 },
-      { x: torso.x + half, y: hem - 2 },
-      { x: torso.x - half + skew, y: hem - 2 },
+      { x: shoulderLeft + 2, y: shoulder + 4 },
+      { x: torso.x - half + 1, y: shoulder + 2 },
+      { x: shoulderRight - 4, y: shoulder + 2 },
+      { x: shoulderRight - 2, y: shoulder + 5 },
+      { x: waistRight - 1, y: hem - 2 },
+      { x: waistLeft + 1, y: hem - 2 },
     ],
     SHADE.base,
   );
   canvas.poly(
     [
-      { x: torso.x + half - 4 + skew, y: shoulder + 3 },
-      { x: torso.x + half - 1 + skew, y: shoulder + 3 },
-      { x: torso.x + half, y: hem - 3 },
-      { x: torso.x + half - 5, y: hem - 2 },
+      { x: shoulderRight - 6, y: shoulder + 3 },
+      { x: shoulderRight - 3, y: shoulder + 5 },
+      { x: waistRight - 1, y: hem - 2 },
+      { x: waistRight - 5, y: hem - 2 },
     ],
     SHADE.shadow,
   );
-  canvas.rect(torso.x - half + 2, shoulder + 4, 4, 12, SHADE.light);
+  canvas.rect(torso.x - half + 3, shoulder + 5, 3, 13, SHADE.light);
+  canvas.line(torso.x - half + 2, shoulder + 6, torso.x - half + 2, hem - 5, SHADE.deep);
+  canvas.rect(waistLeft + 1, hem - 1, waistRight - waistLeft - 2, 2, SHADE.deep);
 
-  drawSleeve(canvas, { x: hands[0].x + 2, y: shoulder + 9 }, -1, style);
-  drawSleeve(canvas, { x: hands[1].x - 2, y: shoulder + 9 }, 1, style);
+  drawSleeve(canvas, { x: shoulderLeft + 3, y: shoulder + 4 }, -1, style);
+  drawSleeve(canvas, { x: shoulderRight - 3, y: shoulder + 4 }, 1, style);
 
   if (style === "hoodie") {
-    canvas.ellipse(torso.x, shoulder + 1, half - 1, 6, SHADE.outline);
-    canvas.ellipse(torso.x, shoulder + 2, half - 3, 4, SHADE.shadow);
+    canvas.roundRect(torso.x - half + 1, shoulder, torso.width - 2, 8, 4, SHADE.outline);
+    canvas.roundRect(torso.x - half + 3, shoulder + 1, torso.width - 6, 6, 3, SHADE.shadow);
     canvas.rect(torso.x - 6, torso.y + 4, 12, 7, SHADE.outline);
     canvas.rect(torso.x - 5, torso.y + 5, 10, 5, SHADE.shadow);
-    canvas.pixel(torso.x - 2, shoulder + 3, SHADE.light);
-    canvas.pixel(torso.x + 2, shoulder + 3, SHADE.light);
+    canvas.pixel(torso.x - 2, shoulder + 4, SHADE.light);
+    canvas.pixel(torso.x + 2, shoulder + 4, SHADE.light);
   } else {
     canvas.rect(torso.x - 5, shoulder + 1, 10, 3, SHADE.outline);
     canvas.rect(torso.x - 3, shoulder + 1, 6, 2, SHADE.deep);
@@ -444,23 +459,23 @@ function drawSleeve(
 
   canvas.poly(
     [
-      { x: shoulder.x, y: shoulder.y - 6 },
-      { x: shoulder.x + side * 7, y: shoulder.y - 4 },
-      { x: shoulder.x + side * 5, y: shoulder.y + 12 },
-      { x: shoulder.x - side * 2, y: shoulder.y + 10 },
+      { x: shoulder.x, y: shoulder.y - 2 },
+      { x: shoulder.x + side * 5, y: shoulder.y },
+      { x: shoulder.x + side * 4, y: shoulder.y + 17 },
+      { x: shoulder.x - side * 1, y: shoulder.y + 16 },
     ],
     SHADE.outline,
   );
   canvas.poly(
     [
-      { x: shoulder.x, y: shoulder.y - 4 },
-      { x: shoulder.x + side * 5, y: shoulder.y - 2 },
-      { x: shoulder.x + side * 4, y: shoulder.y + 9 },
-      { x: shoulder.x - side, y: shoulder.y + 8 },
+      { x: shoulder.x, y: shoulder.y },
+      { x: shoulder.x + side * 3, y: shoulder.y + 1 },
+      { x: shoulder.x + side * 3, y: shoulder.y + 14 },
+      { x: shoulder.x, y: shoulder.y + 13 },
     ],
     SHADE.base,
   );
-  canvas.rect(shoulder.x + side * 2 - (side < 0 ? 3 : 0), shoulder.y + 8, 4, 3, cuff);
+  canvas.rect(shoulder.x + side * 2 - (side < 0 ? 4 : 0), shoulder.y + 14, 4, 3, cuff);
 }
 
 function drawBottoms(
@@ -468,41 +483,54 @@ function drawBottoms(
   pose: ReturnType<typeof createPose>,
   style: "straight" | "wide",
 ): void {
-  const width = style === "wide" ? 6 : 5;
-  const crotch = { x: pose.torso.x, y: pose.torso.y + 13 };
+  const waistY = pose.torso.y + 11;
+  const cuffY = Math.max(...pose.feet.map((foot) => foot.y)) - 5;
+  const topOuter = style === "wide" ? 9 : 8;
+  const bottomOuter = style === "wide" ? 5 : 4;
 
   for (const [index, foot] of pose.feet.entries()) {
     const side = index === 0 ? -1 : 1;
-    const knee = {
-      x: Math.round((crotch.x + foot.x) / 2) + side,
-      y: Math.round((crotch.y + foot.y) / 2),
-    };
-    const points = legPolygon(crotch, knee, foot, side, width);
-    canvas.poly(points.outline, SHADE.outline);
-    canvas.poly(points.fill, index === 0 ? SHADE.base : SHADE.shadow);
-    canvas.line(knee.x - side * 2, knee.y - 4, foot.x - side, foot.y - 5, SHADE.light);
-  }
-}
+    const outerTop = pose.torso.x + side * topOuter;
+    const innerTop = pose.torso.x + side * 1;
+    const outerCuff = foot.x + side * bottomOuter;
+    const innerCuff = foot.x - side * 2;
+    const outline =
+      side < 0
+        ? [
+            { x: outerTop, y: waistY },
+            { x: innerTop, y: waistY },
+            { x: innerCuff, y: cuffY },
+            { x: outerCuff, y: cuffY },
+          ]
+        : [
+            { x: innerTop, y: waistY },
+            { x: outerTop, y: waistY },
+            { x: outerCuff, y: cuffY },
+            { x: innerCuff, y: cuffY },
+          ];
+    const fill =
+      side < 0
+        ? [
+            { x: outerTop + 1, y: waistY + 1 },
+            { x: innerTop - 1, y: waistY + 1 },
+            { x: innerCuff - 1, y: cuffY - 1 },
+            { x: outerCuff + 1, y: cuffY - 1 },
+          ]
+        : [
+            { x: innerTop + 1, y: waistY + 1 },
+            { x: outerTop - 1, y: waistY + 1 },
+            { x: outerCuff - 1, y: cuffY - 1 },
+            { x: innerCuff + 1, y: cuffY - 1 },
+          ];
 
-function legPolygon(crotch: Point, knee: Point, foot: Point, side: -1 | 1, width: number) {
-  return {
-    outline: [
-      { x: crotch.x + side, y: crotch.y - 2 },
-      { x: knee.x + side * width, y: knee.y },
-      { x: foot.x + side * width, y: foot.y - 3 },
-      { x: foot.x - side * 2, y: foot.y - 3 },
-      { x: knee.x - side * 3, y: knee.y },
-      { x: crotch.x - side, y: crotch.y - 1 },
-    ],
-    fill: [
-      { x: crotch.x + side, y: crotch.y },
-      { x: knee.x + side * (width - 2), y: knee.y },
-      { x: foot.x + side * (width - 2), y: foot.y - 5 },
-      { x: foot.x - side, y: foot.y - 5 },
-      { x: knee.x - side * 2, y: knee.y },
-      { x: crotch.x - side, y: crotch.y },
-    ],
-  };
+    canvas.poly(outline, SHADE.outline);
+    canvas.poly(fill, index === 0 ? SHADE.base : SHADE.shadow);
+    canvas.line(innerTop, waistY + 2, innerCuff, cuffY - 2, SHADE.deep);
+    canvas.line(outerTop - side * 2, waistY + 4, outerCuff - side, cuffY - 2, SHADE.light);
+  }
+
+  canvas.rect(pose.torso.x - 8, waistY - 1, 16, 3, SHADE.outline);
+  canvas.rect(pose.torso.x - 7, waistY, 14, 1, SHADE.deep);
 }
 
 function drawShoes(
@@ -511,12 +539,13 @@ function drawShoes(
   style: "boots" | "sneakers",
 ): void {
   for (const [index, foot] of pose.feet.entries()) {
-    const width = style === "boots" ? 8 : 9;
+    const width = style === "boots" ? 7 : 8;
     const height = style === "boots" ? 5 : 4;
     const color = index === 0 ? SHADE.base : SHADE.shadow;
+    const side = index === 0 ? -1 : 1;
 
     canvas.roundRect(
-      foot.x - Math.round(width / 2),
+      foot.x - Math.round(width / 2) + side,
       foot.y - height,
       width,
       height,
@@ -524,7 +553,7 @@ function drawShoes(
       SHADE.outline,
     );
     canvas.roundRect(
-      foot.x - Math.round(width / 2) + 1,
+      foot.x - Math.round(width / 2) + 1 + side,
       foot.y - height + 1,
       width - 2,
       height - 1,
@@ -533,10 +562,10 @@ function drawShoes(
     );
 
     if (style === "boots") {
-      canvas.rect(foot.x - 3, foot.y - 8, 6, 4, SHADE.outline);
-      canvas.rect(foot.x - 2, foot.y - 7, 4, 3, color);
+      canvas.rect(foot.x - 3 + side, foot.y - 8, 6, 4, SHADE.outline);
+      canvas.rect(foot.x - 2 + side, foot.y - 7, 4, 3, color);
     } else {
-      canvas.rect(foot.x - Math.round(width / 2) + 2, foot.y - 3, width - 3, 1, SHADE.light);
+      canvas.rect(foot.x - Math.round(width / 2) + 2 + side, foot.y - 3, width - 3, 1, SHADE.light);
     }
   }
 }
@@ -549,23 +578,34 @@ function drawFace(canvas: FrameCanvas, pose: ReturnType<typeof createPose>): voi
   const { direction, head } = pose;
 
   if (direction === "east") {
-    canvas.rect(head.x + 3, head.y - 3, 2, 3, FACE.dark);
-    canvas.rect(head.x + 2, head.y - 6, 5, 1, FACE.brow);
-    canvas.rect(head.x + 7, head.y + 1, 2, 1, FACE.dark);
-    canvas.rect(head.x + 2, head.y + 6, 4, 1, FACE.lip);
-    canvas.pixel(head.x + 4, head.y + 4, FACE.blush);
+    canvas.rect(head.x + 1, head.y - 3, 2, 2, FACE.dark);
+    canvas.rect(head.x, head.y - 6, 5, 1, FACE.brow);
+    canvas.pixel(head.x + 7, head.y + 1, FACE.dark);
+    canvas.rect(head.x + 1, head.y + 6, 4, 1, FACE.lip);
+    canvas.pixel(head.x + 4, head.y + 3, FACE.blush);
     return;
   }
 
-  const faceShift = direction === "south-east" ? 2 : 0;
-  canvas.rect(head.x - 5 + faceShift, head.y - 3, 2, 3, FACE.dark);
-  canvas.rect(head.x + 4 + faceShift, head.y - 3, 2, 3, FACE.dark);
-  canvas.rect(head.x - 6 + faceShift, head.y - 6, 5, 1, FACE.brow);
-  canvas.rect(head.x + 3 + faceShift, head.y - 6, 5, 1, FACE.brow);
-  canvas.rect(head.x + faceShift, head.y + 1, 2, 3, FACE.dark);
-  canvas.rect(head.x - 3 + faceShift, head.y + 7, 7, 1, FACE.lip);
-  canvas.pixel(head.x - 7 + faceShift, head.y + 3, FACE.blush);
-  canvas.pixel(head.x + 8 + faceShift, head.y + 3, FACE.blush);
+  if (direction === "south-east") {
+    canvas.rect(head.x - 3, head.y - 3, 2, 2, FACE.dark);
+    canvas.rect(head.x + 4, head.y - 3, 2, 2, FACE.dark);
+    canvas.rect(head.x - 4, head.y - 6, 4, 1, FACE.brow);
+    canvas.rect(head.x + 3, head.y - 6, 4, 1, FACE.brow);
+    canvas.pixel(head.x + 7, head.y + 1, FACE.dark);
+    canvas.rect(head.x + 1, head.y + 7, 5, 1, FACE.lip);
+    canvas.pixel(head.x - 6, head.y + 3, FACE.blush);
+    return;
+  }
+
+  canvas.rect(head.x - 5, head.y - 3, 2, 2, FACE.dark);
+  canvas.rect(head.x + 4, head.y - 3, 2, 2, FACE.dark);
+  canvas.rect(head.x - 6, head.y - 6, 5, 1, FACE.brow);
+  canvas.rect(head.x + 3, head.y - 6, 5, 1, FACE.brow);
+  canvas.pixel(head.x, head.y + 1, FACE.dark);
+  canvas.pixel(head.x + 1, head.y + 2, FACE.dark);
+  canvas.rect(head.x - 3, head.y + 7, 7, 1, FACE.lip);
+  canvas.pixel(head.x - 7, head.y + 3, FACE.blush);
+  canvas.pixel(head.x + 7, head.y + 3, FACE.blush);
 }
 
 function drawHair(
@@ -576,48 +616,62 @@ function drawHair(
   const { direction, head } = pose;
   const backView = direction === "north" || direction === "north-east";
   const profile = direction === "east";
+  const half = Math.ceil(head.width / 2);
 
-  canvas.ellipse(head.x, head.y - 7, Math.ceil(head.width / 2) + 1, 8, SHADE.outline);
-  canvas.ellipse(head.x, head.y - 7, Math.ceil(head.width / 2) - 1, 6, SHADE.base);
+  canvas.roundRect(head.x - half - 1, head.y - 14, head.width + 2, 12, 5, SHADE.outline);
+  canvas.roundRect(head.x - half + 1, head.y - 13, head.width - 2, 9, 4, SHADE.base);
+  canvas.rect(head.x - half + 1, head.y - 8, profile ? 12 : head.width - 2, 6, SHADE.outline);
+  canvas.rect(head.x - half + 2, head.y - 8, profile ? 10 : head.width - 4, 4, SHADE.base);
 
   if (style === "short") {
-    canvas.rect(head.x - 10, head.y - 8, profile ? 15 : 20, 7, SHADE.outline);
-    canvas.rect(head.x - 8, head.y - 8, profile ? 12 : 17, 5, SHADE.base);
-    canvas.line(head.x - 7, head.y - 11, head.x + 7, head.y - 9, SHADE.light);
+    canvas.poly(
+      [
+        { x: head.x - half + 1, y: head.y - 13 },
+        { x: head.x + half - 2, y: head.y - 12 },
+        { x: head.x + half + (profile ? 1 : 0), y: head.y - 7 },
+        { x: head.x + 3, y: head.y - 3 },
+        { x: head.x - half + 1, y: head.y - 4 },
+      ],
+      SHADE.base,
+    );
+    canvas.rect(head.x - half + 3, head.y - 15, 4, 2, SHADE.outline);
+    canvas.rect(head.x - 1, head.y - 16, 5, 2, SHADE.outline);
+    canvas.line(head.x - half + 4, head.y - 12, head.x + half - 3, head.y - 10, SHADE.light);
     if (!backView) {
-      canvas.rect(head.x - 8, head.y - 2, 5, 4, SHADE.shadow);
+      canvas.rect(head.x - half + 1, head.y - 3, 5, 5, SHADE.shadow);
+      canvas.rect(head.x + 2, head.y - 4, 5, 3, SHADE.shadow);
     }
     return;
   }
 
   if (style === "side-part") {
-    canvas.rect(head.x - 12, head.y - 8, profile ? 16 : 22, 7, SHADE.outline);
-    canvas.rect(head.x - 10, head.y - 8, profile ? 13 : 18, 5, SHADE.base);
+    canvas.rect(head.x - half - 2, head.y - 9, profile ? 15 : head.width + 3, 7, SHADE.outline);
+    canvas.rect(head.x - half, head.y - 9, profile ? 12 : head.width - 1, 5, SHADE.base);
     canvas.poly(
       [
         { x: head.x - 4, y: head.y - 13 },
-        { x: head.x + 11, y: head.y - 7 },
-        { x: head.x + 5, y: head.y - 2 },
-        { x: head.x - 8, y: head.y - 4 },
+        { x: head.x + half, y: head.y - 8 },
+        { x: head.x + 4, y: head.y - 2 },
+        { x: head.x - half + 1, y: head.y - 4 },
       ],
       SHADE.light,
     );
-    canvas.rect(head.x + 7, head.y - 2, 6, 10, SHADE.outline);
-    canvas.rect(head.x + 7, head.y - 1, 4, 8, SHADE.shadow);
+    canvas.rect(head.x + half - 3, head.y - 2, 5, 9, SHADE.outline);
+    canvas.rect(head.x + half - 3, head.y - 1, 3, 7, SHADE.shadow);
     return;
   }
 
-  canvas.rect(head.x - 12, head.y - 7, profile ? 15 : 23, 8, SHADE.outline);
-  canvas.rect(head.x - 10, head.y - 7, profile ? 12 : 19, 6, SHADE.base);
-  canvas.roundRect(head.x - 13, head.y - 2, 7, 19, 3, SHADE.outline);
-  canvas.roundRect(head.x - 11, head.y - 1, 4, 16, 2, SHADE.shadow);
+  canvas.rect(head.x - half - 2, head.y - 8, profile ? 14 : head.width + 4, 8, SHADE.outline);
+  canvas.rect(head.x - half, head.y - 8, profile ? 11 : head.width, 6, SHADE.base);
+  canvas.roundRect(head.x - half - 3, head.y - 2, 6, 17, 3, SHADE.outline);
+  canvas.roundRect(head.x - half - 1, head.y - 1, 3, 14, 2, SHADE.shadow);
 
   if (!profile) {
-    canvas.roundRect(head.x + 7, head.y - 2, 7, 18, 3, SHADE.outline);
-    canvas.roundRect(head.x + 8, head.y - 1, 4, 15, 2, SHADE.shadow);
+    canvas.roundRect(head.x + half - 2, head.y - 2, 6, 16, 3, SHADE.outline);
+    canvas.roundRect(head.x + half - 1, head.y - 1, 3, 13, 2, SHADE.shadow);
   }
 
-  canvas.line(head.x - 8, head.y - 11, head.x + 6, head.y - 9, SHADE.light);
+  canvas.line(head.x - half + 3, head.y - 12, head.x + half - 4, head.y - 10, SHADE.light);
 }
 
 class PixelCanvas {

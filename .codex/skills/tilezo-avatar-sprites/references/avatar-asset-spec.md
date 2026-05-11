@@ -65,6 +65,23 @@ Recommended first-pass frame counts:
 
 With five directions, that yields 25 frames per complete layer strip. If this is too much for initial art, support a static fallback layer with one frame and let the renderer reuse it for all states and directions.
 
+## Visual Quality Bar
+
+Avatar assets are not acceptable just because the manifest validates. The default composed avatar must pass a visual review at native resolution and at the in-game preview scale.
+
+Minimum target for the first high-quality avatar pack:
+
+- The south-east idle frame is the hero pose and must read as a compact social-room avatar, not a front-facing icon or a procedural doll.
+- The figure should occupy roughly the middle of the 64x96 frame, with the floor anchor staying near `anchorX`/`anchorY`.
+- Head, neck, torso, arms, legs, and shoes must remain distinguishable after tinting.
+- Outer outlines should be crisp and dark, with softer internal lines only where needed.
+- Each tintable layer should contain a limited shade ramp that survives runtime tinting.
+- Faces should use very few pixels and avoid oversized noses, smeared mouths, or drifting eyes.
+- Walk frames should move feet and arms without changing the character's identity, head size, or standing height.
+- Direction changes should rotate one character consistently; they should not look like separate drawings.
+
+The deterministic generator is allowed for scaffolding and regression fixtures. It should not be treated as the production art source unless its contact sheet meets the same bar as authored pixel art.
+
 ## QA Checklist
 
 Before accepting a generated layer pack:
@@ -77,3 +94,5 @@ Before accepting a generated layer pack:
 - Layers align when composed with the default appearance.
 - East-facing layers still read correctly if used for west-facing mirror fallback.
 - The in-room avatar remains readable at gameplay zoom.
+- A contact sheet has been rendered with `render_avatar_contact_sheet.py` and visually reviewed.
+- A browser or game screenshot has been reviewed with the default appearance.

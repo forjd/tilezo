@@ -1,4 +1,4 @@
 interface:
   display_name: "Tilezo Avatar Sprites"
-  short_description: "Generate and validate layered Tilezo avatar sprites."
-  default_prompt: "Use this skill to design, generate, pack, validate, and integrate layered Habbo-like avatar sprites for Tilezo."
+  short_description: "Design, contact-sheet review, validate, and integrate layered Tilezo avatar sprites."
+  default_prompt: "Use this skill to design, generate, pack, contact-sheet review, validate, and integrate layered Habbo-inspired but original avatar sprites for Tilezo."

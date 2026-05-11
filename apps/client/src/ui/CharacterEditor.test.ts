@@ -70,13 +70,12 @@ describe("CharacterEditor", () => {
 
     expect(preview.className).toBe("character-preview");
     const previewAvatar = preview.children[0]?.children[0] as FakeElement;
-    const previewBody = previewAvatar.children[1] as FakeElement;
+    const previewBody = previewAvatar.children[0] as FakeElement;
+    const hair = form.children[0]?.children[1] as FakeElement;
 
     expect(preview.children[0]?.className).toBe("character-preview-views");
     expect(previewAvatar.className).toBe("character-preview-avatar");
-    expect(previewAvatar.children[0]?.className).toBe("character-preview-controls");
-    expect(previewAvatar.children[2]?.className).toBe("character-preview-controls");
-    expect(previewAvatar.children[3]?.textContent).toBe("Preview");
+    expect(previewAvatar.children).toHaveLength(1);
     expect(previewBody.className).toBe("avatar-preview-sprite");
     expect(previewBody.children.map((child) => child.className)).toContain("avatar-preview-layer");
     expect(
@@ -84,16 +83,11 @@ describe("CharacterEditor", () => {
         (child) => child.style.getPropertyValue("--layer-tint") === "#8b4a24",
       ),
     ).toBe(true);
-    expect(previewAvatar.children[2]?.children[0]?.className).toBe("character-preview-swatch");
-    expect(
-      previewAvatar.children[2]?.children[0]?.style.getPropertyValue("--preview-swatch-color"),
-    ).toBe("#8b4a24");
 
-    const previousHair = previewAvatar.children[0]?.children[0]?.children[0] as FakeElement;
-    previousHair.dispatch("click", {});
+    hair.value = "bob";
+    form.dispatch("change", {});
 
     expect(hairColor.value).toBe("#8b4a24");
-    const hair = form.children[0]?.children[1] as FakeElement;
     expect(hair.value).toBe("bob");
     expect(
       previewBody.children.some((child) => child.getAttribute("data-layer-id") === "bob"),

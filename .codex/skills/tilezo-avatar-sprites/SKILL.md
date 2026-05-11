@@ -14,16 +14,39 @@ Tilezo avatars are not single rendered characters. Treat them as ordered layers:
 ## Workflow
 
 1. Read `docs/overview.md`, `docs/realtime-room-loop.md`, `packages/protocol/src/appearance.ts`, `apps/client/src/game/Avatar.ts`, and `apps/client/src/ui/CharacterEditor.ts`.
-2. Read `references/avatar-asset-spec.md` before changing asset schemas, prompts, packing scripts, or renderer assumptions.
+2. Read `docs/art-design-principles.md` and `references/avatar-asset-spec.md` before changing asset schemas, prompts, packing scripts, or renderer assumptions.
 3. Keep scope inside the current room, presence, movement, chat, and persistence foundations. Leave explicit future-work notes for catalogue, inventory, economy, trading, or non-room systems.
-4. Generate or source sprite art as layer rows, not full character composites.
-5. Run deterministic validation before accepting asset packs:
+4. Use local inspiration such as `inspiration/character.png` as a style reference, not as a source to copy. Preserve the Tilezo-specific proportions and motifs from `docs/art-design-principles.md`.
+5. Generate or source sprite art as layer rows, not full character composites.
+6. Run deterministic validation before accepting asset packs:
 
 ```bash
 python3 .codex/skills/tilezo-avatar-sprites/scripts/inspect_avatar_assets.py assets/avatars/avatar-manifest.json
 ```
 
-6. Visually review contact sheets or in-game screenshots. Deterministic validation catches geometry and manifest problems, not style drift.
+7. Render and visually review a contact sheet before claiming an asset pass is acceptable:
+
+```bash
+python3 .codex/skills/tilezo-avatar-sprites/scripts/render_avatar_contact_sheet.py assets/avatars/avatar-manifest.json .codex/tmp/avatar-contact-sheet.png
+```
+
+8. Review the contact sheet and an in-game/browser screenshot. Deterministic validation catches geometry and manifest problems, not style drift.
+
+## Visual Quality Gate
+
+Do not treat generated geometry as final art. The deterministic generator can scaffold frame dimensions, anchors, animation ordering, and placeholder layers, but production avatar quality needs hand-authored or image-assisted pixel art that is then cleaned, sliced, and validated.
+
+Reject an asset pass if any default contact-sheet frame fails these checks:
+
+- The south-east idle frame does not immediately read as a person at native pixel scale.
+- Head, neck, torso, arms, legs, and shoes are not clearly separated.
+- The silhouette is blobby, stick-like, or overpowered by outlines.
+- Facial features drift, smear, or dominate the face.
+- Clothing layers hide the body structure instead of fitting it.
+- Walk frames change height, head position, or foot anchor unexpectedly.
+- Directional frames look like unrelated characters.
+- Tintable layers lose readable highlights and shadows after coloring.
+- The sprite looks blurred, anti-aliased, or scaled from non-pixel art.
 
 ## Asset Rules
 
@@ -40,10 +63,12 @@ python3 .codex/skills/tilezo-avatar-sprites/scripts/inspect_avatar_assets.py ass
 Use the same discipline as a curated asset pipeline:
 
 - Create a base identity sheet first.
+- Make the primary pose a clean three-quarter south-east avatar that works in the character editor and room.
 - Generate grounded rows from the base identity and layout guides.
 - Preserve silhouette, scale, outline weight, face placement, and palette across rows.
 - Reject rows with visible guide marks, frame labels, backgrounds, shadows, detached effects, cropped limbs, or poses crossing into neighboring frames.
 - For clothing and hair, generate isolated layers on transparent or clean chroma-key backgrounds. Avoid full-body composites unless they are only used as visual references.
+- Prefer a small number of excellent base parts over many mediocre options. One good body, one good hair style, one good top, one good bottom, and one good shoe style are enough for a first usable pass.
 
 If using image generation, delegate visual generation through the installed image generation skill when available. Use local scripts only for deterministic work: manifest validation, slicing, packing, contact sheets, and format conversion.
 
