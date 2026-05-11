@@ -9,10 +9,10 @@
   "scripts": {
     "build": "bun run --filter '@tilezo/client' build",
     "db:down": "docker compose -f compose.db.yml down",
-    "db:generate": "bun run --cwd apps/server db:generate",
-    "db:migrate": "bun run --cwd apps/server db:migrate",
+    "db:generate": "bun run scripts/run-server-db.ts generate",
+    "db:migrate": "bun run scripts/run-server-db.ts migrate",
     "db:reset": "docker compose -f compose.db.yml down -v",
-    "db:studio": "bun run --cwd apps/server db:studio",
+    "db:studio": "bun run scripts/run-server-db.ts studio",
     "db:up": "docker compose -f compose.db.yml up -d",
     "dev": "bun run --filter '@tilezo/server' --filter '@tilezo/client' --parallel dev",
     "dev:client": "bun run --filter '@tilezo/client' dev",
