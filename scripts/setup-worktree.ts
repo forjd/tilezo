@@ -54,8 +54,8 @@ console.log("  bun run dev");
 
 async function generateWorktreeEnv(existing: EnvValues): Promise<EnvValues> {
   const worktreeName = slugify(currentBranch() ?? basename(cwd));
-  const projectName = existing.COMPOSE_PROJECT_NAME ?? `tilezo_${worktreeName}`;
   const seed = hashString(`${cwd}:${worktreeName}`);
+  const projectName = existing.COMPOSE_PROJECT_NAME ?? `tilezo_${worktreeName}_${hashSuffix(seed)}`;
 
   const serverPort = Number(
     existing.SERVER_PORT ??
@@ -164,6 +164,10 @@ function hashString(value: string): number {
   }
 
   return hash;
+}
+
+function hashSuffix(value: number): string {
+  return value.toString(36).padStart(6, "0").slice(0, 6);
 }
 
 async function findAvailablePortPair(start: number): Promise<[number, number]> {

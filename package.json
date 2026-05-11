@@ -13,7 +13,7 @@
     "db:migrate": "bun run scripts/run-server-db.ts migrate",
     "db:reset": "docker compose -f compose.db.yml down -v",
     "db:studio": "bun run scripts/run-server-db.ts studio",
-    "db:up": "docker compose -f compose.db.yml up -d",
+    "db:up": "docker compose -f compose.db.yml up -d --wait",
     "dev": "bun run --filter '@tilezo/server' --filter '@tilezo/client' --parallel dev",
     "dev:client": "bun run --filter '@tilezo/client' dev",
     "dev:server": "bun run --filter '@tilezo/server' dev",
