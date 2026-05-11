@@ -5,6 +5,7 @@ import { Avatar } from "./Avatar";
 import { TileMap } from "./TileMap";
 
 type MoveRequestHandler = (target: TilePosition) => void;
+type CanvasInteractionHandler = () => void;
 
 export class RoomScene {
   private readonly world = new Container();
@@ -16,6 +17,7 @@ export class RoomScene {
   constructor(
     private readonly app: Application,
     private readonly onMoveRequest: MoveRequestHandler,
+    private readonly onCanvasInteraction?: CanvasInteractionHandler,
   ) {
     this.world.addChild(this.tiles.view, this.avatarLayer);
     this.app.stage.addChild(this.world);
@@ -112,12 +114,19 @@ export class RoomScene {
       this.tiles.setHover(undefined);
     });
 
+    canvas.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      this.onCanvasInteraction?.();
+    });
+
     canvas.addEventListener("click", (event) => {
       const target = this.eventToTile(event);
 
       if (this.tiles.isWalkable(target)) {
         this.onMoveRequest(target);
       }
+
+      this.onCanvasInteraction?.();
     });
   }
 

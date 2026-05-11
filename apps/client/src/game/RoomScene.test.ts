@@ -67,13 +67,23 @@ describe("RoomScene", () => {
   test("requests movement only when clicking walkable tiles", () => {
     const app = createApp();
     const moves: unknown[] = [];
-    const scene = new RoomScene(app, (target) => moves.push(target));
+    let interactions = 0;
+    const scene = new RoomScene(
+      app,
+      (target) => moves.push(target),
+      () => {
+        interactions += 1;
+      },
+    );
 
     scene.loadSnapshot(snapshot([]));
+    app.canvas.mousedown({ clientX: 400, clientY: 120 });
     app.canvas.click({ clientX: 400, clientY: 120 });
     app.canvas.click({ clientX: 432, clientY: 120 });
 
     expect(moves).toEqual([{ x: 0, y: 0 }]);
+    expect(app.canvas.defaultPrevented).toBe(true);
+    expect(interactions).toBe(3);
   });
 
   test("updates and clears hover from pointer events", () => {
@@ -150,15 +160,11 @@ function avatarState(avatar?: { view: Container }): {
 }
 
 class FakeCanvas {
-  private readonly listeners = new Map<
-    string,
-    Set<(event: { clientX?: number; clientY?: number }) => void>
-  >();
+  defaultPrevented = false;
 
-  addEventListener(
-    type: string,
-    listener: (event: { clientX?: number; clientY?: number }) => void,
-  ): void {
+  private readonly listeners = new Map<string, Set<(event: FakePointerEvent) => void>>();
+
+  addEventListener(type: string, listener: (event: FakePointerEvent) => void): void {
     const listeners = this.listeners.get(type) ?? new Set();
     listeners.add(listener);
     this.listeners.set(type, listeners);
@@ -172,6 +178,15 @@ class FakeCanvas {
     this.dispatch("click", event);
   }
 
+  mousedown(event: { clientX: number; clientY: number }): void {
+    this.dispatch("mousedown", {
+      ...event,
+      preventDefault: () => {
+        this.defaultPrevented = true;
+      },
+    });
+  }
+
   mousemove(event: { clientX: number; clientY: number }): void {
     this.dispatch("mousemove", event);
   }
@@ -180,9 +195,15 @@ class FakeCanvas {
     this.dispatch("mouseleave", event);
   }
 
-  private dispatch(type: string, event: { clientX?: number; clientY?: number }): void {
+  private dispatch(type: string, event: FakePointerEvent): void {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event);
     }
   }
 }
+
+type FakePointerEvent = {
+  clientX?: number;
+  clientY?: number;
+  preventDefault?: () => void;
+};

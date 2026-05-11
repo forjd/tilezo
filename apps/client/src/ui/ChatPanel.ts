@@ -32,6 +32,7 @@ export class ChatPanel {
 
   show(): void {
     this.element.classList.remove("hidden");
+    this.focusInput();
   }
 
   hide(): void {
@@ -44,6 +45,14 @@ export class ChatPanel {
 
   onSend(handler: (text: string) => void): void {
     this.sendHandler = handler;
+  }
+
+  focusInput(): void {
+    if (this.element.classList.contains("hidden")) {
+      return;
+    }
+
+    this.input.focus({ preventScroll: true });
   }
 
   addMessage(username: string, text: string): void {

@@ -28,9 +28,13 @@ export class Game {
     });
 
     this.options.stage.appendChild(this.app.canvas);
-    this.scene = new RoomScene(this.app, (target) => {
-      this.net.send({ type: "avatar.move.request", target });
-    });
+    this.scene = new RoomScene(
+      this.app,
+      (target) => {
+        this.net.send({ type: "avatar.move.request", target });
+      },
+      () => this.options.chat.focusInput(),
+    );
 
     this.net.onStatus(this.options.setStatus);
     this.net.onMessage((message) => {

@@ -11,16 +11,33 @@ describe("ChatPanel", () => {
   test("starts hidden and becomes visible", () => {
     installDocument();
     const panel = new ChatPanel();
+    const input = getInput(panel);
 
     expect(panel.element.className).toBe("chat-panel hidden");
 
     panel.show();
 
     expect(panel.element.classList.contains("hidden")).toBe(false);
+    expect(input.focusCount).toBe(1);
 
     panel.hide();
 
     expect(panel.element.classList.contains("hidden")).toBe(true);
+  });
+
+  test("focuses the chat input only while visible", () => {
+    installDocument();
+    const panel = new ChatPanel();
+    const input = getInput(panel);
+
+    panel.focusInput();
+    expect(input.focusCount).toBe(0);
+
+    panel.show();
+    panel.focusInput();
+
+    expect(input.focusCount).toBe(2);
+    expect(input.lastFocusOptions).toEqual({ preventScroll: true });
   });
 
   test("sends trimmed enter-key messages and clears the input", () => {
@@ -106,6 +123,8 @@ class FakeElement {
   textContent = "";
   type = "";
   value = "";
+  focusCount = 0;
+  lastFocusOptions?: FocusOptions;
 
   constructor(readonly tagName: string) {}
 
@@ -127,6 +146,11 @@ class FakeElement {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event);
     }
+  }
+
+  focus(options?: FocusOptions): void {
+    this.focusCount += 1;
+    this.lastFocusOptions = options;
   }
 }
 
