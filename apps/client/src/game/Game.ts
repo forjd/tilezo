@@ -1,4 +1,4 @@
-import type { AvatarAppearance } from "@tilezo/protocol";
+import type { AvatarAppearance, PublicRoomSummary, RoomSnapshotMessage } from "@tilezo/protocol";
 import { Application } from "pixi.js";
 import type { ChatPanel } from "../ui/ChatPanel";
 import { NetClient } from "./NetClient";
@@ -8,6 +8,8 @@ type GameOptions = {
   stage: HTMLElement;
   chat: ChatPanel;
   setStatus: (status: string) => void;
+  setRooms: (rooms: PublicRoomSummary[]) => void;
+  onRoomJoined: (snapshot: RoomSnapshotMessage) => void;
 };
 
 export class Game {
@@ -17,7 +19,7 @@ export class Game {
 
   constructor(private readonly options: GameOptions) {}
 
-  async start(token: string, roomId: string): Promise<void> {
+  async start(token: string): Promise<void> {
     await this.app.init({
       antialias: true,
       autoDensity: true,
@@ -38,6 +40,12 @@ export class Game {
 
       if (message.type === "room.snapshot") {
         this.options.setStatus(`joined ${message.roomId}`);
+        this.options.onRoomJoined(message);
+        this.refreshRooms();
+      }
+
+      if (message.type === "room.list") {
+        this.options.setRooms(message.rooms);
       }
 
       if (message.type === "chat.message") {
@@ -52,10 +60,7 @@ export class Game {
     });
 
     await this.net.connect(token);
-    this.net.send({
-      type: "room.join",
-      roomId,
-    });
+    this.refreshRooms();
 
     this.options.chat.onSend((text) => {
       this.net.send({ type: "chat.say", text });
@@ -66,6 +71,17 @@ export class Game {
     });
 
     globalThis.addEventListener("resize", () => this.scene?.resize());
+  }
+
+  joinRoom(roomId: string): void {
+    this.net.send({
+      type: "room.join",
+      roomId,
+    });
+  }
+
+  refreshRooms(): void {
+    this.net.send({ type: "room.list.request" });
   }
 
   updateAppearance(appearance: AvatarAppearance): void {

@@ -28,13 +28,41 @@ export function handleMessage(
   }
 
   switch (parsed.value.type) {
+    case "room.list.request":
+      send(ws, {
+        type: "room.list",
+        rooms: context.rooms.listPublicRooms(ws.data.roomId),
+      });
+      break;
+
     case "room.join": {
       if (!ws.data.username) {
         sendError(ws, "UNAUTHENTICATED", "Log in before joining a room");
         return;
       }
 
+      const room = context.rooms.getOrCreate(parsed.value.roomId);
+
+      if (!room) {
+        sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
+        return;
+      }
+
       const previousRoomId = ws.data.roomId;
+
+      if (previousRoomId === room.id) {
+        send(ws, {
+          type: "room.snapshot",
+          roomId: room.id,
+          users: room.getUsers(),
+          tiles: room.getSnapshot().tiles,
+        });
+        send(ws, {
+          type: "room.list",
+          rooms: context.rooms.listPublicRooms(room.id),
+        });
+        return;
+      }
 
       if (previousRoomId) {
         context.rooms.get(previousRoomId)?.leave(ws.data.userId);
@@ -46,7 +74,6 @@ export function handleMessage(
         context.rooms.removeIfEmpty(previousRoomId);
       }
 
-      const room = context.rooms.getOrCreate(parsed.value.roomId);
       const user = room.join({
         id: ws.data.userId,
         username: ws.data.username,
@@ -64,6 +91,10 @@ export function handleMessage(
       context.publish(roomTopic(room.id), {
         type: "user.joined",
         user,
+      });
+      send(ws, {
+        type: "room.list",
+        rooms: context.rooms.listPublicRooms(room.id),
       });
       break;
     }

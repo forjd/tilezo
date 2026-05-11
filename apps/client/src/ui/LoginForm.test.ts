@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { DEFAULT_ROOM_ID } from "../assets";
 import { LoginForm } from "./LoginForm";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -12,8 +11,7 @@ describe("LoginForm", () => {
   test("renders default fields and hides on request", () => {
     installDocument();
     const form = new LoginForm(() => {});
-    const { username, password, roomId, loginModeButton, registerModeButton, button } =
-      getFields(form);
+    const { username, password, loginModeButton, registerModeButton, button } = getFields(form);
 
     expect(form.element.className).toBe("login-panel");
     expect(username.maxLength).toBe(24);
@@ -21,12 +19,9 @@ describe("LoginForm", () => {
     expect(username.placeholder).toBe("dan");
     expect(password.required).toBe(true);
     expect(password.type).toBe("password");
-    expect(roomId.maxLength).toBe(64);
-    expect(roomId.required).toBe(true);
-    expect(roomId.value).toBe(DEFAULT_ROOM_ID);
     expect(loginModeButton.classList.contains("active")).toBe(true);
     expect(registerModeButton.classList.contains("active")).toBe(false);
-    expect(button.textContent).toBe("Enter room");
+    expect(button.textContent).toBe("Continue");
 
     form.hide();
 
@@ -37,20 +32,17 @@ describe("LoginForm", () => {
     installDocument();
     const submissions: unknown[] = [];
     const form = new LoginForm((values) => submissions.push(values));
-    const { element, username, password, roomId, registerModeButton, button } = getFields(form);
+    const { element, username, password, registerModeButton, button } = getFields(form);
     const event = new FakeSubmitEvent();
 
     username.value = "  Dan  ";
     password.value = "  secret phrase  ";
-    roomId.value = "  studio  ";
     registerModeButton.dispatch("click", {});
     element.dispatch("submit", event);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(button.textContent).toBe("Create and enter");
-    expect(submissions).toEqual([
-      { mode: "register", username: "Dan", password: "secret phrase", roomId: "studio" },
-    ]);
+    expect(button.textContent).toBe("Create account");
+    expect(submissions).toEqual([{ mode: "register", username: "Dan", password: "secret phrase" }]);
   });
 
   test("shows and clears inline errors", () => {
@@ -69,23 +61,17 @@ describe("LoginForm", () => {
     expect(message.classList.contains("visible")).toBe(false);
   });
 
-  test("ignores blank usernames, passwords, and room IDs", () => {
+  test("ignores blank usernames and passwords", () => {
     installDocument();
     const submissions: unknown[] = [];
     const form = new LoginForm((values) => submissions.push(values));
-    const { element, username, password, roomId } = getFields(form);
+    const { element, username, password } = getFields(form);
 
     username.value = " ";
     password.value = "password";
-    roomId.value = "lobby";
     element.dispatch("submit", new FakeSubmitEvent());
     username.value = "Dan";
     password.value = " ";
-    roomId.value = "lobby";
-    element.dispatch("submit", new FakeSubmitEvent());
-    username.value = "Dan";
-    password.value = "password";
-    roomId.value = " ";
     element.dispatch("submit", new FakeSubmitEvent());
 
     expect(submissions).toEqual([]);
@@ -96,7 +82,6 @@ function getFields(form: LoginForm): {
   element: FakeElement;
   username: FakeElement;
   password: FakeElement;
-  roomId: FakeElement;
   loginModeButton: FakeElement;
   registerModeButton: FakeElement;
   button: FakeElement;
@@ -106,16 +91,14 @@ function getFields(form: LoginForm): {
   const modeGroup = element.children[0];
   const usernameLabel = element.children[1];
   const passwordLabel = element.children[2];
-  const roomLabel = element.children[3];
 
   return {
     element,
     username: usernameLabel?.children[1] as FakeElement,
     password: passwordLabel?.children[1] as FakeElement,
-    roomId: roomLabel?.children[1] as FakeElement,
     loginModeButton: modeGroup?.children[0] as FakeElement,
     registerModeButton: modeGroup?.children[1] as FakeElement,
-    button: element.children[4] as FakeElement,
+    button: element.children[3] as FakeElement,
     message: form.element.children[1] as unknown as FakeElement,
   };
 }

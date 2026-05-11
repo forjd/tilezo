@@ -49,6 +49,33 @@ describe("handleMessage", () => {
     });
   });
 
+  test("lists public rooms with current membership state", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "studio" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(ws, JSON.stringify({ type: "room.list.request" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.sent).toEqual([
+      {
+        type: "room.list",
+        rooms: [
+          { id: "lobby", name: "Lobby", userCount: 0, joined: false },
+          { id: "atrium", name: "Atrium", userCount: 0, joined: false },
+          { id: "studio", name: "Studio", userCount: 1, joined: true },
+        ],
+      },
+    ]);
+  });
+
   test("rejects movement and chat before joining a room", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket();
@@ -79,6 +106,28 @@ describe("handleMessage", () => {
 
     expect(ws.sent).toEqual([
       { type: "error", code: "UNAUTHENTICATED", message: "Log in before joining a room" },
+    ]);
+  });
+
+  test("rejects unavailable public rooms without leaving the current room", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "private-room" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.data.roomId).toBe("lobby");
+    expect(ws.unsubscribed).toEqual([]);
+    expect(ws.sent).toEqual([
+      { type: "error", code: "ROOM_NOT_FOUND", message: "Room is not available" },
     ]);
   });
 

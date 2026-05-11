@@ -17,6 +17,10 @@ describe("ChatPanel", () => {
     panel.show();
 
     expect(panel.element.classList.contains("hidden")).toBe(false);
+
+    panel.hide();
+
+    expect(panel.element.classList.contains("hidden")).toBe(true);
   });
 
   test("sends trimmed enter-key messages and clears the input", () => {
@@ -50,6 +54,10 @@ describe("ChatPanel", () => {
     expect(message?.children[0]?.textContent).toBe("Dan");
     expect(message?.children[1]?.textContent).toBe(": hello");
     expect(list.scrollTop).toBe(120);
+
+    panel.clear();
+
+    expect(list.children).toEqual([]);
   });
 });
 
@@ -103,6 +111,10 @@ class FakeElement {
 
   append(...children: FakeElement[]): void {
     this.children.push(...children);
+  }
+
+  replaceChildren(...children: FakeElement[]): void {
+    this.children.splice(0, this.children.length, ...children);
   }
 
   addEventListener(type: string, listener: (event: FakeEvent) => void): void {

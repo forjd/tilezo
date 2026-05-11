@@ -8,10 +8,11 @@ The current product loop is:
 2. Open the client in two or more browser tabs.
 3. Create accounts or log in.
 4. Join the same room.
-5. See connected users as avatars.
-6. Click tiles to request server-authoritative movement.
-7. Send and receive room chat messages.
-8. See users leave the room when they disconnect.
+5. Browse public rooms and hop between them.
+6. See connected users as avatars.
+7. Click tiles to request server-authoritative movement.
+8. Send and receive room chat messages.
+9. See users leave the room when they disconnect or switch rooms.
 
 The project is inspired by the social-room interaction pattern of classic browser hotels, but it is not a clone. The goal is to establish reusable foundations for a custom social room game.
 
@@ -27,6 +28,7 @@ Implemented:
 - Bun WebSocket server with in-memory authoritative room state.
 - Account creation and login with case-insensitive usernames and hashed passwords.
 - Multi-user presence.
+- Public room browser with live room population counts.
 - Server-authoritative tile movement.
 - Basic realtime chat.
 - PostgreSQL schema, migrations, and account persistence.

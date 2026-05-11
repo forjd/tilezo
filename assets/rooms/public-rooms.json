@@ -1,0 +1,47 @@
+[
+  {
+    "id": "lobby",
+    "name": "Lobby",
+    "width": 10,
+    "height": 10,
+    "spawn": {
+      "x": 2,
+      "y": 2
+    },
+    "blocked": [{ "x": 4, "y": 4 }, { "x": 4, "y": 5 }, { "x": 5, "y": 4 }]
+  },
+  {
+    "id": "atrium",
+    "name": "Atrium",
+    "width": 12,
+    "height": 9,
+    "spawn": {
+      "x": 3,
+      "y": 2
+    },
+    "blocked": [
+      { "x": 6, "y": 2 },
+      { "x": 6, "y": 3 },
+      { "x": 6, "y": 4 },
+      { "x": 2, "y": 6 },
+      { "x": 3, "y": 6 }
+    ]
+  },
+  {
+    "id": "studio",
+    "name": "Studio",
+    "width": 9,
+    "height": 9,
+    "spawn": {
+      "x": 2,
+      "y": 2
+    },
+    "blocked": [
+      { "x": 5, "y": 1 },
+      { "x": 5, "y": 2 },
+      { "x": 5, "y": 3 },
+      { "x": 6, "y": 6 },
+      { "x": 7, "y": 6 }
+    ]
+  }
+]

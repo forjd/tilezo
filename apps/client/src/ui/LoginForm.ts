@@ -1,10 +1,7 @@
-import { DEFAULT_ROOM_ID } from "../assets";
-
 type LoginValues = {
   mode: "login" | "register";
   username: string;
   password: string;
-  roomId: string;
 };
 
 export class LoginForm {
@@ -12,7 +9,6 @@ export class LoginForm {
 
   private readonly username = document.createElement("input");
   private readonly password = document.createElement("input");
-  private readonly roomId = document.createElement("input");
   private readonly message = document.createElement("p");
   private readonly loginModeButton = document.createElement("button");
   private readonly registerModeButton = document.createElement("button");
@@ -46,7 +42,6 @@ export class LoginForm {
       modeGroup,
       this.createField("Username", this.username),
       this.createField("Password", this.password),
-      this.createField("Room", this.roomId),
     );
 
     this.submitButton.className = "primary-button";
@@ -62,10 +57,6 @@ export class LoginForm {
     this.password.type = "password";
     this.password.autocomplete = "current-password";
 
-    this.roomId.maxLength = 64;
-    this.roomId.required = true;
-    this.roomId.value = DEFAULT_ROOM_ID;
-
     this.loginModeButton.addEventListener("click", () => this.setMode("login"));
     this.registerModeButton.addEventListener("click", () => this.setMode("register"));
     this.setMode("login");
@@ -75,13 +66,12 @@ export class LoginForm {
       this.clearError();
       const username = this.username.value.trim();
       const password = this.password.value.trim();
-      const roomId = this.roomId.value.trim();
 
-      if (!username || !password || !roomId) {
+      if (!username || !password) {
         return;
       }
 
-      this.onSubmit({ mode: this.mode, username, password, roomId });
+      this.onSubmit({ mode: this.mode, username, password });
     });
 
     this.element.append(header, this.message, form);
@@ -103,7 +93,7 @@ export class LoginForm {
 
   private setMode(mode: LoginValues["mode"]): void {
     this.mode = mode;
-    this.submitButton.textContent = mode === "register" ? "Create and enter" : "Enter room";
+    this.submitButton.textContent = mode === "register" ? "Create account" : "Continue";
     this.password.autocomplete = mode === "register" ? "new-password" : "current-password";
     this.loginModeButton.classList[mode === "login" ? "add" : "remove"]("active");
     this.registerModeButton.classList[mode === "register" ? "add" : "remove"]("active");
