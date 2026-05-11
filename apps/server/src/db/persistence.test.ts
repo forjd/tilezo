@@ -3,6 +3,7 @@ import { createRectRoomLayout, type RoomLayout } from "@tilezo/engine";
 import {
   DrizzlePersistenceStore,
   loadOrSeedDefaultRoom,
+  loadOrSeedPublicRooms,
   type PersistenceStore,
 } from "./persistence";
 
@@ -45,6 +46,30 @@ describe("persistence", () => {
     );
     warn.mockRestore();
   });
+
+  test("seeds missing public rooms and returns the persisted directory", async () => {
+    const lobby = createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 });
+    const studio = createRectRoomLayout("studio", "Studio", 4, 4, { x: 1, y: 1 });
+    const storedLobby = createRectRoomLayout("lobby", "Stored Lobby", 2, 2, { x: 0, y: 0 });
+    const store = {
+      seededRooms: [] as RoomLayout[],
+      async getRoom(roomId: string) {
+        return roomId === "lobby" ? storedLobby : undefined;
+      },
+      async seedRoom(layout: RoomLayout) {
+        this.seededRooms.push(layout);
+      },
+      async listRooms() {
+        return [storedLobby, studio];
+      },
+    } satisfies PersistenceStore & { seededRooms: RoomLayout[] };
+
+    await expect(loadOrSeedPublicRooms(store, [lobby, studio])).resolves.toEqual([
+      storedLobby,
+      studio,
+    ]);
+    expect(store.seededRooms).toEqual([studio]);
+  });
 });
 
 describe("DrizzlePersistenceStore", () => {
@@ -55,8 +80,10 @@ describe("DrizzlePersistenceStore", () => {
 
     await expect(store.getRoom("lobby")).resolves.toBe(layout);
     await store.seedRoom(layout);
+    await expect(store.listRooms()).resolves.toEqual([layout]);
 
     expect(db.selectedRooms).toBe(1);
+    expect(db.listedRooms).toBe(1);
     expect(db.insertedValues).toEqual([
       {
         id: layout.id,
@@ -88,6 +115,7 @@ function createStore(options: { room?: RoomLayout } = {}) {
 function createDrizzleDouble(layout: RoomLayout) {
   const calls = {
     selectedRooms: 0,
+    listedRooms: 0,
     insertedValues: [] as unknown[],
     conflictUpdates: [] as unknown[],
     database: {
@@ -97,6 +125,10 @@ function createDrizzleDouble(layout: RoomLayout) {
             return {
               where() {
                 calls.selectedRooms += 1;
+                return Promise.resolve([{ layout }]);
+              },
+              orderBy() {
+                calls.listedRooms += 1;
                 return Promise.resolve([{ layout }]);
               },
             };

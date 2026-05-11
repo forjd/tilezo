@@ -34,6 +34,14 @@ export class ChatPanel {
     this.element.classList.remove("hidden");
   }
 
+  hide(): void {
+    this.element.classList.add("hidden");
+  }
+
+  clear(): void {
+    this.list.replaceChildren();
+  }
+
   onSend(handler: (text: string) => void): void {
     this.sendHandler = handler;
   }

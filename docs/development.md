@@ -184,7 +184,8 @@ PUBLIC_API_URL=http://localhost:3000
 PUBLIC_WS_URL=ws://localhost:3000/ws
 ```
 
-If `PUBLIC_API_URL` or `PUBLIC_WS_URL` is omitted, the client uses the local server defaults.
+If `PUBLIC_API_URL` or `PUBLIC_WS_URL` is omitted, the client uses the local server defaults. The
+client uses Bun's static env inlining for literal `process.env.PUBLIC_*` references.
 
 ## Deployment Notes
 
@@ -199,7 +200,9 @@ The `server` target runs the Bun WebSocket server on `PORT` with `HOST=0.0.0.0`.
 
 For a production deployment, use a managed Postgres database when possible, set `DATABASE_URL` and `AUTH_SECRET` on the server service, and route `/auth/*`, `/ws`, and `/health` to the server. Route the browser app to the client service. Use `https://...` for `PUBLIC_API_URL` and `wss://.../ws` for `PUBLIC_WS_URL` when serving over HTTPS.
 
-`PUBLIC_API_URL` and `PUBLIC_WS_URL` are baked into the static client build. If the same client image needs to move between environments, add a runtime client config file or config endpoint before promoting one image across staging and production.
+`PUBLIC_API_URL` and `PUBLIC_WS_URL` are baked into the static client build. If the same client image
+needs to move between environments, add a runtime client config file or config endpoint before
+promoting one image across staging and production.
 
 ## Testing Notes
 

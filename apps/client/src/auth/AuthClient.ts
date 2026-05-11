@@ -62,14 +62,6 @@ export async function updateAppearance(
 }
 
 function getApiUrl(): string {
-  const configured = getPublicEnv("PUBLIC_API_URL");
+  const configured = process.env.PUBLIC_API_URL;
   return configured ?? DEFAULT_API_URL;
-}
-
-function getPublicEnv(key: string): string | undefined {
-  const env = import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  };
-
-  return env.env?.[key];
 }

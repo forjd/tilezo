@@ -42,7 +42,7 @@ When using Docker Compose, the `migrate` service runs migrations before the serv
 ## Runtime Behavior
 
 1. Connect to Postgres through Drizzle when `DATABASE_URL` is present.
-2. Load or seed the default room layout.
+2. Load or seed the bundled public room layouts.
 3. Upsert joined users.
 4. Keep realtime room membership, movement, and chat in memory.
 

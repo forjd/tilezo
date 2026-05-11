@@ -10,6 +10,16 @@ ws://localhost:3000/ws?token=<auth-token>
 
 ## Client Messages
 
+### `room.list.request`
+
+Request the public room directory with live occupancy.
+
+```json
+{
+  "type": "room.list.request"
+}
+```
+
 ### `room.join`
 
 Join a room as the authenticated WebSocket user.
@@ -80,6 +90,24 @@ Sent after a successful join.
   "roomId": "lobby",
   "users": [],
   "tiles": []
+}
+```
+
+### `room.list`
+
+Sent after a room list request and after a successful join.
+
+```json
+{
+  "type": "room.list",
+  "rooms": [
+    {
+      "id": "lobby",
+      "name": "Lobby",
+      "userCount": 4,
+      "joined": true
+    }
+  ]
 }
 ```
 

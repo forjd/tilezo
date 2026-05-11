@@ -6,6 +6,10 @@ export type RoomJoinMessage = {
   roomId: string;
 };
 
+export type RoomListRequestMessage = {
+  type: "room.list.request";
+};
+
 export type AvatarMoveRequestMessage = {
   type: "avatar.move.request";
   target: TilePosition;
@@ -28,6 +32,7 @@ export type PingMessage = {
 
 export type ClientMessage =
   | RoomJoinMessage
+  | RoomListRequestMessage
   | AvatarMoveRequestMessage
   | ChatSayMessage
   | AvatarAppearanceUpdateMessage
@@ -50,6 +55,18 @@ export type RoomSnapshotMessage = {
   roomId: string;
   users: RoomUserSnapshot[];
   tiles: RoomTile[];
+};
+
+export type PublicRoomSummary = {
+  id: string;
+  name: string;
+  userCount: number;
+  joined: boolean;
+};
+
+export type RoomListMessage = {
+  type: "room.list";
+  rooms: PublicRoomSummary[];
 };
 
 export type UserJoinedMessage = {
@@ -96,6 +113,7 @@ export type ErrorMessage = {
 export type ServerMessage =
   | ConnectedMessage
   | RoomSnapshotMessage
+  | RoomListMessage
   | UserJoinedMessage
   | UserLeftMessage
   | AvatarMovedMessage

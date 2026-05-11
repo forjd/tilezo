@@ -4,14 +4,17 @@ import { DEFAULT_API_URL } from "../assets";
 import { authenticate, updateAppearance } from "./AuthClient";
 
 const originalFetch = globalThis.fetch;
+const originalPublicApiUrl = Bun.env.PUBLIC_API_URL;
 type FetchArgs = Parameters<typeof fetch>;
 
 describe("authenticate", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    restorePublicApiUrl();
   });
 
   test("posts credentials to the selected auth endpoint", async () => {
+    delete Bun.env.PUBLIC_API_URL;
     const session = {
       user: {
         id: "user_1",
@@ -47,6 +50,7 @@ describe("authenticate", () => {
   });
 
   test("throws the server error message when authentication fails", async () => {
+    delete Bun.env.PUBLIC_API_URL;
     globalThis.fetch = (async () =>
       Response.json(
         {
@@ -61,14 +65,32 @@ describe("authenticate", () => {
       authenticate({ mode: "login", username: "dan", password: "wrong" }),
     ).rejects.toThrow("Invalid credentials");
   });
+
+  test("uses public API URL overrides", async () => {
+    Bun.env.PUBLIC_API_URL = "http://localhost:4567";
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
+      requests.push({ url: String(url), init });
+      return Response.json({
+        user: { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE },
+        token: "session-token",
+      });
+    }) as unknown as typeof fetch;
+
+    await authenticate({ mode: "login", username: "dan", password: "secret" });
+
+    expect(requests[0]?.url).toBe("http://localhost:4567/auth/login");
+  });
 });
 
 describe("updateAppearance", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    restorePublicApiUrl();
   });
 
   test("puts the selected appearance with the session token", async () => {
+    delete Bun.env.PUBLIC_API_URL;
     const appearance = {
       ...DEFAULT_AVATAR_APPEARANCE,
       hair: "side-part" as const,
@@ -97,3 +119,11 @@ describe("updateAppearance", () => {
     ]);
   });
 });
+
+function restorePublicApiUrl(): void {
+  if (originalPublicApiUrl === undefined) {
+    delete Bun.env.PUBLIC_API_URL;
+  } else {
+    Bun.env.PUBLIC_API_URL = originalPublicApiUrl;
+  }
+}

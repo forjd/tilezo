@@ -17,6 +17,13 @@ describe("protocol parser", () => {
     });
   });
 
+  test("accepts room list requests", () => {
+    expect(parseClientMessage({ type: "room.list.request" })).toEqual({
+      ok: true,
+      value: { type: "room.list.request" },
+    });
+  });
+
   test("rejects malformed raw messages", () => {
     expect(parseRawClientMessage("{bad json").ok).toBe(false);
   });

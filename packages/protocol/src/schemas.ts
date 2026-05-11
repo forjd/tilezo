@@ -31,6 +31,10 @@ export const roomJoinMessageSchema = z.object({
   roomId: trimmedString(ROOM_ID_MAX_LENGTH),
 });
 
+export const roomListRequestMessageSchema = z.object({
+  type: z.literal("room.list.request"),
+});
+
 export const avatarMoveRequestMessageSchema = z.object({
   type: z.literal("avatar.move.request"),
   target: tilePositionSchema,
@@ -65,6 +69,7 @@ export const pingMessageSchema = z.object({
 
 export const clientMessageSchema = z.discriminatedUnion("type", [
   roomJoinMessageSchema,
+  roomListRequestMessageSchema,
   avatarMoveRequestMessageSchema,
   chatSayMessageSchema,
   avatarAppearanceUpdateMessageSchema,

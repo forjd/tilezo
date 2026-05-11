@@ -81,7 +81,7 @@ export class NetClient {
 }
 
 function getWebSocketUrl(token: string): string {
-  const configured = getPublicEnv("PUBLIC_WS_URL");
+  const configured = process.env.PUBLIC_WS_URL;
   const baseUrl =
     configured ??
     (location.protocol === "https:" ? DEFAULT_WS_URL.replace("ws://", "wss://") : DEFAULT_WS_URL);
@@ -89,12 +89,4 @@ function getWebSocketUrl(token: string): string {
   url.searchParams.set("token", token);
 
   return url.toString();
-}
-
-function getPublicEnv(key: string): string | undefined {
-  const env = import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  };
-
-  return env.env?.[key];
 }

@@ -7,7 +7,7 @@ export function getDatabaseUrl(env = Bun.env): string | undefined {
   return env.DATABASE_URL;
 }
 
-export function createDatabase(databaseUrl = getDatabaseUrl()): TilezoDatabase | undefined {
+export function createDatabase(databaseUrl: string | undefined): TilezoDatabase | undefined {
   if (!databaseUrl) {
     return undefined;
   }

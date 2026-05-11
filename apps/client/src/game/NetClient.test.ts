@@ -4,6 +4,7 @@ import { NetClient } from "./NetClient";
 
 const originalWebSocket = globalThis.WebSocket;
 const originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+const originalPublicWsUrl = Bun.env.PUBLIC_WS_URL;
 
 describe("NetClient", () => {
   afterEach(() => {
@@ -15,6 +16,7 @@ describe("NetClient", () => {
       Reflect.deleteProperty(globalThis, "location");
     }
 
+    restorePublicWsUrl();
     FakeWebSocket.instances.length = 0;
   });
 
@@ -50,6 +52,19 @@ describe("NetClient", () => {
     await connected;
 
     expect(socket.url).toBe("wss://localhost:3000/ws?token=session-token");
+  });
+
+  test("uses public websocket URL overrides", async () => {
+    installBrowserFakes("http:");
+    Bun.env.PUBLIC_WS_URL = "ws://localhost:4567/ws";
+    const client = new NetClient();
+
+    const connected = client.connect("session-token");
+    const socket = currentSocket();
+    socket.open();
+    await connected;
+
+    expect(socket.url).toBe("ws://localhost:4567/ws?token=session-token");
   });
 
   test("emits parsed server messages and ignores unsubscribed handlers", () => {
@@ -98,11 +113,20 @@ describe("NetClient", () => {
 });
 
 function installBrowserFakes(protocol: "http:" | "https:") {
+  delete Bun.env.PUBLIC_WS_URL;
   Object.defineProperty(globalThis, "location", {
     configurable: true,
     value: { protocol },
   });
   globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+}
+
+function restorePublicWsUrl(): void {
+  if (originalPublicWsUrl === undefined) {
+    delete Bun.env.PUBLIC_WS_URL;
+  } else {
+    Bun.env.PUBLIC_WS_URL = originalPublicWsUrl;
+  }
 }
 
 class FakeWebSocket {

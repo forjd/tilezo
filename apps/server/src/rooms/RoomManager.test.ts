@@ -4,28 +4,46 @@ import type { PersistenceStore } from "../db/persistence";
 import { RoomManager } from "./RoomManager";
 
 describe("RoomManager", () => {
-  test("creates rooms from the default layout and clones it for ad hoc rooms", () => {
-    const manager = new RoomManager(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
+  test("creates only rooms from the public layout directory", () => {
+    const manager = new RoomManager([
+      createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),
+      createRectRoomLayout("studio", "Studio", 4, 4, { x: 1, y: 1 }),
+    ]);
 
     const lobby = manager.getOrCreate("lobby");
     const studio = manager.getOrCreate("studio");
 
     expect(manager.getOrCreate("lobby")).toBe(lobby);
-    expect(lobby.id).toBe("lobby");
-    expect(studio.id).toBe("studio");
+    expect(lobby?.id).toBe("lobby");
+    expect(studio?.id).toBe("studio");
+    expect(manager.getOrCreate("private-room")).toBeUndefined();
   });
 
   test("removes only empty rooms", () => {
     const manager = new RoomManager(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
     const room = manager.getOrCreate("lobby");
 
-    room.join({ id: "user_1", username: "Dan" });
+    room?.join({ id: "user_1", username: "Dan" });
     manager.removeIfEmpty("lobby");
     expect(manager.get("lobby")).toBe(room);
 
-    room.leave("user_1");
+    room?.leave("user_1");
     manager.removeIfEmpty("lobby");
     expect(manager.get("lobby")).toBeUndefined();
+  });
+
+  test("lists public rooms with live population and current-room state", () => {
+    const manager = new RoomManager([
+      createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),
+      createRectRoomLayout("studio", "Studio", 4, 4, { x: 1, y: 1 }),
+    ]);
+
+    manager.getOrCreate("studio")?.join({ id: "user_1", username: "Dan" });
+
+    expect(manager.listPublicRooms("studio")).toEqual([
+      { id: "lobby", name: "Lobby", userCount: 0, joined: false },
+      { id: "studio", name: "Studio", userCount: 1, joined: true },
+    ]);
   });
 
   test("loads and seeds the bundled default room through persistence", async () => {
@@ -41,7 +59,7 @@ describe("RoomManager", () => {
 
     const manager = await RoomManager.create({ persistence: store });
 
-    expect(manager.getOrCreate("lobby").id).toBe("lobby");
-    expect(store.seededRoomIds).toEqual(["lobby"]);
+    expect(manager.getOrCreate("lobby")?.id).toBe("lobby");
+    expect(store.seededRoomIds).toEqual(["lobby", "atrium", "studio"]);
   });
 });

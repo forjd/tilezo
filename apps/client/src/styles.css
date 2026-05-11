@@ -58,6 +58,7 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   pointer-events: none;
 }
 
@@ -109,7 +110,15 @@ select {
   white-space: nowrap;
 }
 
-.edit-character-button {
+.top-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.edit-character-button,
+.room-browser-button {
   height: 34px;
   padding: 0 12px;
   border: 2px solid #1d2324;
@@ -119,7 +128,6 @@ select {
   cursor: pointer;
   font-size: 12px;
   font-weight: 800;
-  pointer-events: auto;
   box-shadow:
     inset 0 0 0 2px #ffffff,
     2px 2px 0 rgba(0, 0, 0, 0.22);
@@ -411,11 +419,134 @@ select {
     2px 2px 0 rgba(0, 0, 0, 0.14);
 }
 
+.secondary-button:disabled,
+.primary-button:disabled {
+  cursor: default;
+  opacity: 0.68;
+  transform: none;
+}
+
 .character-actions {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.room-browser {
+  position: absolute;
+  top: 86px;
+  left: 20px;
+  z-index: 5;
+  display: grid;
+  width: min(380px, calc(100vw - 40px));
+  max-height: calc(100vh - 118px);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 2px solid #1d2324;
+  border-radius: 8px;
+  background: #eeeade;
+  box-shadow:
+    inset 0 0 0 2px #ffffff,
+    7px 7px 0 rgba(31, 45, 47, 0.32);
+  pointer-events: auto;
+}
+
+.room-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 2px solid #1d2324;
+  background: linear-gradient(180deg, #4ba4bd 0%, #2c7794 100%);
+}
+
+.room-browser-header h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1.1;
+  text-shadow: 1px 1px 0 #17485a;
+}
+
+.room-browser-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.room-browser-refresh,
+.room-browser-close {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.room-list {
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.room-list-empty {
+  margin: 0;
+  color: #5f5a51;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.room-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 2px solid #716d64;
+  border-radius: 7px;
+  background: #fbfaf0;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    2px 2px 0 rgba(31, 45, 47, 0.18);
+}
+
+.room-item.joined {
+  background: #e7f2ef;
+  border-color: #2f7f9d;
+}
+
+.room-item-details {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.room-item-details strong {
+  overflow: hidden;
+  color: #302c27;
+  font-size: 14px;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-item-details span,
+.room-count {
+  color: #5f5a51;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.room-count {
+  white-space: nowrap;
+}
+
+.room-join-button {
+  width: 74px;
+  height: 34px;
+  margin: 0;
+  font-size: 12px;
 }
 
 .chat-panel {
@@ -436,11 +567,14 @@ select {
     top: 12px;
     left: 12px;
     right: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
   }
 
   .brand {
     min-width: 0;
-    max-width: calc(100vw - 104px);
+    max-width: none;
   }
 
   .brand span {
@@ -453,8 +587,35 @@ select {
     max-width: 88px;
   }
 
+  .top-actions {
+    grid-column: 1 / -1;
+    gap: 6px;
+  }
+
+  .edit-character-button,
+  .room-browser-button {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
   .login-panel {
     top: 52%;
+  }
+
+  .room-browser {
+    top: 118px;
+    left: 12px;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 136px);
+  }
+
+  .room-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .room-count {
+    display: none;
   }
 
   .character-panel {
