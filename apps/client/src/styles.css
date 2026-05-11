@@ -118,7 +118,8 @@ select {
 }
 
 .edit-character-button,
-.room-browser-button {
+.room-browser-button,
+.log-out-button {
   height: 34px;
   padding: 0 12px;
   border: 2px solid #1d2324;
@@ -593,7 +594,8 @@ select {
   }
 
   .edit-character-button,
-  .room-browser-button {
+  .room-browser-button,
+  .log-out-button {
     height: 32px;
     padding: 0 10px;
     font-size: 11px;

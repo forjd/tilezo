@@ -17,6 +17,7 @@ export function createApp(root: HTMLElement): void {
   const status = document.createElement("div");
   const browseRooms = document.createElement("button");
   const editCharacter = document.createElement("button");
+  const logOut = document.createElement("button");
   const chat = new ChatPanel();
   let session:
     | {
@@ -41,12 +42,15 @@ export function createApp(root: HTMLElement): void {
   editCharacter.className = "edit-character-button hidden";
   editCharacter.type = "button";
   editCharacter.textContent = "Edit character";
+  logOut.className = "log-out-button hidden";
+  logOut.type = "button";
+  logOut.textContent = "Log out";
   brandTitle.textContent = "Room";
   brandSubtitle.textContent = "server-authoritative isometric multiplayer";
   status.textContent = "idle";
 
   brand.append(brandTitle, brandSubtitle);
-  topActions.append(browseRooms, editCharacter);
+  topActions.append(browseRooms, editCharacter, logOut);
   topBar.append(brand, topActions, status);
 
   const game = new Game({
@@ -129,6 +133,7 @@ export function createApp(root: HTMLElement): void {
 
     try {
       session = await authenticate({ mode, username, password });
+      logOut.classList.remove("hidden");
       characterEditor.setSubmitLabel("Enter room");
       characterEditor.show(session.user.appearance);
       status.textContent = "choose character";
@@ -136,6 +141,7 @@ export function createApp(root: HTMLElement): void {
       status.textContent = error instanceof Error ? error.message : "connection failed";
       login.showError(status.textContent);
       login.element.classList.remove("hidden");
+      logOut.classList.add("hidden");
       chat.hide();
     }
   });
@@ -152,6 +158,14 @@ export function createApp(root: HTMLElement): void {
 
   browseRooms.addEventListener("click", () => {
     roomBrowser.show();
+  });
+
+  logOut.addEventListener("click", () => {
+    if (gameStarted) {
+      game.stop();
+    }
+
+    createApp(root);
   });
 
   shell.append(
