@@ -65,4 +65,24 @@ describe("Avatar", () => {
     });
     expect({ x: avatar.view.x, y: avatar.view.y }).toEqual(before);
   });
+
+  test("rebuilds sprite layers when appearance changes", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 }, DEFAULT_AVATAR_APPEARANCE);
+
+    avatar.setAppearance({
+      ...DEFAULT_AVATAR_APPEARANCE,
+      hair: "bob",
+      hairColor: "#111111",
+      shirt: "hoodie",
+      shirtColor: "#222222",
+    });
+
+    const state = avatar as unknown as {
+      spriteLayer?: { children: Array<{ tint?: number }> };
+    };
+
+    expect(state.spriteLayer?.children.length).toBeGreaterThanOrEqual(6);
+    expect(state.spriteLayer?.children.some((child) => child.tint === 0x111111)).toBe(true);
+    expect(state.spriteLayer?.children.some((child) => child.tint === 0x222222)).toBe(true);
+  });
 });
