@@ -51,6 +51,7 @@ describe("persistence", () => {
     const lobby = createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 });
     const studio = createRectRoomLayout("studio", "Studio", 4, 4, { x: 1, y: 1 });
     const storedLobby = createRectRoomLayout("lobby", "Stored Lobby", 2, 2, { x: 0, y: 0 });
+    const privateRoom = createRectRoomLayout("home_user_1", "Dan's Room", 3, 3, { x: 1, y: 1 });
     const store = {
       seededRooms: [] as RoomLayout[],
       async getRoom(roomId: string) {
@@ -60,14 +61,18 @@ describe("persistence", () => {
         this.seededRooms.push(layout);
       },
       async listRooms() {
-        return [storedLobby, studio];
+        return [
+          { layout: storedLobby, visibility: "public" as const },
+          { layout: studio, visibility: "public" as const },
+          { layout: privateRoom, visibility: "private" as const, ownerUserId: "user_1" },
+        ];
       },
     } satisfies PersistenceStore & { seededRooms: RoomLayout[] };
 
-    await expect(loadOrSeedPublicRooms(store, [lobby, studio])).resolves.toEqual([
-      storedLobby,
-      studio,
-    ]);
+    await expect(loadOrSeedPublicRooms(store, [lobby, studio])).resolves.toEqual({
+      publicLayouts: [storedLobby, studio],
+      privateLayouts: [{ layout: privateRoom, ownerUserId: "user_1" }],
+    });
     expect(store.seededRooms).toEqual([studio]);
   });
 });
@@ -80,7 +85,9 @@ describe("DrizzlePersistenceStore", () => {
 
     await expect(store.getRoom("lobby")).resolves.toBe(layout);
     await store.seedRoom(layout);
-    await expect(store.listRooms()).resolves.toEqual([layout]);
+    await expect(store.listRooms()).resolves.toEqual([
+      { layout, ownerUserId: undefined, visibility: "public" },
+    ]);
 
     expect(db.selectedRooms).toBe(1);
     expect(db.listedRooms).toBe(1);
@@ -89,6 +96,8 @@ describe("DrizzlePersistenceStore", () => {
         id: layout.id,
         slug: layout.id,
         name: layout.name,
+        ownerUserId: null,
+        visibility: "public",
         layout,
       },
     ]);

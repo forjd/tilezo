@@ -4,7 +4,7 @@ import type { PersistenceStore } from "../db/persistence";
 import { RoomManager } from "./RoomManager";
 
 describe("RoomManager", () => {
-  test("creates only rooms from the public layout directory", () => {
+  test("creates only public rooms without an owner", () => {
     const manager = new RoomManager([
       createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),
       createRectRoomLayout("studio", "Studio", 4, 4, { x: 1, y: 1 }),
@@ -17,6 +17,28 @@ describe("RoomManager", () => {
     expect(lobby?.id).toBe("lobby");
     expect(studio?.id).toBe("studio");
     expect(manager.getOrCreate("private-room")).toBeUndefined();
+  });
+
+  test("lists and joins private rooms only for their owner", () => {
+    const privateLayout = createRectRoomLayout("home_user_1", "Dan's Room", 3, 3, {
+      x: 1,
+      y: 1,
+    });
+    const manager = new RoomManager({
+      publicLayouts: [createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 })],
+      privateLayouts: [{ layout: privateLayout, ownerUserId: "user_1" }],
+    });
+
+    expect(manager.listPublicRooms(undefined, "user_2")).toEqual([
+      { id: "lobby", name: "Lobby", userCount: 0, joined: false },
+    ]);
+    expect(manager.listPublicRooms(undefined, "user_1")).toEqual([
+      { id: "lobby", name: "Lobby", userCount: 0, joined: false },
+      { id: "home_user_1", name: "Dan's Room", userCount: 0, joined: false },
+    ]);
+    expect(manager.getOrCreate("home_user_1", "user_2")).toBeUndefined();
+    expect(manager.getOrCreate("home_user_1", "user_1")?.id).toBe("home_user_1");
+    expect(manager.getOrCreate("home_user_1", "user_2")).toBeUndefined();
   });
 
   test("removes only empty rooms", () => {

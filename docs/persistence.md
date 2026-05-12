@@ -17,6 +17,7 @@ Persist:
 - Rooms.
 - Room layouts.
 - Room items.
+- Private room ownership.
 
 Do not persist:
 
@@ -43,7 +44,7 @@ When using Docker Compose, the `migrate` service runs migrations before the serv
 
 1. Connect to Postgres through Drizzle when `DATABASE_URL` is present.
 2. Load or seed the bundled public room layouts.
-3. Upsert joined users.
+3. Create or refresh a private room for each successfully authenticated user.
 4. Keep realtime room membership, movement, and chat in memory.
 
 ## Constraints

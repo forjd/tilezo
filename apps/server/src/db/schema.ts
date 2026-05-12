@@ -19,6 +19,8 @@ export const rooms = pgTable("rooms", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "cascade" }),
+  visibility: text("visibility").notNull().default("public"),
   layout: jsonb("layout").$type<RoomLayout>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

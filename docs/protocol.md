@@ -12,7 +12,7 @@ ws://localhost:3000/ws?token=<auth-token>
 
 ### `room.list.request`
 
-Request the public room directory with live occupancy.
+Request the room directory available to the authenticated user with live occupancy.
 
 ```json
 {

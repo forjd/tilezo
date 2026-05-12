@@ -3,10 +3,31 @@ import { asc, eq } from "drizzle-orm";
 import type { TilezoDatabase } from "./db";
 import { rooms } from "./schema";
 
+export type RoomVisibility = "public" | "private";
+
+export type OwnedRoomLayout = {
+  layout: RoomLayout;
+  ownerUserId: string;
+};
+
+export type PersistedRoomLayout = {
+  layout: RoomLayout;
+  ownerUserId?: string;
+  visibility: RoomVisibility;
+};
+
+export type RoomDirectory = {
+  publicLayouts: RoomLayout[];
+  privateLayouts: OwnedRoomLayout[];
+};
+
 export type PersistenceStore = {
   getRoom(roomId: string): Promise<RoomLayout | undefined>;
-  seedRoom(layout: RoomLayout): Promise<void>;
-  listRooms?(): Promise<RoomLayout[]>;
+  seedRoom(
+    layout: RoomLayout,
+    options?: { ownerUserId?: string; visibility?: RoomVisibility },
+  ): Promise<void>;
+  listRooms?(): Promise<PersistedRoomLayout[]>;
 };
 
 export async function loadOrSeedDefaultRoom(
@@ -35,9 +56,9 @@ export async function loadOrSeedDefaultRoom(
 export async function loadOrSeedPublicRooms(
   store: PersistenceStore | undefined,
   fallbackLayouts: RoomLayout[],
-): Promise<RoomLayout[]> {
+): Promise<RoomDirectory> {
   if (!store) {
-    return fallbackLayouts;
+    return { publicLayouts: fallbackLayouts, privateLayouts: [] };
   }
 
   try {
@@ -49,15 +70,24 @@ export async function loadOrSeedPublicRooms(
       }
     }
 
-    return mergeRoomLayouts(
-      fallbackLayouts,
-      store.listRooms ? await store.listRooms() : fallbackLayouts,
-    );
+    const storedRooms = store.listRooms ? await store.listRooms() : [];
+    return {
+      publicLayouts: mergeRoomLayouts(
+        fallbackLayouts,
+        storedRooms.filter((room) => room.visibility === "public").map((room) => room.layout),
+      ),
+      privateLayouts: storedRooms
+        .filter(
+          (room): room is PersistedRoomLayout & { ownerUserId: string } =>
+            room.visibility === "private" && typeof room.ownerUserId === "string",
+        )
+        .map((room) => ({ layout: room.layout, ownerUserId: room.ownerUserId })),
+    };
   } catch (error) {
     console.warn("Room persistence unavailable; using bundled public rooms", error);
   }
 
-  return fallbackLayouts;
+  return { publicLayouts: fallbackLayouts, privateLayouts: [] };
 }
 
 export class DrizzlePersistenceStore implements PersistenceStore {
@@ -71,31 +101,48 @@ export class DrizzlePersistenceStore implements PersistenceStore {
     return room?.layout;
   }
 
-  async seedRoom(layout: RoomLayout): Promise<void> {
+  async seedRoom(
+    layout: RoomLayout,
+    options: { ownerUserId?: string; visibility?: RoomVisibility } = {},
+  ): Promise<void> {
+    const visibility = options.visibility ?? "public";
+
     await this.db
       .insert(rooms)
       .values({
         id: layout.id,
         slug: layout.id,
         name: layout.name,
+        ownerUserId: options.ownerUserId ?? null,
+        visibility,
         layout,
       })
       .onConflictDoUpdate({
         target: rooms.id,
         set: {
           name: layout.name,
+          ownerUserId: options.ownerUserId ?? null,
+          visibility,
           layout,
           updatedAt: new Date(),
         },
       });
   }
 
-  async listRooms(): Promise<RoomLayout[]> {
+  async listRooms(): Promise<PersistedRoomLayout[]> {
     const storedRooms = await this.db
-      .select({ layout: rooms.layout })
+      .select({
+        layout: rooms.layout,
+        ownerUserId: rooms.ownerUserId,
+        visibility: rooms.visibility,
+      })
       .from(rooms)
       .orderBy(asc(rooms.name), asc(rooms.id));
-    return storedRooms.map((room) => room.layout);
+    return storedRooms.map((room) => ({
+      layout: room.layout,
+      ownerUserId: room.ownerUserId ?? undefined,
+      visibility: room.visibility === "private" ? "private" : "public",
+    }));
   }
 }
 

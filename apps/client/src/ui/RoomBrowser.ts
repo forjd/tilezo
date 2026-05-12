@@ -22,7 +22,7 @@ export class RoomBrowser {
     const actions = document.createElement("div");
 
     header.className = "room-browser-header";
-    title.textContent = "Public rooms";
+    title.textContent = "Rooms";
     actions.className = "room-browser-actions";
 
     this.refreshButton.type = "button";

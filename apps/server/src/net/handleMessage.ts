@@ -31,7 +31,7 @@ export function handleMessage(
     case "room.list.request":
       send(ws, {
         type: "room.list",
-        rooms: context.rooms.listPublicRooms(ws.data.roomId),
+        rooms: context.rooms.listPublicRooms(ws.data.roomId, ws.data.userId),
       });
       break;
 
@@ -41,7 +41,7 @@ export function handleMessage(
         return;
       }
 
-      const room = context.rooms.getOrCreate(parsed.value.roomId);
+      const room = context.rooms.getOrCreate(parsed.value.roomId, ws.data.userId);
 
       if (!room) {
         sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
@@ -59,7 +59,7 @@ export function handleMessage(
         });
         send(ws, {
           type: "room.list",
-          rooms: context.rooms.listPublicRooms(room.id),
+          rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
         });
         return;
       }
@@ -94,7 +94,7 @@ export function handleMessage(
       });
       send(ws, {
         type: "room.list",
-        rooms: context.rooms.listPublicRooms(room.id),
+        rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
       });
       break;
     }

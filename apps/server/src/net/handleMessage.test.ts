@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createRectRoomLayout } from "@tilezo/engine";
 import { DEFAULT_AVATAR_APPEARANCE, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import { RoomManager } from "../rooms/RoomManager";
@@ -73,6 +74,50 @@ describe("handleMessage", () => {
           { id: "studio", name: "Studio", userCount: 1, joined: true },
         ],
       },
+    ]);
+  });
+
+  test("lists and joins the authenticated user's private room", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addPrivateRoom(createTestLayout("home_user_db_1", "Dan's Room"), "user_db_1");
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+
+    handleMessage(ws, JSON.stringify({ type: "room.list.request" }), {
+      rooms,
+      publish() {},
+    });
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "home_user_db_1" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.sent[0]).toEqual({
+      type: "room.list",
+      rooms: [
+        { id: "lobby", name: "Lobby", userCount: 0, joined: false },
+        { id: "atrium", name: "Atrium", userCount: 0, joined: false },
+        { id: "studio", name: "Studio", userCount: 0, joined: false },
+        { id: "home_user_db_1", name: "Dan's Room", userCount: 0, joined: false },
+      ],
+    });
+    expect(ws.sent[1]).toMatchObject({
+      type: "room.snapshot",
+      roomId: "home_user_db_1",
+    });
+  });
+
+  test("rejects private rooms owned by another user", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addPrivateRoom(createTestLayout("home_user_db_2", "Kai's Room"), "user_db_2");
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "home_user_db_2" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.sent).toEqual([
+      { type: "error", code: "ROOM_NOT_FOUND", message: "Room is not available" },
     ]);
   });
 
@@ -245,6 +290,36 @@ describe("handleMessage", () => {
       },
     });
   });
+
+  test("does not update socket appearance before a room join", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      appearance: DEFAULT_AVATAR_APPEARANCE,
+    });
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "avatar.appearance.update",
+        appearance: { ...DEFAULT_AVATAR_APPEARANCE, hair: "bob" },
+      }),
+      {
+        rooms,
+        publish() {},
+      },
+    );
+
+    expect(ws.data.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
+    expect(ws.sent).toEqual([
+      {
+        type: "error",
+        code: "NOT_IN_ROOM",
+        message: "Join a room before updating your character",
+      },
+    ]);
+  });
 });
 
 describe("handleClose", () => {
@@ -302,4 +377,8 @@ function createSocket(data: SocketData = { userId: "user_1" }) {
     subscribed: string[];
     unsubscribed: string[];
   };
+}
+
+function createTestLayout(id: string, name: string) {
+  return createRectRoomLayout(id, name, 3, 3, { x: 1, y: 1 });
 }

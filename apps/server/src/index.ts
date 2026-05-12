@@ -3,9 +3,10 @@ import { avatarAppearanceSchema } from "@tilezo/protocol";
 import { AuthError, AuthService, DrizzleAuthStore } from "./auth/auth";
 import { getConfig } from "./config";
 import { createDatabase } from "./db/db";
-import { DrizzlePersistenceStore } from "./db/persistence";
+import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
 import { handleClose, handleMessage } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
+import { createPersonalRoomLayout } from "./rooms/personalRoom";
 import { RoomManager } from "./rooms/RoomManager";
 import { encodeServerMessage } from "./util/safeJson";
 
@@ -28,11 +29,11 @@ const server = Bun.serve<SocketData>({
     }
 
     if (url.pathname === "/auth/register" && request.method === "POST") {
-      return handleAuthRequest(request, auth, "register");
+      return handleAuthRequest(request, auth, "register", { persistence, rooms });
     }
 
     if (url.pathname === "/auth/login" && request.method === "POST") {
-      return handleAuthRequest(request, auth, "login");
+      return handleAuthRequest(request, auth, "login", { persistence, rooms });
     }
 
     if (url.pathname === "/me/appearance") {
@@ -118,6 +119,7 @@ async function handleAuthRequest(
   request: Request,
   authService: AuthService | undefined,
   mode: AuthMode,
+  roomProvisioning: { persistence?: PersistenceStore; rooms: RoomManager },
 ): Promise<Response> {
   if (!authService) {
     return authJson(
@@ -141,6 +143,8 @@ async function handleAuthRequest(
         ? await authService.createUser(body.username, body.password)
         : await authService.login(body.username, body.password);
 
+    await provisionPersonalRoom(session.user, roomProvisioning);
+
     return authJson(session, mode === "register" ? 201 : 200);
   } catch (error) {
     if (error instanceof AuthError) {
@@ -152,6 +156,22 @@ async function handleAuthRequest(
       400,
     );
   }
+}
+
+async function provisionPersonalRoom(
+  user: { id: string; username: string },
+  roomProvisioning: { persistence?: PersistenceStore; rooms: RoomManager },
+): Promise<void> {
+  if (!roomProvisioning.persistence) {
+    return;
+  }
+
+  const layout = createPersonalRoomLayout(user);
+  await roomProvisioning.persistence.seedRoom(layout, {
+    ownerUserId: user.id,
+    visibility: "private",
+  });
+  roomProvisioning.rooms.addPrivateRoom(layout, user.id);
 }
 
 async function handleAppearanceRequest(

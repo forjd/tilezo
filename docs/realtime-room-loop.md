@@ -21,13 +21,13 @@ Socket metadata currently includes:
 ## Join
 
 The client can send `room.list.request` before joining or while already in a room. The server
-responds with the public room directory, including live user counts and which room the socket has
-joined.
+responds with the rooms available to the authenticated user, including public rooms, that user's
+private room, live user counts, and which room the socket has joined.
 
 When the client sends `room.join`, the server:
 
 1. Confirms the socket is authenticated and validates the room ID.
-2. Confirms the requested room is in the public room directory.
+2. Confirms the requested room is public or privately owned by the socket user.
 3. Leaves the previous room if the socket had already joined one.
 4. Creates or retrieves the requested room.
 5. Adds the user at the room spawn position.
@@ -38,7 +38,7 @@ When the client sends `room.join`, the server:
 
 Public rooms are loaded from `assets/rooms/public-rooms.json` and expanded into rectangular tile
 layouts at server startup. When persistence is available, the bundled public rooms are seeded into
-the `rooms` table and any persisted rooms are included in the public directory.
+the `rooms` table and persisted private rooms are included only for their owner.
 
 ## Movement
 
