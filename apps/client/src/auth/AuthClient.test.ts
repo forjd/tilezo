@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { DEFAULT_API_URL } from "../assets";
 import { authenticate, updateAppearance } from "./AuthClient";
 
@@ -110,7 +110,7 @@ describe("updateAppearance", () => {
 
   test("puts the selected appearance with the session token", async () => {
     delete Bun.env.PUBLIC_API_URL;
-    const appearance = {
+    const appearance: AvatarAppearance = {
       ...DEFAULT_AVATAR_APPEARANCE,
       hair: "side-part" as const,
       hairColor: "#8b4a24",

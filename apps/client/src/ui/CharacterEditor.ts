@@ -1,8 +1,13 @@
 import {
+  AVATAR_HAIR_COLORS,
   AVATAR_HAIR_STYLES,
+  AVATAR_PANTS_COLORS,
   AVATAR_PANTS_STYLES,
+  AVATAR_SHIRT_COLORS,
   AVATAR_SHIRT_STYLES,
+  AVATAR_SHOE_COLORS,
   AVATAR_SHOE_STYLES,
+  AVATAR_SKIN_TONES,
   type AvatarAppearance,
 } from "@tilezo/protocol";
 import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
@@ -109,14 +114,14 @@ export class CharacterEditor {
   private readAppearance(): AvatarAppearance {
     return {
       hair: this.hair.value as AvatarAppearance["hair"],
-      hairColor: this.hairColor.value,
-      skinTone: this.skinTone.value,
+      hairColor: this.hairColor.value as AvatarAppearance["hairColor"],
+      skinTone: this.skinTone.value as AvatarAppearance["skinTone"],
       shirt: this.shirt.value as AvatarAppearance["shirt"],
-      shirtColor: this.shirtColor.value,
+      shirtColor: this.shirtColor.value as AvatarAppearance["shirtColor"],
       pants: this.pants.value as AvatarAppearance["pants"],
-      pantsColor: this.pantsColor.value,
+      pantsColor: this.pantsColor.value as AvatarAppearance["pantsColor"],
       shoes: this.shoes.value as AvatarAppearance["shoes"],
-      shoesColor: this.shoesColor.value,
+      shoesColor: this.shoesColor.value as AvatarAppearance["shoesColor"],
     };
   }
 
@@ -245,14 +250,14 @@ function titleCase(value: string): string {
 }
 
 const COLOR_PALETTES = {
-  hair: ["#3b2418", "#6f3f22", "#9a5a2d", "#c99743", "#1f2326"] as const,
-  skin: ["#8f5f45", "#b77a58", "#d59a73", "#f2c097", "#f6d7b8"] as const,
-  shirt: ["#24546f", "#2f6f5f", "#7f3b44", "#d69a35", "#ece3cf"] as const,
-  pants: ["#3f4d5c", "#77684b", "#b7aa78", "#503d33", "#d8d0ba"] as const,
-  shoes: ["#2a2118", "#5b4218", "#6c3328", "#2f3b40", "#e5ded1"] as const,
+  hair: AVATAR_HAIR_COLORS,
+  skin: AVATAR_SKIN_TONES,
+  shirt: AVATAR_SHIRT_COLORS,
+  pants: AVATAR_PANTS_COLORS,
+  shoes: AVATAR_SHOE_COLORS,
 } satisfies Record<string, readonly string[]>;
 
-const PRIMARY_HAIR_STYLES = [AVATAR_HAIR_STYLES[0]] as const;
-const PRIMARY_SHIRT_STYLES = [AVATAR_SHIRT_STYLES[0]] as const;
-const PRIMARY_PANTS_STYLES = [AVATAR_PANTS_STYLES[0]] as const;
-const PRIMARY_SHOE_STYLES = [AVATAR_SHOE_STYLES[0]] as const;
+const PRIMARY_HAIR_STYLES = AVATAR_HAIR_STYLES;
+const PRIMARY_SHIRT_STYLES = AVATAR_SHIRT_STYLES;
+const PRIMARY_PANTS_STYLES = AVATAR_PANTS_STYLES;
+const PRIMARY_SHOE_STYLES = AVATAR_SHOE_STYLES;

@@ -1,9 +1,14 @@
 import { z } from "zod";
 import {
+  AVATAR_HAIR_COLORS,
   AVATAR_HAIR_STYLES,
+  AVATAR_PANTS_COLORS,
   AVATAR_PANTS_STYLES,
+  AVATAR_SHIRT_COLORS,
   AVATAR_SHIRT_STYLES,
+  AVATAR_SHOE_COLORS,
   AVATAR_SHOE_STYLES,
+  AVATAR_SKIN_TONES,
 } from "./appearance";
 
 export const MAX_RAW_MESSAGE_BYTES = 8 * 1024;
@@ -18,8 +23,6 @@ const trimmedString = (maxLength: number) =>
     .min(1)
     .max(maxLength)
     .transform((value) => value.trim());
-
-const colorSchema = z.string().regex(/^#[0-9a-f]{6}$/i);
 
 export const tilePositionSchema = z.object({
   x: z.number().int(),
@@ -47,14 +50,14 @@ export const chatSayMessageSchema = z.object({
 
 export const avatarAppearanceSchema = z.object({
   hair: z.enum(AVATAR_HAIR_STYLES),
-  hairColor: colorSchema,
-  skinTone: colorSchema,
+  hairColor: z.enum(AVATAR_HAIR_COLORS),
+  skinTone: z.enum(AVATAR_SKIN_TONES),
   shirt: z.enum(AVATAR_SHIRT_STYLES),
-  shirtColor: colorSchema,
+  shirtColor: z.enum(AVATAR_SHIRT_COLORS),
   pants: z.enum(AVATAR_PANTS_STYLES),
-  pantsColor: colorSchema,
+  pantsColor: z.enum(AVATAR_PANTS_COLORS),
   shoes: z.enum(AVATAR_SHOE_STYLES),
-  shoesColor: colorSchema,
+  shoesColor: z.enum(AVATAR_SHOE_COLORS),
 });
 
 export const avatarAppearanceUpdateMessageSchema = z.object({

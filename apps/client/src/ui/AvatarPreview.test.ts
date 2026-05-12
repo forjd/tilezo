@@ -14,9 +14,9 @@ describe("AvatarPreview", () => {
       {
         ...DEFAULT_AVATAR_APPEARANCE,
         hair: "bob",
-        hairColor: "#111111",
+        hairColor: "#3b2418",
         shirt: "hoodie",
-        shirtColor: "#222222",
+        shirtColor: "#7f3b44",
       },
       { state: "walk", direction: "east", elapsedSeconds: 0.13 },
     );
@@ -31,10 +31,10 @@ describe("AvatarPreview", () => {
       "hair",
     ]);
     expect(
-      preview.children.some((layer) => layer.style.getPropertyValue("--layer-tint") === "#111111"),
+      preview.children.some((layer) => layer.style.getPropertyValue("--layer-tint") === "#3b2418"),
     ).toBe(true);
     expect(
-      preview.children.some((layer) => layer.style.getPropertyValue("--layer-tint") === "#222222"),
+      preview.children.some((layer) => layer.style.getPropertyValue("--layer-tint") === "#7f3b44"),
     ).toBe(true);
     expect(preview.children.every((layer) => layer.getAttribute("data-frame-index") === "14")).toBe(
       true,

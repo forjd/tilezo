@@ -72,9 +72,9 @@ describe("Avatar", () => {
     avatar.setAppearance({
       ...DEFAULT_AVATAR_APPEARANCE,
       hair: "bob",
-      hairColor: "#111111",
+      hairColor: "#3b2418",
       shirt: "hoodie",
-      shirtColor: "#222222",
+      shirtColor: "#7f3b44",
     });
 
     const state = avatar as unknown as {
@@ -82,8 +82,8 @@ describe("Avatar", () => {
     };
 
     expect(state.spriteLayer?.children.length).toBeGreaterThanOrEqual(6);
-    expect(state.spriteLayer?.children.some((child) => child.tint === 0x111111)).toBe(true);
-    expect(state.spriteLayer?.children.some((child) => child.tint === 0x222222)).toBe(true);
+    expect(state.spriteLayer?.children.some((child) => child.tint === 0x3b2418)).toBe(true);
+    expect(state.spriteLayer?.children.some((child) => child.tint === 0x7f3b44)).toBe(true);
   });
 
   test("shows chat bubbles briefly above the avatar", () => {

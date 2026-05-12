@@ -63,7 +63,7 @@ describe("AuthService", () => {
     const store = createAuthStore();
     const auth = new AuthService(store, { secret: "test-secret" });
     const session = await auth.createUser("Dan", "correct horse battery staple");
-    const appearance = {
+    const appearance: AvatarAppearance = {
       ...DEFAULT_AVATAR_APPEARANCE,
       hair: "side-part" as const,
       hairColor: "#8b4a24",
@@ -73,6 +73,21 @@ describe("AuthService", () => {
 
     expect(updated).toEqual({ ...session.user, appearance });
     expect(await auth.verifyToken(session.token)).toEqual(updated);
+  });
+
+  test("rejects unsupported avatar colors before persistence", async () => {
+    const store = createAuthStore();
+    const auth = new AuthService(store, { secret: "test-secret" });
+    const session = await auth.createUser("Dan", "correct horse battery staple");
+
+    await expect(
+      auth.updateAppearance(session.user.id, {
+        ...DEFAULT_AVATAR_APPEARANCE,
+        shirtColor: "#123456",
+      } as unknown as AvatarAppearance),
+    ).rejects.toThrow("Invalid character appearance");
+
+    expect(store.users[0]?.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
   });
 });
 

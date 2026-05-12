@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { CharacterEditor } from "./CharacterEditor";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -42,7 +42,7 @@ describe("CharacterEditor", () => {
       initialAppearance: DEFAULT_AVATAR_APPEARANCE,
       onSubmit() {},
     });
-    const appearance = { ...DEFAULT_AVATAR_APPEARANCE, pantsColor: "#6f5b2a" };
+    const appearance: AvatarAppearance = { ...DEFAULT_AVATAR_APPEARANCE, pantsColor: "#77684b" };
 
     editor.hide();
     expect(editor.element.classList.contains("hidden")).toBe(true);
@@ -52,7 +52,7 @@ describe("CharacterEditor", () => {
     const pantsColor = form.children[6]?.children[1] as FakeElement;
 
     expect(editor.element.classList.contains("hidden")).toBe(false);
-    expect(pantsColor.value).toBe("#6f5b2a");
+    expect(pantsColor.value).toBe("#77684b");
   });
 
   test("renders a manifest-driven preview and updates it when controls change", () => {

@@ -69,5 +69,14 @@ describe("protocol parser", () => {
         },
       }).ok,
     ).toBe(false);
+    expect(
+      parseClientMessage({
+        type: "avatar.appearance.update",
+        appearance: {
+          ...DEFAULT_AVATAR_APPEARANCE,
+          shirtColor: "#123456",
+        },
+      }).ok,
+    ).toBe(false);
   });
 });

@@ -56,6 +56,28 @@ Send a plain room chat message.
 }
 ```
 
+### `avatar.appearance.update`
+
+Broadcast the authenticated user's saved character appearance to the current room after the profile
+update succeeds.
+
+```json
+{
+  "type": "avatar.appearance.update",
+  "appearance": {
+    "hair": "side-part",
+    "hairColor": "#8b4a24",
+    "skinTone": "#f2c097",
+    "shirt": "hoodie",
+    "shirtColor": "#2f5f7f",
+    "pants": "straight",
+    "pantsColor": "#d2c294",
+    "shoes": "boots",
+    "shoesColor": "#5b4218"
+  }
+}
+```
+
 ### `ping`
 
 Simple ping/pong support.
@@ -93,6 +115,8 @@ Sent after a successful join.
 }
 ```
 
+Each room user includes `id`, `username`, `position`, and `appearance`.
+
 ### `room.list`
 
 Sent after a room list request and after a successful join.
@@ -124,6 +148,17 @@ Broadcast when a user joins a room.
     "position": {
       "x": 2,
       "y": 2
+    },
+    "appearance": {
+      "hair": "short",
+      "hairColor": "#7a4424",
+      "skinTone": "#f2c097",
+      "shirt": "crew",
+      "shirtColor": "#2f5f7f",
+      "pants": "straight",
+      "pantsColor": "#d2c294",
+      "shoes": "boots",
+      "shoesColor": "#5b4218"
     }
   }
 }
@@ -158,6 +193,28 @@ Broadcast after the server accepts a movement request.
       "y": 2
     }
   ]
+}
+```
+
+### `avatar.appearance.updated`
+
+Broadcast after a user changes their character while inside a room.
+
+```json
+{
+  "type": "avatar.appearance.updated",
+  "userId": "user_...",
+  "appearance": {
+    "hair": "bob",
+    "hairColor": "#3b2418",
+    "skinTone": "#f2c097",
+    "shirt": "hoodie",
+    "shirtColor": "#7f3b44",
+    "pants": "wide",
+    "pantsColor": "#77684b",
+    "shoes": "sneakers",
+    "shoesColor": "#2f3b40"
+  }
 }
 ```
 
@@ -208,5 +265,8 @@ Current limits:
 - Room ID: 1 to 64 trimmed characters.
 - Chat text: 1 to 240 trimmed characters.
 - Tile coordinates: integers only.
+- Avatar styles and colors must be one of the supported values exported by `@tilezo/protocol`.
 
-Malformed JSON, unknown message types, invalid payloads, unauthenticated room joins, movement before joining, chat before joining, and invalid tiles are rejected without crashing the server.
+Malformed JSON, unknown message types, invalid payloads, unauthenticated room joins, movement before
+joining, chat before joining, character updates before joining, and invalid tiles are rejected
+without crashing the server.

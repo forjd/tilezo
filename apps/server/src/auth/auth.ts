@@ -1,5 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import {
+  type AvatarAppearance,
+  avatarAppearanceSchema,
+  DEFAULT_AVATAR_APPEARANCE,
+} from "@tilezo/protocol";
 import { eq } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
 import { users } from "../db/schema";
@@ -93,7 +97,13 @@ export class AuthService {
   }
 
   async updateAppearance(userId: string, appearance: AvatarAppearance): Promise<AuthUser> {
-    const user = await this.store.updateUserAppearance(userId, appearance);
+    const parsed = avatarAppearanceSchema.safeParse(appearance);
+
+    if (!parsed.success) {
+      throw new AuthError("INVALID_APPEARANCE", "Invalid character appearance");
+    }
+
+    const user = await this.store.updateUserAppearance(userId, parsed.data);
 
     if (!user) {
       throw new AuthError("USER_NOT_FOUND", "User not found");

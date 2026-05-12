@@ -124,12 +124,13 @@ export function handleMessage(
 
     case "avatar.appearance.update": {
       const room = getJoinedRoom(ws, context.rooms);
-      ws.data.appearance = parsed.value.appearance;
 
       if (!room) {
         sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
         return;
       }
+
+      ws.data.appearance = parsed.value.appearance;
 
       if (!room.updateAppearance(ws.data.userId, parsed.value.appearance)) {
         sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
