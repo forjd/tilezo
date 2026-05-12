@@ -54,3 +54,14 @@ chore: configure biome
 - Use [docs/persistence.md](docs/persistence.md) as the source of truth for the next database and migration pass.
 - Use [docs/art-design-principles.md](docs/art-design-principles.md) as the source of truth for Tilezo's pixel-art direction, asset review, and Habbo-inspired-but-original visual constraints.
 - If a feature is outside the current room, presence, movement, chat, or persistence foundations, add a TODO instead of implementing it.
+
+## Reference Projects
+
+- Local references are available at `../bobba_server`, `../bobba_client`, and `../Kepler`. Use them to understand emulator architecture, room-loop behavior, protocol shape, isometric rendering, and persistence boundaries.
+- Treat these projects as behavioral references, not source templates. `bobba_server` and `bobba_client` are GPL-licensed, and `Kepler` is AGPL-licensed; do not copy, port, or lightly rewrite their code, assets, SQL dumps, packet constants, text strings, or proprietary Habbo-era content into Tilezo.
+- When consulting the references, extract product and architecture lessons: server-authoritative rooms, explicit incoming/outgoing message handlers, room-scoped broadcast helpers, deterministic room ticks, tile occupancy maps, height-aware movement, avatar status updates, room model parsing, item definitions, inventories, catalogues, and room rights.
+- Prefer Tilezo-native names, schemas, messages, and assets. Keep our WebSocket protocol JSON-oriented and TypeScript/Bun-first unless a documented Tilezo design says otherwise.
+- For movement and collision work, compare Bobba's compact `Room`/`RoomUserManager`/`GameMap` flow with Kepler's fuller `RoomEntity`/`RoomMapping`/`RoomTile`/`Pathfinder` model, then implement the smallest Tilezo-specific version that preserves authoritative validation, diagonal movement rules, occupied-tile handling, stack/height checks, and status broadcast semantics.
+- For persistence work, use the references only to identify domain concepts and relationships such as users, rooms, room models, room rights, items, item definitions, inventories, catalogue pages/items, chat logs, and favourites. Design Drizzle schemas from [docs/persistence.md](docs/persistence.md) and current Tilezo requirements rather than mirroring legacy MySQL tables.
+- For rendering and UI work, use `../bobba_client` to study high-level client responsibilities such as asset managers, room imagers, avatar containers, hit testing, and incoming event routing. Keep Tilezo's visual direction original and aligned with [docs/art-design-principles.md](docs/art-design-principles.md).
+- When a reference influences an implementation decision, mention the reference concept in the PR or commit notes without claiming compatibility with Habbo, Bobba, or Kepler unless that compatibility is explicitly implemented and tested.
