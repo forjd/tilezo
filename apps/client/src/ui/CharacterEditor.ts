@@ -16,14 +16,14 @@ type CharacterEditorOptions = {
 export class CharacterEditor {
   readonly element = document.createElement("section");
 
-  private readonly hair = this.createSelect(AVATAR_HAIR_STYLES);
+  private readonly hair = this.createSelect(PRIMARY_HAIR_STYLES);
   private readonly hairColor = this.createColorInput();
   private readonly skinTone = this.createColorInput();
-  private readonly shirt = this.createSelect(AVATAR_SHIRT_STYLES);
+  private readonly shirt = this.createSelect(PRIMARY_SHIRT_STYLES);
   private readonly shirtColor = this.createColorInput();
-  private readonly pants = this.createSelect(AVATAR_PANTS_STYLES);
+  private readonly pants = this.createSelect(PRIMARY_PANTS_STYLES);
   private readonly pantsColor = this.createColorInput();
-  private readonly shoes = this.createSelect(AVATAR_SHOE_STYLES);
+  private readonly shoes = this.createSelect(PRIMARY_SHOE_STYLES);
   private readonly shoesColor = this.createColorInput();
   private readonly previewBody = createAvatarPreview(document);
   private readonly submitButton = document.createElement("button");
@@ -57,14 +57,14 @@ export class CharacterEditor {
     form.className = "character-form";
     form.append(
       this.createField("Hair", this.hair),
-      this.createField("Hair color", this.hairColor),
-      this.createField("Skin tone", this.skinTone),
+      this.createColorField("Hair color", this.hairColor, COLOR_PALETTES.hair),
+      this.createColorField("Skin tone", this.skinTone, COLOR_PALETTES.skin),
       this.createField("Top", this.shirt),
-      this.createField("Top color", this.shirtColor),
+      this.createColorField("Top color", this.shirtColor, COLOR_PALETTES.shirt),
       this.createField("Bottoms", this.pants),
-      this.createField("Bottoms color", this.pantsColor),
+      this.createColorField("Bottoms color", this.pantsColor, COLOR_PALETTES.pants),
       this.createField("Shoes", this.shoes),
-      this.createField("Shoe color", this.shoesColor),
+      this.createColorField("Shoe color", this.shoesColor, COLOR_PALETTES.shoes),
     );
 
     const actions = document.createElement("div");
@@ -121,6 +121,10 @@ export class CharacterEditor {
   }
 
   private setAppearance(appearance: AvatarAppearance): void {
+    this.ensureSelectOption(this.hair, appearance.hair);
+    this.ensureSelectOption(this.shirt, appearance.shirt);
+    this.ensureSelectOption(this.pants, appearance.pants);
+    this.ensureSelectOption(this.shoes, appearance.shoes);
     this.hair.value = appearance.hair;
     this.hairColor.value = appearance.hairColor;
     this.skinTone.value = appearance.skinTone;
@@ -131,10 +135,12 @@ export class CharacterEditor {
     this.shoes.value = appearance.shoes;
     this.shoesColor.value = appearance.shoesColor;
     this.updatePreview();
+    this.syncSwatches();
   }
 
   private updatePreview(): void {
     updateAvatarPreview(this.previewBody, this.readAppearance(), { direction: "south-east" });
+    this.syncSwatches();
   }
 
   private createField(
@@ -146,6 +152,35 @@ export class CharacterEditor {
     label.className = "field";
     labelContent.textContent = labelText;
     label.append(labelContent, input);
+    return label;
+  }
+
+  private createColorField(
+    labelText: string,
+    input: HTMLInputElement,
+    palette: readonly string[],
+  ): HTMLLabelElement {
+    const label = this.createField(labelText, input);
+    const swatches = document.createElement("div");
+    swatches.className = "swatch-list";
+    input.type = "hidden";
+
+    for (const color of palette) {
+      const swatch = document.createElement("button");
+      swatch.className = "color-swatch";
+      swatch.type = "button";
+      swatch.title = color;
+      swatch.setAttribute("aria-label", `${labelText} ${color}`);
+      swatch.setAttribute("data-color", color);
+      swatch.style.setProperty("--swatch-color", color);
+      swatch.addEventListener("click", () => {
+        input.value = color;
+        this.updatePreview();
+      });
+      swatches.append(swatch);
+    }
+
+    label.append(swatches);
     return label;
   }
 
@@ -163,11 +198,42 @@ export class CharacterEditor {
     return select;
   }
 
+  private ensureSelectOption(select: HTMLSelectElement, value: string): void {
+    if (Array.from(select.options).some((option) => option.value === value)) {
+      return;
+    }
+
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = titleCase(value);
+    select.add(option);
+  }
+
   private createColorInput(): HTMLInputElement {
     const input = document.createElement("input");
-    input.type = "color";
+    input.type = "hidden";
+    input.autocomplete = "off";
     input.required = true;
     return input;
+  }
+
+  private syncSwatches(): void {
+    for (const input of [
+      this.hairColor,
+      this.skinTone,
+      this.shirtColor,
+      this.pantsColor,
+      this.shoesColor,
+    ]) {
+      const field = input.parentElement;
+      const swatches = Array.from(
+        field?.querySelectorAll<HTMLButtonElement>(".color-swatch") ?? [],
+      );
+
+      for (const swatch of swatches) {
+        swatch.classList.toggle("selected", swatch.dataset.color === input.value);
+      }
+    }
   }
 }
 
@@ -177,3 +243,16 @@ function titleCase(value: string): string {
     .map((part) => `${part.slice(0, 1).toLocaleUpperCase("en-US")}${part.slice(1)}`)
     .join(" ");
 }
+
+const COLOR_PALETTES = {
+  hair: ["#3b2418", "#6f3f22", "#9a5a2d", "#c99743", "#1f2326"] as const,
+  skin: ["#8f5f45", "#b77a58", "#d59a73", "#f2c097", "#f6d7b8"] as const,
+  shirt: ["#24546f", "#2f6f5f", "#7f3b44", "#d69a35", "#ece3cf"] as const,
+  pants: ["#3f4d5c", "#77684b", "#b7aa78", "#503d33", "#d8d0ba"] as const,
+  shoes: ["#2a2118", "#5b4218", "#6c3328", "#2f3b40", "#e5ded1"] as const,
+} satisfies Record<string, readonly string[]>;
+
+const PRIMARY_HAIR_STYLES = [AVATAR_HAIR_STYLES[0]] as const;
+const PRIMARY_SHIRT_STYLES = [AVATAR_SHIRT_STYLES[0]] as const;
+const PRIMARY_PANTS_STYLES = [AVATAR_PANTS_STYLES[0]] as const;
+const PRIMARY_SHOE_STYLES = [AVATAR_SHOE_STYLES[0]] as const;

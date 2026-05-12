@@ -30,6 +30,7 @@ export class LoginForm {
     this.message.className = "login-message";
 
     const form = document.createElement("form");
+    form.autocomplete = "on";
     const modeGroup = document.createElement("div");
     modeGroup.className = "mode-toggle";
     this.loginModeButton.type = "button";
@@ -49,10 +50,12 @@ export class LoginForm {
     form.append(this.submitButton);
 
     this.username.maxLength = 24;
+    this.username.name = "tilezo-username";
     this.username.required = true;
-    this.username.autocomplete = "off";
+    this.username.autocomplete = "username";
     this.username.placeholder = "dan";
 
+    this.password.name = "tilezo-password";
     this.password.required = true;
     this.password.type = "password";
     this.password.autocomplete = "current-password";
@@ -79,6 +82,7 @@ export class LoginForm {
 
   hide(): void {
     this.element.classList.add("hidden");
+    this.password.blur?.();
   }
 
   showError(message: string): void {
