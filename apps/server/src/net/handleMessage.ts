@@ -7,6 +7,7 @@ import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
+import { ensurePersonalRoom, personalRoomId } from "../rooms/personalRoom";
 import type { RoomManager } from "../rooms/RoomManager";
 import { encodeServerMessage } from "../util/safeJson";
 import type { SocketData } from "./socketTypes";
@@ -40,10 +41,7 @@ export function handleMessage(
   try {
     switch (parsed.value.type) {
       case "room.list.request":
-        send(ws, {
-          type: "room.list",
-          rooms: context.rooms.listPublicRooms(ws.data.roomId, ws.data.userId),
-        });
+        void sendRoomList(ws, context);
         break;
 
       case "room.join": {
@@ -285,6 +283,10 @@ async function joinRoom(
   const startedAt = performance.now();
 
   try {
+    if (roomId === personalRoomId(ws.data.userId)) {
+      await ensureOwnPersonalRoom(ws, context);
+    }
+
     const room = context.rooms.getOrCreate(roomId, ws.data.userId);
 
     if (!room) {
@@ -378,6 +380,39 @@ async function joinRoom(
   } finally {
     context.metrics?.observe("room.join.duration", performance.now() - startedAt);
   }
+}
+
+async function sendRoomList(ws: ServerWebSocket<SocketData>, context: Context): Promise<void> {
+  const startedAt = performance.now();
+
+  try {
+    await ensureOwnPersonalRoom(ws, context);
+    send(ws, {
+      type: "room.list",
+      rooms: context.rooms.listPublicRooms(ws.data.roomId, ws.data.userId),
+    });
+  } finally {
+    context.metrics?.observe("room.list.duration", performance.now() - startedAt);
+  }
+}
+
+async function ensureOwnPersonalRoom(
+  ws: ServerWebSocket<SocketData>,
+  context: Context,
+): Promise<void> {
+  if (!ws.data.username) {
+    return;
+  }
+
+  await ensurePersonalRoom(
+    { id: ws.data.userId, username: ws.data.username },
+    {
+      logger: context.logger,
+      metrics: context.metrics,
+      persistence: context.persistence,
+      rooms: context.rooms,
+    },
+  );
 }
 
 async function saveLastRoomId(context: Context, userId: string, roomId: string): Promise<void> {

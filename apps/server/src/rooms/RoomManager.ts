@@ -59,6 +59,10 @@ export class RoomManager {
     return room;
   }
 
+  hasAccessibleLayout(roomId: string, userId?: string): boolean {
+    return Boolean(this.getAccessibleLayout(roomId, userId));
+  }
+
   listPublicRooms(currentRoomId?: string, userId?: string): PublicRoomSummary[] {
     return this.listAccessibleLayouts(userId).map((layout) => ({
       id: layout.id,

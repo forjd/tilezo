@@ -39,6 +39,8 @@ describe("RoomManager", () => {
     expect(manager.getOrCreate("home_user_1", "user_2")).toBeUndefined();
     expect(manager.getOrCreate("home_user_1", "user_1")?.id).toBe("home_user_1");
     expect(manager.getOrCreate("home_user_1", "user_2")).toBeUndefined();
+    expect(manager.hasAccessibleLayout("home_user_1", "user_1")).toBe(true);
+    expect(manager.hasAccessibleLayout("home_user_1", "user_2")).toBe(false);
   });
 
   test("removes only empty rooms", () => {

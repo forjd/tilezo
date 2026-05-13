@@ -8,7 +8,6 @@ import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { createLogger, type Logger, type LogLevel, parseLogLevel } from "./observability/logger";
 import { Metrics } from "./observability/metrics";
-import { createPersonalRoomLayout } from "./rooms/personalRoom";
 import { RoomManager } from "./rooms/RoomManager";
 import {
   createRoomLayoutFromTemplate,
@@ -57,19 +56,11 @@ const server = Bun.serve<SocketData>({
     }
 
     if (url.pathname === "/auth/register" && request.method === "POST") {
-      return handleAuthRequest(request, auth, "register", {
-        persistence,
-        rooms,
-        logger: requestLogger,
-      });
+      return handleAuthRequest(request, auth, "register", requestLogger);
     }
 
     if (url.pathname === "/auth/login" && request.method === "POST") {
-      return handleAuthRequest(request, auth, "login", {
-        persistence,
-        rooms,
-        logger: requestLogger,
-      });
+      return handleAuthRequest(request, auth, "login", requestLogger);
     }
 
     if (url.pathname === "/me/appearance") {
@@ -210,10 +201,10 @@ async function handleAuthRequest(
   request: Request,
   authService: AuthService | undefined,
   mode: AuthMode,
-  roomProvisioning: { persistence?: PersistenceStore; rooms: RoomManager; logger: Logger },
+  requestLogger: Logger,
 ): Promise<Response> {
   if (!authService) {
-    roomProvisioning.logger.warn("auth.database_required", { mode });
+    requestLogger.warn("auth.database_required", { mode });
     return authJson(
       { error: { code: "DATABASE_REQUIRED", message: "Database is required for login" } },
       503,
@@ -235,13 +226,12 @@ async function handleAuthRequest(
         ? await authService.createUser(body.username, body.password)
         : await authService.login(body.username, body.password);
 
-    await provisionPersonalRoom(session.user, roomProvisioning);
-    roomProvisioning.logger.info("auth.succeeded", { mode, userId: session.user.id });
+    requestLogger.info("auth.succeeded", { mode, userId: session.user.id });
 
     return authJson(session, mode === "register" ? 201 : 200);
   } catch (error) {
     if (error instanceof AuthError) {
-      roomProvisioning.logger.warn("auth.failed", { mode, code: error.code });
+      requestLogger.warn("auth.failed", { mode, code: error.code });
       return authJson(
         { error: { code: error.code, message: error.message } },
         authStatus(error),
@@ -249,32 +239,12 @@ async function handleAuthRequest(
       );
     }
 
-    roomProvisioning.logger.warn("auth.invalid_request", { mode, error });
+    requestLogger.warn("auth.invalid_request", { mode, error });
     return authJson(
       { error: { code: "INVALID_AUTH_INPUT", message: "Invalid authentication request" } },
       400,
     );
   }
-}
-
-async function provisionPersonalRoom(
-  user: { id: string; username: string },
-  roomProvisioning: { persistence?: PersistenceStore; rooms: RoomManager; logger: Logger },
-): Promise<void> {
-  if (!roomProvisioning.persistence) {
-    return;
-  }
-
-  const layout = createPersonalRoomLayout(user);
-  await roomProvisioning.persistence.seedRoom(layout, {
-    ownerUserId: user.id,
-    visibility: "private",
-  });
-  roomProvisioning.rooms.addPrivateRoom(layout, user.id);
-  roomProvisioning.logger.debug("room.private.provisioned", {
-    userId: user.id,
-    roomId: layout.id,
-  });
 }
 
 async function handleAppearanceRequest(

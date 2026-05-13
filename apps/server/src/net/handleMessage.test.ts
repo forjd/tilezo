@@ -64,6 +64,7 @@ describe("handleMessage", () => {
       rooms,
       publish() {},
     });
+    await flushAsyncMessages();
 
     expect(ws.sent).toEqual([
       {
@@ -90,6 +91,7 @@ describe("handleMessage", () => {
       rooms,
       publish() {},
     });
+    await flushAsyncMessages();
 
     expect(ws.sent[0]).toEqual({
       type: "room.list",
@@ -104,6 +106,36 @@ describe("handleMessage", () => {
       type: "room.snapshot",
       roomId: "home_user_db_1",
     });
+  });
+
+  test("lazily provisions the authenticated user's private room when listed", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const seededRoomIds: string[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.list.request" }), {
+      rooms,
+      publish() {},
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom(layout) {
+          seededRoomIds.push(layout.id);
+        },
+      },
+    });
+    await flushAsyncMessages();
+
+    expect(seededRoomIds).toEqual(["home_user_db_1"]);
+    expect(ws.sent[0]?.type).toBe("room.list");
+    expect(
+      ws.sent[0]?.type === "room.list"
+        ? ws.sent[0].rooms.some(
+            (room) => room.id === "home_user_db_1" && room.name === "Dan's Room",
+          )
+        : false,
+    ).toBe(true);
   });
 
   test("persists the last joined room", async () => {
@@ -530,4 +562,9 @@ function createSocket(data: SocketData = { userId: "user_1" }) {
 
 function createTestLayout(id: string, name: string) {
   return createRectRoomLayout(id, name, 3, 3, { x: 1, y: 1 });
+}
+
+async function flushAsyncMessages(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }
