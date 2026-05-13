@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "build": "bun run --filter '@tilezo/client' build",
+    "benchmark": "bun run scripts/benchmark.ts",
     "db:down": "docker compose -f compose.db.yml down",
     "db:generate": "bun run scripts/run-server-db.ts generate",
     "db:migrate": "bun run scripts/run-server-db.ts migrate",
