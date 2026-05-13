@@ -28,6 +28,10 @@ chore: configure biome
 - Preserve the adjusted coverage gate in `scripts/check-coverage.ts`: CI requires adjusted line coverage to stay at or above `COVERAGE_THRESHOLD` and treats executable source files missing from LCOV as uncovered.
 - Do not lower the coverage threshold or exclude executable product code from coverage accounting to make CI pass. Add focused tests for real behavior instead; only exclude entrypoints, config, type-only modules, or re-export shims when they do not contain meaningful executable logic.
 
+## Browser Testing
+
+- Do not run automated browser testing without asking the user first, including Playwright runs, browser automation, scripted UI flows, screenshots, or in-app browser interactions.
+
 ## Runtime and Dependencies
 
 - Use Bun-native APIs where possible.
