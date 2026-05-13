@@ -1,5 +1,6 @@
 import type { TilePosition } from "../packages/engine/src";
 import {
+  AVATAR_SHIRT_COLORS,
   DEFAULT_AVATAR_APPEARANCE,
   type RoomSnapshotMessage,
   type ServerMessage,
@@ -496,10 +497,9 @@ function includesChat(scenario: Scenario): boolean {
 }
 
 function botAppearance(botId: number): typeof DEFAULT_AVATAR_APPEARANCE {
-  const shirtColors = ["#2f5f7f", "#8b4a24", "#2f7f5f", "#7f2f47"] as const;
   return {
     ...DEFAULT_AVATAR_APPEARANCE,
-    shirtColor: shirtColors[botId % shirtColors.length],
+    shirtColor: AVATAR_SHIRT_COLORS[botId % AVATAR_SHIRT_COLORS.length],
   };
 }
 
