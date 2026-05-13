@@ -8,6 +8,8 @@ export type ServerConfig = {
   authPasswordConcurrency: number;
   authPasswordQueueLimit: number;
   authPasswordWaitTimeoutMs: number;
+  authRegisterRateLimitMax: number;
+  authRegisterRateLimitWindowMs: number;
   nodeEnv: string;
 };
 
@@ -17,6 +19,7 @@ export const DEFAULT_AUTH_PASSWORD_CONCURRENCY = Math.max(
 );
 export const DEFAULT_AUTH_PASSWORD_QUEUE_LIMIT = DEFAULT_AUTH_PASSWORD_CONCURRENCY * 32;
 export const DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS = 10_000;
+export const DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW_MS = 60_000;
 
 export function getConfig(env = Bun.env): ServerConfig {
   const nodeEnv = env.NODE_ENV ?? "development";
@@ -37,6 +40,16 @@ export function getConfig(env = Bun.env): ServerConfig {
     "AUTH_PASSWORD_WAIT_TIMEOUT_MS",
     env.AUTH_PASSWORD_WAIT_TIMEOUT_MS,
     DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS,
+  );
+  const authRegisterRateLimitWindowMs = parsePositiveInteger(
+    "AUTH_REGISTER_RATE_LIMIT_WINDOW_MS",
+    env.AUTH_REGISTER_RATE_LIMIT_WINDOW_MS,
+    DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW_MS,
+  );
+  const authRegisterRateLimitMax = parsePositiveInteger(
+    "AUTH_REGISTER_RATE_LIMIT_MAX",
+    env.AUTH_REGISTER_RATE_LIMIT_MAX,
+    nodeEnv === "production" ? 30 : 1000,
   );
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -61,6 +74,8 @@ export function getConfig(env = Bun.env): ServerConfig {
     authPasswordConcurrency,
     authPasswordQueueLimit,
     authPasswordWaitTimeoutMs,
+    authRegisterRateLimitMax,
+    authRegisterRateLimitWindowMs,
     nodeEnv,
   };
 }

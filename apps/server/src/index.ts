@@ -1,6 +1,7 @@
 import type { ServerMessage } from "@tilezo/protocol";
 import { avatarAppearanceSchema, MAX_RAW_MESSAGE_BYTES } from "@tilezo/protocol";
 import { AuthError, AuthPasswordLimiter, AuthService, DrizzleAuthStore } from "./auth/auth";
+import { FixedWindowRateLimiter } from "./auth/rateLimit";
 import { getConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
@@ -24,6 +25,15 @@ const logger = createLogger({
 });
 const metrics = new Metrics();
 metrics.startEventLoopMonitor();
+const registerRateLimiter = new FixedWindowRateLimiter({
+  limit: config.authRegisterRateLimitMax,
+  windowMs: config.authRegisterRateLimitWindowMs,
+});
+const registerRateLimiterPruneTimer = setInterval(
+  () => registerRateLimiter.prune(),
+  config.authRegisterRateLimitWindowMs,
+);
+registerRateLimiterPruneTimer.unref?.();
 const database = createDatabase(config.databaseUrl);
 const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
 const auth = database
@@ -56,6 +66,25 @@ const server = Bun.serve<SocketData>({
     }
 
     if (url.pathname === "/auth/register" && request.method === "POST") {
+      const rateLimit = registerRateLimiter.consume(clientRateLimitKey(request));
+
+      if (!rateLimit.allowed) {
+        metrics.increment("auth.register.rate_limited");
+        requestLogger.warn("auth.register.rate_limited", {
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        });
+        return authJson(
+          {
+            error: {
+              code: "RATE_LIMITED",
+              message: "Too many account registrations, try again shortly",
+            },
+          },
+          429,
+          { "retry-after": rateLimit.retryAfterSeconds.toString() },
+        );
+      }
+
       return handleAuthRequest(request, auth, "register", requestLogger);
     }
 
@@ -487,6 +516,16 @@ function readBearerToken(request: Request): string | undefined {
   const authorization = request.headers.get("authorization");
   const [scheme, token] = authorization?.split(" ") ?? [];
   return scheme?.toLocaleLowerCase("en-US") === "bearer" ? token : undefined;
+}
+
+function clientRateLimitKey(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return (
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-real-ip") ??
+    forwardedFor ??
+    "local"
+  );
 }
 
 function authJson(body: unknown, status: number, headers: Record<string, string> = {}): Response {

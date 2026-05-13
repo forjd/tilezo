@@ -3,6 +3,7 @@ import {
   DEFAULT_AUTH_PASSWORD_CONCURRENCY,
   DEFAULT_AUTH_PASSWORD_QUEUE_LIMIT,
   DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS,
+  DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW_MS,
   getConfig,
 } from "./config";
 
@@ -16,6 +17,8 @@ describe("getConfig", () => {
       authPasswordConcurrency: DEFAULT_AUTH_PASSWORD_CONCURRENCY,
       authPasswordQueueLimit: DEFAULT_AUTH_PASSWORD_QUEUE_LIMIT,
       authPasswordWaitTimeoutMs: DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS,
+      authRegisterRateLimitMax: 1000,
+      authRegisterRateLimitWindowMs: DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW_MS,
       nodeEnv: "development",
     });
   });
@@ -30,6 +33,8 @@ describe("getConfig", () => {
         AUTH_PASSWORD_CONCURRENCY: "2",
         AUTH_PASSWORD_QUEUE_LIMIT: "8",
         AUTH_PASSWORD_WAIT_TIMEOUT_MS: "1500",
+        AUTH_REGISTER_RATE_LIMIT_MAX: "12",
+        AUTH_REGISTER_RATE_LIMIT_WINDOW_MS: "30000",
         NODE_ENV: "production",
       }),
     ).toEqual({
@@ -40,6 +45,8 @@ describe("getConfig", () => {
       authPasswordConcurrency: 2,
       authPasswordQueueLimit: 8,
       authPasswordWaitTimeoutMs: 1500,
+      authRegisterRateLimitMax: 12,
+      authRegisterRateLimitWindowMs: 30000,
       nodeEnv: "production",
     });
   });
@@ -58,6 +65,12 @@ describe("getConfig", () => {
     );
     expect(() => getConfig({ AUTH_PASSWORD_WAIT_TIMEOUT_MS: "0" })).toThrow(
       "AUTH_PASSWORD_WAIT_TIMEOUT_MS must be a positive integer",
+    );
+    expect(() => getConfig({ AUTH_REGISTER_RATE_LIMIT_MAX: "0" })).toThrow(
+      "AUTH_REGISTER_RATE_LIMIT_MAX must be a positive integer",
+    );
+    expect(() => getConfig({ AUTH_REGISTER_RATE_LIMIT_WINDOW_MS: "0" })).toThrow(
+      "AUTH_REGISTER_RATE_LIMIT_WINDOW_MS must be a positive integer",
     );
   });
 
