@@ -11,6 +11,7 @@ describe("stress-test CLI", () => {
 
     expect(output).toContain("Usage: bun run stress -- [options]");
     expect(output).toContain("--duration <seconds>");
+    expect(output).toContain("--seed <number>");
   });
 
   test("rejects invalid scenarios before running load", () => {

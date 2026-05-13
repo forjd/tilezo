@@ -22,6 +22,7 @@ export type StressOptions = {
   durationSeconds: number;
   moveIntervalMs: number;
   chatIntervalMs: number;
+  seed: number;
 };
 
 type BotResult = {
@@ -58,6 +59,7 @@ const DEFAULT_OPTIONS: StressOptions = {
   durationSeconds: 0,
   moveIntervalMs: 1000,
   chatIntervalMs: 5000,
+  seed: Date.now(),
 };
 
 if (import.meta.main) {
@@ -136,6 +138,7 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
   const username = `${options.usernamePrefix}_${botId}`;
   const timings: Record<string, number> = {};
   const counters: BotCounters = { moves: 0, messages: 0 };
+  const random = mulberry32(options.seed + botId * 0x9e3779b9);
   const totalStart = performance.now();
   let socket: WebSocket | undefined;
 
@@ -165,7 +168,15 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
 
     if (options.durationSeconds > 0) {
       await timed(timings, "steady", () =>
-        runSteady(socket as WebSocket, session.userId, username, snapshot, options, counters),
+        runSteady(
+          socket as WebSocket,
+          session.userId,
+          username,
+          snapshot,
+          options,
+          counters,
+          random,
+        ),
       );
       timings.total = performance.now() - totalStart;
       return { botId, username, ok: true, timings, counters };
@@ -178,7 +189,7 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
 
     if (includesMovement(options.scenario)) {
       counters.moves += await timed(timings, "movement", () =>
-        runMovement(socket as WebSocket, session.userId, snapshot, options.moves, 0),
+        runMovement(socket as WebSocket, session.userId, snapshot, options.moves, random),
       );
     }
 
@@ -295,7 +306,7 @@ async function runMovement(
   userId: string,
   snapshot: RoomSnapshotMessage,
   moves: number,
-  startIndex: number,
+  random: () => number,
 ): Promise<number> {
   const targets = snapshot.tiles.filter((tile) => tile.walkable);
 
@@ -304,7 +315,7 @@ async function runMovement(
   }
 
   for (let index = 0; index < moves; index += 1) {
-    await sendMove(socket, userId, targets, startIndex + index);
+    await sendMove(socket, userId, targets, random);
   }
 
   return moves;
@@ -331,6 +342,7 @@ async function runSteady(
   snapshot: RoomSnapshotMessage,
   options: StressOptions,
   counters: BotCounters,
+  random: () => number,
 ): Promise<void> {
   const targets = snapshot.tiles.filter((tile) => tile.walkable);
   const runMovementLoop = includesMovement(options.scenario);
@@ -338,7 +350,6 @@ async function runSteady(
   const deadline = performance.now() + options.durationSeconds * 1000;
   let nextMoveAt = performance.now();
   let nextChatAt = performance.now();
-  let moveIndex = 0;
   let messageIndex = 0;
 
   if (runMovementLoop && targets.length === 0) {
@@ -350,8 +361,7 @@ async function runSteady(
     let acted = false;
 
     if (runMovementLoop && now >= nextMoveAt) {
-      await sendMove(socket, userId, targets, moveIndex);
-      moveIndex += 1;
+      await sendMove(socket, userId, targets, random);
       counters.moves += 1;
       nextMoveAt = performance.now() + options.moveIntervalMs;
       acted = true;
@@ -380,9 +390,9 @@ async function sendMove(
   socket: WebSocket,
   userId: string,
   targets: TilePosition[],
-  index: number,
+  random: () => number,
 ): Promise<void> {
-  const tile = targets[index % targets.length] as TilePosition;
+  const tile = targets[Math.floor(random() * targets.length)] as TilePosition;
   const target = { x: tile.x, y: tile.y };
   socket.send(JSON.stringify({ type: "avatar.move.request", target }));
   await waitForMessage(
@@ -540,6 +550,9 @@ function applyOption(options: StressOptions, key: string, value: string): void {
     case "chat-interval-ms":
       options.chatIntervalMs = parsePositiveInteger(key, value);
       break;
+    case "seed":
+      options.seed = parseNonNegativeInteger(key, value);
+      break;
     default:
       throw new Error(`Unknown option --${key}`);
   }
@@ -624,6 +637,18 @@ function botAppearance(botId: number): typeof DEFAULT_AVATAR_APPEARANCE {
   };
 }
 
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 async function safeJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -642,6 +667,7 @@ function printSummary(options: StressOptions, results: BotResult[]): void {
 
   console.log("Tilezo stress test");
   console.log(`Scenario: ${options.scenario}`);
+  console.log(`Seed: ${options.seed.toString()}`);
   if (options.durationSeconds > 0) {
     console.log(`Duration: ${options.durationSeconds.toString()}s`);
   }
@@ -676,5 +702,6 @@ Options:
   --duration <seconds>     Keep bots connected and active for this long
   --move-interval-ms <ms>  Timed-mode movement interval (default: 1000)
   --chat-interval-ms <ms>  Timed-mode chat interval (default: 5000)
+  --seed <number>          Reproduce randomized bot movement
 `);
 }
