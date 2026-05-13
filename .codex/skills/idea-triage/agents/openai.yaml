@@ -1,0 +1,4 @@
+interface:
+  display_name: "Idea Triage"
+  short_description: "Audit idea status and capture follow-ups."
+  default_prompt: "Use $idea-triage to audit docs/IDEAS.md, mark implemented Tilezo ideas, and capture caveats in FOLLOW_UPS.md."

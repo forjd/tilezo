@@ -3,6 +3,7 @@
 ## Centralised Logging
 
 Added: 2026-05-13 19:19 BST
+Implemented: 2026-05-13
 
 Add centralised logging so Tilezo can collect client, server, and room-loop events in one place for debugging, operations, and post-incident review.
 
@@ -36,6 +37,7 @@ The feature should include adding and removing friends, online/offline presence 
 ## Retro Paused Disconnected State
 
 Added: 2026-05-13 20:54 BST
+Implemented: 2026-05-13
 
 Add a disconnected state that feels like a retro game paused pop-up instead of a generic network error.
 
@@ -44,6 +46,9 @@ When the client loses the room connection, freeze or dim the current room view a
 ## Create Room Dialog
 
 Added: 2026-05-13 20:55 BST
+Implemented: 2026-05-13
+
+Follow-up: knock-only access enforcement is tracked in [FOLLOW_UPS.md](../FOLLOW_UPS.md).
 
 Add a create-room option that opens a dialog where players can make their own rooms instead of only joining existing ones.
 
@@ -52,6 +57,7 @@ The dialog should let players choose from a small selection of predefined room l
 ## Stress Test CLI
 
 Added: 2026-05-13 21:03 BST
+Implemented: 2026-05-13
 
 Add a CLI tool that can run realistic load scenarios against different areas of the app, including registration, login, character creation, room entry, movement, and chat.
 
