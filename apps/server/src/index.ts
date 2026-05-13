@@ -144,6 +144,19 @@ const server = Bun.serve<SocketData>({
       return Response.json(metrics.snapshot(rooms.getMetrics()), { headers: corsHeaders() });
     }
 
+    if (url.pathname === "/debug/metrics/reset" && request.method === "POST") {
+      if (config.nodeEnv === "production") {
+        return Response.json(
+          { error: { code: "NOT_FOUND", message: "Not found" } },
+          { status: 404, headers: corsHeaders() },
+        );
+      }
+
+      metrics.reset();
+      requestLogger.info("metrics.reset");
+      return Response.json({ ok: true }, { headers: corsHeaders() });
+    }
+
     return new Response("Tilezo room server", {
       headers: {
         ...corsHeaders(),

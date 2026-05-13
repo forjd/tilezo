@@ -40,7 +40,7 @@ type MetricsOptions = {
 export class Metrics {
   private readonly now: () => number;
   private readonly maxSamplesPerHistogram: number;
-  private readonly startedAt: number;
+  private startedAt: number;
   private readonly counters = new Map<string, number>();
   private readonly histograms = new Map<string, LatencyHistogram>();
   private eventLoopLastDelayMs = 0;
@@ -106,6 +106,16 @@ export class Metrics {
       this.histograms.get(histogram) ?? new LatencyHistogram(this.maxSamplesPerHistogram);
     current.observe(valueMs);
     this.histograms.set(histogram, current);
+  }
+
+  reset(): void {
+    this.startedAt = this.now();
+    this.counters.clear();
+    this.histograms.clear();
+    this.eventLoopLastDelayMs = 0;
+    this.eventLoopMaxDelayMs = 0;
+    this.openedSockets = 0;
+    this.closedSockets = 0;
   }
 
   snapshot(rooms: RoomMetrics): MetricsSnapshot {

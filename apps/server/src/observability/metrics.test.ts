@@ -67,4 +67,31 @@ describe("Metrics", () => {
         .histograms,
     ).toEqual({});
   });
+
+  test("resets counters and histograms while keeping active socket state", () => {
+    let now = 1000;
+    const metrics = new Metrics({ now: () => now });
+
+    metrics.socketOpened();
+    metrics.socketOpened();
+    metrics.socketClosed();
+    metrics.increment("movement.accepted");
+    metrics.observe("movement.duration", 10);
+
+    now = 2000;
+    metrics.reset();
+
+    expect(
+      metrics.snapshot({ activeRooms: 0, rooms: [], layouts: { public: 0, private: 0 } }),
+    ).toMatchObject({
+      uptimeSeconds: 0,
+      sockets: {
+        active: 1,
+        opened: 0,
+        closed: 0,
+      },
+      counters: {},
+      histograms: {},
+    });
+  });
 });
