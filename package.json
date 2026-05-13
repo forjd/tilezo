@@ -19,6 +19,7 @@
     "dev:server": "bun run --filter '@tilezo/server' dev",
     "format": "biome format --write .",
     "lint": "biome check .",
+    "stress": "bun run scripts/stress-test.ts",
     "test": "bun test",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
     "coverage:check": "bun run scripts/check-coverage.ts",
