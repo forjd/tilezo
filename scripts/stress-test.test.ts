@@ -11,6 +11,7 @@ describe("stress-test CLI", () => {
 
     expect(output).toContain("Usage: bun run stress -- [options]");
     expect(output).toContain("--duration <seconds>");
+    expect(output).toContain("--request-timeout-ms <ms>");
     expect(output).toContain("--seed <number>");
   });
 

@@ -23,6 +23,7 @@ export type StressOptions = {
   moveIntervalMs: number;
   chatIntervalMs: number;
   seed: number;
+  requestTimeoutMs: number;
 };
 
 type BotResult = {
@@ -72,6 +73,7 @@ const DEFAULT_OPTIONS: StressOptions = {
   moveIntervalMs: 1000,
   chatIntervalMs: 5000,
   seed: Date.now(),
+  requestTimeoutMs: 30_000,
 };
 
 if (import.meta.main) {
@@ -159,11 +161,23 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
 
   try {
     const registered = await timed(timings, samples, "register", () =>
-      authenticate(options.apiUrl, "register", username, options.password),
+      authenticate(
+        options.apiUrl,
+        "register",
+        username,
+        options.password,
+        options.requestTimeoutMs,
+      ),
     );
     const session = includesAuthLogin(options.scenario)
       ? await timed(timings, samples, "login", () =>
-          authenticate(options.apiUrl, "login", username, options.password),
+          authenticate(
+            options.apiUrl,
+            "login",
+            username,
+            options.password,
+            options.requestTimeoutMs,
+          ),
         )
       : registered;
 
@@ -173,7 +187,12 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
     }
 
     await timed(timings, samples, "appearance", () =>
-      updateAppearance(options.apiUrl, session.token, botAppearance(botId)),
+      updateAppearance(
+        options.apiUrl,
+        session.token,
+        botAppearance(botId),
+        options.requestTimeoutMs,
+      ),
     );
 
     socket = await timed(timings, samples, "connect", () =>
@@ -240,14 +259,20 @@ async function authenticate(
   mode: "register" | "login",
   username: string,
   password: string,
+  timeoutMs: number,
 ): Promise<BotSession> {
-  const response = await fetch(`${apiUrl}/auth/${mode}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
+  const response = await fetchWithTimeout(
+    `${apiUrl}/auth/${mode}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ username, password }),
     },
-    body: JSON.stringify({ username, password }),
-  });
+    timeoutMs,
+    mode,
+  );
   const body = (await response.json()) as {
     token?: string;
     user?: { id?: string; username?: string };
@@ -269,15 +294,21 @@ async function updateAppearance(
   apiUrl: string,
   token: string,
   appearance: typeof DEFAULT_AVATAR_APPEARANCE,
+  timeoutMs: number,
 ): Promise<void> {
-  const response = await fetch(`${apiUrl}/me/appearance`, {
-    method: "PUT",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
+  const response = await fetchWithTimeout(
+    `${apiUrl}/me/appearance`,
+    {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ appearance }),
     },
-    body: JSON.stringify({ appearance }),
-  });
+    timeoutMs,
+    "appearance update",
+  );
 
   if (!response.ok) {
     const body = (await safeJson(response)) as { error?: { message?: string } } | undefined;
@@ -598,6 +629,9 @@ function applyOption(options: StressOptions, key: string, value: string): void {
     case "seed":
       options.seed = parseNonNegativeInteger(key, value);
       break;
+    case "request-timeout-ms":
+      options.requestTimeoutMs = parsePositiveInteger(key, value);
+      break;
     default:
       throw new Error(`Unknown option --${key}`);
   }
@@ -699,6 +733,28 @@ async function safeJson(response: Response): Promise<unknown> {
     return await response.json();
   } catch {
     return undefined;
+  }
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  label: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`${label} timed out after ${timeoutMs.toString()}ms`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -824,5 +880,6 @@ Options:
   --move-interval-ms <ms>  Timed-mode movement interval (default: 1000)
   --chat-interval-ms <ms>  Timed-mode chat interval (default: 5000)
   --seed <number>          Reproduce randomized bot movement
+  --request-timeout-ms <ms> HTTP setup request timeout (default: 30000)
 `);
 }
