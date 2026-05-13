@@ -63,3 +63,25 @@ export const DEFAULT_AVATAR_APPEARANCE: AvatarAppearance = {
   shoes: "boots",
   shoesColor: "#5b4218",
 };
+
+export function createRandomAvatarAppearance(random: () => number = Math.random): AvatarAppearance {
+  return {
+    hair: pickRandom(AVATAR_HAIR_STYLES, random),
+    hairColor: pickRandom(AVATAR_HAIR_COLORS, random),
+    skinTone: pickRandom(AVATAR_SKIN_TONES, random),
+    shirt: pickRandom(AVATAR_SHIRT_STYLES, random),
+    shirtColor: pickRandom(AVATAR_SHIRT_COLORS, random),
+    pants: pickRandom(AVATAR_PANTS_STYLES, random),
+    pantsColor: pickRandom(AVATAR_PANTS_COLORS, random),
+    shoes: pickRandom(AVATAR_SHOE_STYLES, random),
+    shoesColor: pickRandom(AVATAR_SHOE_COLORS, random),
+  };
+}
+
+function pickRandom<T extends readonly string[]>(values: T, random: () => number): T[number] {
+  const value = random();
+  const index = Number.isFinite(value)
+    ? Math.max(0, Math.min(values.length - 1, Math.floor(value * values.length)))
+    : 0;
+  return values[index] as T[number];
+}

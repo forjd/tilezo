@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AVATAR_APPEARANCE, parseClientMessage, parseRawClientMessage } from ".";
+import {
+  createRandomAvatarAppearance,
+  DEFAULT_AVATAR_APPEARANCE,
+  parseClientMessage,
+  parseRawClientMessage,
+} from ".";
 
 describe("protocol parser", () => {
   test("accepts valid client messages and trims user strings", () => {
@@ -87,4 +92,28 @@ describe("protocol parser", () => {
       }).ok,
     ).toBe(false);
   });
+
+  test("creates randomized avatar appearances from supported options", () => {
+    const appearance = createRandomAvatarAppearance(
+      createSequenceRandom([0.99, 0, 0.2, 0.75, 0.5, 0.99, 0, 0.8, 0.8]),
+    );
+
+    expect(appearance).toEqual({
+      hair: "bob",
+      hairColor: "#3b2418",
+      skinTone: "#b77a58",
+      shirt: "hoodie",
+      shirtColor: "#7f3b44",
+      pants: "wide",
+      pantsColor: "#3f4d5c",
+      shoes: "sneakers",
+      shoesColor: "#e5ded1",
+    });
+    expect(parseClientMessage({ type: "avatar.appearance.update", appearance }).ok).toBe(true);
+  });
 });
+
+function createSequenceRandom(values: readonly number[]): () => number {
+  let index = 0;
+  return () => values[index++] ?? 0;
+}

@@ -9,16 +9,19 @@ describe("normalizeUsername", () => {
 });
 
 describe("AuthService", () => {
-  test("creates users with hashed passwords and rejects case-insensitive duplicates", async () => {
+  test("creates users with hashed passwords, randomized appearances, and case-insensitive uniqueness", async () => {
     const store = createAuthStore();
-    const auth = new AuthService(store, { secret: "test-secret" });
+    const auth = new AuthService(store, {
+      secret: "test-secret",
+      random: createSequenceRandom([0.99, 0, 0.2, 0.75, 0.5, 0.99, 0, 0.8, 0.8]),
+    });
 
     const created = await auth.createUser("  Dan  ", "correct horse battery staple");
 
     expect(created.user).toMatchObject({
       id: "user_1",
       username: "Dan",
-      appearance: DEFAULT_AVATAR_APPEARANCE,
+      appearance: RANDOM_APPEARANCE,
     });
     expect(store.users[0]?.usernameKey).toBe("dan");
     expect(store.users[0]?.passwordHash).not.toBe("correct horse battery staple");
@@ -30,15 +33,11 @@ describe("AuthService", () => {
   test("logs in usernames case-insensitively and rejects bad passwords", async () => {
     const store = createAuthStore();
     const auth = new AuthService(store, { secret: "test-secret" });
-    await auth.createUser("Dan", "correct horse battery staple");
+    const created = await auth.createUser("Dan", "correct horse battery staple");
 
     const session = await auth.login("dan", "correct horse battery staple");
 
-    expect(session.user).toMatchObject({
-      id: "user_1",
-      username: "Dan",
-      appearance: DEFAULT_AVATAR_APPEARANCE,
-    });
+    expect(session.user).toEqual(created.user);
     expect(await auth.verifyToken(session.token)).toEqual(session.user);
     await expect(auth.login("DAN", "wrong password")).rejects.toThrow(
       "Invalid username or password",
@@ -87,27 +86,43 @@ describe("AuthService", () => {
       } as unknown as AvatarAppearance),
     ).rejects.toThrow("Invalid character appearance");
 
-    expect(store.users[0]?.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
+    expect(store.users[0]?.appearance).toEqual(session.user.appearance);
   });
 });
+
+const RANDOM_APPEARANCE: AvatarAppearance = {
+  hair: "bob",
+  hairColor: "#3b2418",
+  skinTone: "#b77a58",
+  shirt: "hoodie",
+  shirtColor: "#7f3b44",
+  pants: "wide",
+  pantsColor: "#3f4d5c",
+  shoes: "sneakers",
+  shoesColor: "#e5ded1",
+};
 
 function createAuthStore() {
   return {
     users: [] as {
       id: string;
+      appearance: AvatarAppearance;
       username: string;
       usernameKey: string;
       passwordHash: string;
-      appearance: AvatarAppearance;
     }[],
-    async createUser(user: { username: string; usernameKey: string; passwordHash: string }) {
+    async createUser(user: {
+      appearance: AvatarAppearance;
+      username: string;
+      usernameKey: string;
+      passwordHash: string;
+    }) {
       if (this.users.some((existing) => existing.usernameKey === user.usernameKey)) {
         throw new Error("duplicate username");
       }
 
       const persisted = {
         id: `user_${this.users.length + 1}`,
-        appearance: DEFAULT_AVATAR_APPEARANCE,
         ...user,
       };
       this.users.push(persisted);
@@ -130,4 +145,9 @@ function createAuthStore() {
       return user;
     },
   };
+}
+
+function createSequenceRandom(values: readonly number[]): () => number {
+  let index = 0;
+  return () => values[index++] ?? 0;
 }

@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   type AvatarAppearance,
   avatarAppearanceSchema,
-  DEFAULT_AVATAR_APPEARANCE,
+  createRandomAvatarAppearance,
 } from "@tilezo/protocol";
 import { eq } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
@@ -27,6 +27,7 @@ export type AuthSession = {
 
 export type AuthStore = {
   createUser(user: {
+    appearance: AvatarAppearance;
     username: string;
     usernameKey: string;
     passwordHash: string;
@@ -40,6 +41,7 @@ export type AuthStore = {
 };
 
 type AuthOptions = {
+  random?: () => number;
   secret: string;
 };
 
@@ -61,6 +63,7 @@ export class AuthService {
 
     try {
       const user = await this.store.createUser({
+        appearance: createRandomAvatarAppearance(this.options.random),
         username,
         usernameKey,
         passwordHash: await Bun.password.hash(password),
@@ -145,6 +148,7 @@ export class DrizzleAuthStore implements AuthStore {
   constructor(private readonly db: TilezoDatabase) {}
 
   async createUser(user: {
+    appearance: AvatarAppearance;
     username: string;
     usernameKey: string;
     passwordHash: string;
@@ -153,7 +157,6 @@ export class DrizzleAuthStore implements AuthStore {
       .insert(users)
       .values({
         id: createId("user"),
-        appearance: DEFAULT_AVATAR_APPEARANCE,
         ...user,
       })
       .returning({
