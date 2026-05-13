@@ -4,7 +4,7 @@ import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 import type { RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { type Application, Container } from "pixi.js";
 import { Avatar } from "./Avatar";
-import { TileMap } from "./TileMap";
+import { ROOM_WALL_HEIGHT, TileMap } from "./TileMap";
 
 type MoveRequestHandler = (target: TilePosition) => void;
 type CanvasInteractionHandler = () => void;
@@ -302,7 +302,7 @@ function calculateRoomBounds(tiles: RoomTile[]): RoomBounds | undefined {
     const screen = tileToScreen(tile.x, tile.y);
     bounds.minX = Math.min(bounds.minX, screen.x - 32);
     bounds.maxX = Math.max(bounds.maxX, screen.x + 32);
-    bounds.minY = Math.min(bounds.minY, screen.y - 16);
+    bounds.minY = Math.min(bounds.minY, screen.y - 16 - ROOM_WALL_HEIGHT);
     bounds.maxY = Math.max(bounds.maxY, screen.y + 16);
   }
 

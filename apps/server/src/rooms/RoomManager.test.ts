@@ -84,4 +84,12 @@ describe("RoomManager", () => {
     expect(manager.getOrCreate("lobby")?.id).toBe("lobby");
     expect(store.seededRoomIds).toEqual(["lobby", "atrium", "studio"]);
   });
+
+  test("bundled public rooms spawn users on the door tile", async () => {
+    const manager = await RoomManager.create();
+
+    manager.getOrCreate("lobby")?.join({ id: "user_1", username: "Dan" });
+
+    expect(manager.get("lobby")?.getUsers()[0]?.position).toEqual({ x: 0, y: 2 });
+  });
 });

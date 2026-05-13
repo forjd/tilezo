@@ -42,7 +42,7 @@ describe("RoomScene", () => {
     expect(avatar?.view.x).toBe(16);
     expect(avatar?.view.y).toBe(8);
     expect(world?.x).toBe(484);
-    expect(world?.y).toBe(292);
+    expect(world?.y).toBe(348);
   });
 
   test("shows chat messages above the matching avatar", () => {
@@ -106,9 +106,9 @@ describe("RoomScene", () => {
     );
 
     scene.loadSnapshot(snapshot([]));
-    app.canvas.mousedown({ clientX: 384, clientY: 292 });
-    app.canvas.click({ clientX: 384, clientY: 292 });
-    app.canvas.click({ clientX: 416, clientY: 308 });
+    app.canvas.mousedown({ clientX: 384, clientY: 348 });
+    app.canvas.click({ clientX: 384, clientY: 348 });
+    app.canvas.click({ clientX: 416, clientY: 364 });
 
     expect(moves).toEqual([{ x: 0, y: 0 }]);
     expect(app.canvas.defaultPrevented).toBe(true);
@@ -120,7 +120,7 @@ describe("RoomScene", () => {
     const scene = new RoomScene(app, () => {});
 
     scene.loadSnapshot(snapshot([]));
-    app.canvas.mousemove({ clientX: 384, clientY: 292 });
+    app.canvas.mousemove({ clientX: 384, clientY: 348 });
     expect(sceneState(scene).hover).toEqual({ x: 0, y: 0 });
 
     app.canvas.mouseleave({});
@@ -133,14 +133,14 @@ describe("RoomScene", () => {
     const scene = new RoomScene(app, (target) => moves.push(target));
 
     scene.loadSnapshot(snapshot([]));
-    app.canvas.mousedown({ clientX: 384, clientY: 292 });
-    app.canvas.mousemove({ clientX: 420, clientY: 312 });
+    app.canvas.mousedown({ clientX: 384, clientY: 348 });
+    app.canvas.mousemove({ clientX: 420, clientY: 368 });
     app.canvas.mouseup({});
-    app.canvas.click({ clientX: 420, clientY: 312 });
+    app.canvas.click({ clientX: 420, clientY: 368 });
 
     const world = app.stage.children[0];
     expect(world?.x).toBe(420);
-    expect(world?.y).toBe(312);
+    expect(world?.y).toBe(368);
     expect(moves).toEqual([]);
   });
 
@@ -150,14 +150,14 @@ describe("RoomScene", () => {
     const scene = new RoomScene(app, (target) => moves.push(target));
 
     scene.loadSnapshot(snapshot([]));
-    app.canvas.wheel({ clientX: 384, clientY: 292, deltaY: -100 });
-    app.canvas.click({ clientX: 384, clientY: 292 });
+    app.canvas.wheel({ clientX: 384, clientY: 348, deltaY: -100 });
+    app.canvas.click({ clientX: 384, clientY: 348 });
 
     const world = app.stage.children[0];
     expect(world?.scale.x).toBe(1.15);
     expect(world?.scale.y).toBe(1.15);
     expect(world?.x).toBe(384);
-    expect(world?.y).toBe(292);
+    expect(world?.y).toBe(348);
     expect(moves).toEqual([{ x: 0, y: 0 }]);
   });
 });

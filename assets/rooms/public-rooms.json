@@ -5,7 +5,7 @@
     "width": 10,
     "height": 10,
     "spawn": {
-      "x": 2,
+      "x": 0,
       "y": 2
     },
     "blocked": [{ "x": 4, "y": 4 }, { "x": 4, "y": 5 }, { "x": 5, "y": 4 }]
@@ -16,7 +16,7 @@
     "width": 12,
     "height": 9,
     "spawn": {
-      "x": 3,
+      "x": 0,
       "y": 2
     },
     "blocked": [
@@ -33,7 +33,7 @@
     "width": 9,
     "height": 9,
     "spawn": {
-      "x": 2,
+      "x": 0,
       "y": 2
     },
     "blocked": [

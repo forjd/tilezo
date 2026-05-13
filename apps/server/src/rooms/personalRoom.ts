@@ -6,7 +6,7 @@ export function createPersonalRoomLayout(user: { id: string; username: string })
     `${user.username}'s Room`,
     8,
     8,
-    { x: 2, y: 2 },
+    { x: 0, y: 2 },
     [
       { x: 5, y: 1 },
       { x: 5, y: 2 },
