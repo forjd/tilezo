@@ -7,6 +7,7 @@ import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence
 import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { createLogger, type Logger, type LogLevel, parseLogLevel } from "./observability/logger";
+import { Metrics } from "./observability/metrics";
 import { createPersonalRoomLayout } from "./rooms/personalRoom";
 import { RoomManager } from "./rooms/RoomManager";
 import {
@@ -22,6 +23,8 @@ const logger = createLogger({
   service: "tilezo-server",
   level: parseLogLevel(Bun.env.LOG_LEVEL),
 });
+const metrics = new Metrics();
+metrics.startEventLoopMonitor();
 const database = createDatabase(config.databaseUrl);
 const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
 const auth = database
@@ -109,6 +112,10 @@ const server = Bun.serve<SocketData>({
       return Response.json({ ok: true }, { headers: corsHeaders() });
     }
 
+    if (url.pathname === "/debug/metrics") {
+      return Response.json(metrics.snapshot(rooms.getMetrics()), { headers: corsHeaders() });
+    }
+
     return new Response("Tilezo room server", {
       headers: {
         ...corsHeaders(),
@@ -126,6 +133,7 @@ const server = Bun.serve<SocketData>({
         publish,
         persistence,
         logger,
+        metrics,
       });
     },
     message(ws, message) {
@@ -135,10 +143,12 @@ const server = Bun.serve<SocketData>({
           publish,
           persistence,
           logger,
+          metrics,
         });
         return;
       }
 
+      metrics.increment("messages.unsupported");
       logger.warn("websocket.message.unsupported", {
         userId: ws.data.userId,
         roomId: ws.data.roomId,
@@ -153,15 +163,17 @@ const server = Bun.serve<SocketData>({
       );
     },
     close(ws) {
-      handleClose(ws, rooms, publish, logger);
+      handleClose(ws, rooms, publish, logger, metrics);
     },
   },
 });
 
 function publish(topic: string, message: ServerMessage): void {
   const result = server.publish(topic, encodeServerMessage(message));
+  metrics.increment(`publish.${message.type}`);
 
   if (result === -1) {
+    metrics.increment("publish.dropped");
     logger.warn("websocket.publish.backpressure", { topic });
   }
 }

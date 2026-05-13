@@ -30,6 +30,7 @@ type BotResult = {
   username: string;
   ok: boolean;
   timings: Record<string, number>;
+  samples: SampleBag;
   counters: BotCounters;
   error?: string;
 };
@@ -43,6 +44,17 @@ type BotSession = {
 type BotCounters = {
   moves: number;
   messages: number;
+};
+
+type SampleBag = Record<string, number[]>;
+
+type LatencySummary = {
+  count: number;
+  averageMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  maxMs: number;
 };
 
 const DEFAULT_OPTIONS: StressOptions = {
@@ -115,6 +127,7 @@ export function summarizeResults(results: BotResult[]): {
   p95Ms: number;
   moves: number;
   messages: number;
+  operations: Record<string, LatencySummary>;
 } {
   const durations = results
     .map((result) => result.timings.total)
@@ -131,43 +144,47 @@ export function summarizeResults(results: BotResult[]): {
     p95Ms: durations[p95Index] ?? 0,
     moves: results.reduce((total, result) => total + result.counters.moves, 0),
     messages: results.reduce((total, result) => total + result.counters.messages, 0),
+    operations: summarizeSamples(results),
   };
 }
 
 async function runBot(botId: number, options: StressOptions): Promise<BotResult> {
   const username = `${options.usernamePrefix}_${botId}`;
   const timings: Record<string, number> = {};
+  const samples: SampleBag = {};
   const counters: BotCounters = { moves: 0, messages: 0 };
   const random = mulberry32(options.seed + botId * 0x9e3779b9);
   const totalStart = performance.now();
   let socket: WebSocket | undefined;
 
   try {
-    const registered = await timed(timings, "register", () =>
+    const registered = await timed(timings, samples, "register", () =>
       authenticate(options.apiUrl, "register", username, options.password),
     );
     const session = includesAuthLogin(options.scenario)
-      ? await timed(timings, "login", () =>
+      ? await timed(timings, samples, "login", () =>
           authenticate(options.apiUrl, "login", username, options.password),
         )
       : registered;
 
     if (options.scenario === "auth") {
       timings.total = performance.now() - totalStart;
-      return { botId, username, ok: true, timings, counters };
+      return { botId, username, ok: true, timings, samples, counters };
     }
 
-    await timed(timings, "appearance", () =>
+    await timed(timings, samples, "appearance", () =>
       updateAppearance(options.apiUrl, session.token, botAppearance(botId)),
     );
 
-    socket = await timed(timings, "connect", () => connectWebSocket(options.wsUrl, session.token));
-    const snapshot = await timed(timings, "join", () =>
+    socket = await timed(timings, samples, "connect", () =>
+      connectWebSocket(options.wsUrl, session.token),
+    );
+    const snapshot = await timed(timings, samples, "join", () =>
       joinRoom(socket as WebSocket, session.userId, options.roomId),
     );
 
     if (options.durationSeconds > 0) {
-      await timed(timings, "steady", () =>
+      await timed(timings, samples, "steady.phase", () =>
         runSteady(
           socket as WebSocket,
           session.userId,
@@ -176,31 +193,32 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
           options,
           counters,
           random,
+          samples,
         ),
       );
       timings.total = performance.now() - totalStart;
-      return { botId, username, ok: true, timings, counters };
+      return { botId, username, ok: true, timings, samples, counters };
     }
 
     if (options.scenario === "room") {
       timings.total = performance.now() - totalStart;
-      return { botId, username, ok: true, timings, counters };
+      return { botId, username, ok: true, timings, samples, counters };
     }
 
     if (includesMovement(options.scenario)) {
-      counters.moves += await timed(timings, "movement", () =>
-        runMovement(socket as WebSocket, session.userId, snapshot, options.moves, random),
+      counters.moves += await timed(timings, samples, "movement.phase", () =>
+        runMovement(socket as WebSocket, session.userId, snapshot, options.moves, random, samples),
       );
     }
 
     if (includesChat(options.scenario)) {
-      counters.messages += await timed(timings, "chat", () =>
-        runChat(socket as WebSocket, session.userId, username, options.messages, 0),
+      counters.messages += await timed(timings, samples, "chat.phase", () =>
+        runChat(socket as WebSocket, session.userId, username, options.messages, 0, samples),
       );
     }
 
     timings.total = performance.now() - totalStart;
-    return { botId, username, ok: true, timings, counters };
+    return { botId, username, ok: true, timings, samples, counters };
   } catch (error) {
     timings.total = performance.now() - totalStart;
     return {
@@ -208,6 +226,7 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
       username,
       ok: false,
       timings,
+      samples,
       counters,
       error: error instanceof Error ? error.message : String(error),
     };
@@ -307,6 +326,7 @@ async function runMovement(
   snapshot: RoomSnapshotMessage,
   moves: number,
   random: () => number,
+  samples: SampleBag,
 ): Promise<number> {
   const targets = snapshot.tiles.filter((tile) => tile.walkable);
 
@@ -315,7 +335,7 @@ async function runMovement(
   }
 
   for (let index = 0; index < moves; index += 1) {
-    await sendMove(socket, userId, targets, random);
+    await sendMove(socket, userId, targets, random, samples);
   }
 
   return moves;
@@ -327,9 +347,10 @@ async function runChat(
   username: string,
   messages: number,
   startIndex: number,
+  samples: SampleBag,
 ): Promise<number> {
   for (let index = 0; index < messages; index += 1) {
-    await sendChat(socket, userId, username, startIndex + index + 1);
+    await sendChat(socket, userId, username, startIndex + index + 1, samples);
   }
 
   return messages;
@@ -343,6 +364,7 @@ async function runSteady(
   options: StressOptions,
   counters: BotCounters,
   random: () => number,
+  samples: SampleBag,
 ): Promise<void> {
   const targets = snapshot.tiles.filter((tile) => tile.walkable);
   const runMovementLoop = includesMovement(options.scenario);
@@ -361,7 +383,7 @@ async function runSteady(
     let acted = false;
 
     if (runMovementLoop && now >= nextMoveAt) {
-      await sendMove(socket, userId, targets, random);
+      await sendMove(socket, userId, targets, random, samples);
       counters.moves += 1;
       nextMoveAt = performance.now() + options.moveIntervalMs;
       acted = true;
@@ -369,7 +391,7 @@ async function runSteady(
 
     if (runChatLoop && performance.now() >= nextChatAt) {
       messageIndex += 1;
-      await sendChat(socket, userId, username, messageIndex);
+      await sendChat(socket, userId, username, messageIndex, samples);
       counters.messages += 1;
       nextChatAt = performance.now() + options.chatIntervalMs;
       acted = true;
@@ -391,16 +413,19 @@ async function sendMove(
   userId: string,
   targets: TilePosition[],
   random: () => number,
+  samples: SampleBag,
 ): Promise<void> {
-  const tile = targets[Math.floor(random() * targets.length)] as TilePosition;
-  const target = { x: tile.x, y: tile.y };
-  socket.send(JSON.stringify({ type: "avatar.move.request", target }));
-  await waitForMessage(
-    socket,
-    (message) =>
-      (message.type === "avatar.moved" && message.userId === userId) || message.type === "error",
-    userId,
-  );
+  await timedSample(samples, "move.request", async () => {
+    const tile = targets[Math.floor(random() * targets.length)] as TilePosition;
+    const target = { x: tile.x, y: tile.y };
+    socket.send(JSON.stringify({ type: "avatar.move.request", target }));
+    await waitForMessage(
+      socket,
+      (message) =>
+        (message.type === "avatar.moved" && message.userId === userId) || message.type === "error",
+      userId,
+    );
+  });
 }
 
 async function sendChat(
@@ -408,15 +433,18 @@ async function sendChat(
   userId: string,
   username: string,
   messageNumber: number,
+  samples: SampleBag,
 ): Promise<void> {
-  const text = `stress message ${messageNumber} from ${username}`;
-  socket.send(JSON.stringify({ type: "chat.say", text }));
-  await waitForMessage(
-    socket,
-    (message) =>
-      (message.type === "chat.message" && message.userId === userId) || message.type === "error",
-    userId,
-  );
+  await timedSample(samples, "chat.request", async () => {
+    const text = `stress message ${messageNumber} from ${username}`;
+    socket.send(JSON.stringify({ type: "chat.say", text }));
+    await waitForMessage(
+      socket,
+      (message) =>
+        (message.type === "chat.message" && message.userId === userId) || message.type === "error",
+      userId,
+    );
+  });
 }
 
 function waitForMessage<T extends ServerMessage>(
@@ -477,6 +505,7 @@ function waitForMessage(
 
 async function timed<T>(
   timings: Record<string, number>,
+  samples: SampleBag,
   name: string,
   action: () => Promise<T>,
 ): Promise<T> {
@@ -485,7 +514,23 @@ async function timed<T>(
   try {
     return await action();
   } finally {
-    timings[name] = (timings[name] ?? 0) + performance.now() - startedAt;
+    const durationMs = performance.now() - startedAt;
+    timings[name] = (timings[name] ?? 0) + durationMs;
+    recordSample(samples, name, durationMs);
+  }
+}
+
+async function timedSample<T>(
+  samples: SampleBag,
+  name: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now();
+
+  try {
+    return await action();
+  } finally {
+    recordSample(samples, name, performance.now() - startedAt);
   }
 }
 
@@ -675,6 +720,7 @@ function printSummary(options: StressOptions, results: BotResult[]): void {
   console.log(`Actions: ${summary.moves} moves, ${summary.messages} messages`);
   console.log(`Average: ${summary.averageMs.toFixed(1)}ms`);
   console.log(`P95: ${summary.p95Ms.toFixed(1)}ms`);
+  printLatencyTable(summary.operations);
 
   if (failures.length > 0) {
     console.log("Failures:");
@@ -683,6 +729,81 @@ function printSummary(options: StressOptions, results: BotResult[]): void {
       console.log(`- ${failure.username}: ${failure.error}`);
     }
   }
+}
+
+function summarizeSamples(results: BotResult[]): Record<string, LatencySummary> {
+  const samplesByOperation = new Map<string, number[]>();
+
+  for (const result of results) {
+    for (const [operation, samples] of Object.entries(result.samples)) {
+      const current = samplesByOperation.get(operation) ?? [];
+      current.push(...samples);
+      samplesByOperation.set(operation, current);
+    }
+  }
+
+  return Object.fromEntries(
+    [...samplesByOperation.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([operation, samples]) => [operation, summarizeLatency(samples)]),
+  );
+}
+
+function summarizeLatency(samples: number[]): LatencySummary {
+  const sorted = [...samples].sort((left, right) => left - right);
+  const total = sorted.reduce((sum, sample) => sum + sample, 0);
+
+  return {
+    count: sorted.length,
+    averageMs: sorted.length === 0 ? 0 : total / sorted.length,
+    p50Ms: percentile(sorted, 0.5),
+    p95Ms: percentile(sorted, 0.95),
+    p99Ms: percentile(sorted, 0.99),
+    maxMs: sorted.at(-1) ?? 0,
+  };
+}
+
+function percentile(sorted: number[], value: number): number {
+  if (sorted.length === 0) {
+    return 0;
+  }
+
+  const index = Math.max(0, Math.ceil(sorted.length * value) - 1);
+  return sorted[index] ?? 0;
+}
+
+function recordSample(samples: SampleBag, name: string, durationMs: number): void {
+  if (!Number.isFinite(durationMs) || durationMs < 0) {
+    return;
+  }
+
+  samples[name] ??= [];
+  samples[name].push(durationMs);
+}
+
+function printLatencyTable(operations: Record<string, LatencySummary>): void {
+  const rows = Object.entries(operations);
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  console.log("Latency (ms):");
+  console.log("operation          count      avg      p50      p95      p99      max");
+
+  for (const [operation, summary] of rows) {
+    console.log(
+      `${operation.padEnd(18)} ${String(summary.count).padStart(5)} ${formatMs(
+        summary.averageMs,
+      )} ${formatMs(summary.p50Ms)} ${formatMs(summary.p95Ms)} ${formatMs(
+        summary.p99Ms,
+      )} ${formatMs(summary.maxMs)}`,
+    );
+  }
+}
+
+function formatMs(value: number): string {
+  return value.toFixed(1).padStart(8);
 }
 
 function printUsage(): void {

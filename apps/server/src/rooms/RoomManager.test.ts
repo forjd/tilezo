@@ -90,6 +90,28 @@ describe("RoomManager", () => {
     ]);
   });
 
+  test("reports room metrics for the debug endpoint", () => {
+    const manager = new RoomManager([
+      createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),
+      createRectRoomLayout("studio", "Studio", 3, 3, { x: 1, y: 1 }),
+    ]);
+
+    manager.addPrivateRoom(
+      createRectRoomLayout("home_user_1", "Home", 3, 3, { x: 1, y: 1 }),
+      "user_1",
+    );
+    manager.getOrCreate("studio")?.join({ id: "user_1", username: "Dan" });
+
+    expect(manager.getMetrics()).toEqual({
+      activeRooms: 1,
+      rooms: [{ id: "studio", userCount: 1 }],
+      layouts: {
+        public: 2,
+        private: 1,
+      },
+    });
+  });
+
   test("loads and seeds the bundled default room through persistence", async () => {
     const store = {
       seededRoomIds: [] as string[],

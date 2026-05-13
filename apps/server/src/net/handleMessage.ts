@@ -6,6 +6,7 @@ import {
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import type { Logger } from "../observability/logger";
+import type { Metrics } from "../observability/metrics";
 import type { RoomManager } from "../rooms/RoomManager";
 import { encodeServerMessage } from "../util/safeJson";
 import type { SocketData } from "./socketTypes";
@@ -15,6 +16,7 @@ type Context = {
   publish: (topic: string, message: ServerMessage) => void;
   persistence?: PersistenceStore;
   logger?: Logger;
+  metrics?: Metrics;
 };
 
 export function handleMessage(
@@ -22,186 +24,215 @@ export function handleMessage(
   raw: string | Buffer,
   context: Context,
 ): void {
+  const startedAt = performance.now();
   const parsed = parseRawClientMessage(raw);
 
   if (!parsed.ok) {
+    context.metrics?.increment("messages.invalid");
+    context.metrics?.observe("message.invalid.duration", performance.now() - startedAt);
     context.logger?.warn("websocket.message.invalid", socketFields(ws));
     sendError(ws, "INVALID_MESSAGE", parsed.error);
     return;
   }
 
-  switch (parsed.value.type) {
-    case "room.list.request":
-      send(ws, {
-        type: "room.list",
-        rooms: context.rooms.listPublicRooms(ws.data.roomId, ws.data.userId),
-      });
-      break;
+  context.metrics?.increment(`messages.${parsed.value.type}`);
 
-    case "room.join": {
-      if (!ws.data.username) {
-        context.logger?.warn("room.join.unauthenticated", socketFields(ws));
-        sendError(ws, "UNAUTHENTICATED", "Log in before joining a room");
-        return;
-      }
-
-      void joinRoom(ws, parsed.value.roomId, context, { sendUnavailableError: true });
-      break;
-    }
-
-    case "avatar.move.request": {
-      if (!consumeRateLimit(ws, "movement")) {
-        context.logger?.warn("websocket.rate_limited", {
-          ...socketFields(ws),
-          kind: "movement",
+  try {
+    switch (parsed.value.type) {
+      case "room.list.request":
+        send(ws, {
+          type: "room.list",
+          rooms: context.rooms.listPublicRooms(ws.data.roomId, ws.data.userId),
         });
-        sendError(ws, "RATE_LIMITED", "Slow down before moving again");
-        return;
+        break;
+
+      case "room.join": {
+        if (!ws.data.username) {
+          context.metrics?.increment("room.join.unauthenticated");
+          context.logger?.warn("room.join.unauthenticated", socketFields(ws));
+          sendError(ws, "UNAUTHENTICATED", "Log in before joining a room");
+          return;
+        }
+
+        void joinRoom(ws, parsed.value.roomId, context, { sendUnavailableError: true });
+        break;
       }
 
-      const room = getJoinedRoom(ws, context.rooms);
+      case "avatar.move.request": {
+        if (!consumeRateLimit(ws, "movement")) {
+          context.metrics?.increment("rate_limited.movement");
+          context.logger?.warn("websocket.rate_limited", {
+            ...socketFields(ws),
+            kind: "movement",
+          });
+          sendError(ws, "RATE_LIMITED", "Slow down before moving again");
+          return;
+        }
 
-      if (!room) {
-        context.logger?.warn("room.movement.not_in_room", socketFields(ws));
-        sendError(ws, "NOT_IN_ROOM", "Join a room before moving");
-        return;
-      }
+        const room = getJoinedRoom(ws, context.rooms);
 
-      const path = room.moveUser(ws.data.userId, parsed.value.target);
+        if (!room) {
+          context.metrics?.increment("movement.rejected.not_in_room");
+          context.logger?.warn("room.movement.not_in_room", socketFields(ws));
+          sendError(ws, "NOT_IN_ROOM", "Join a room before moving");
+          return;
+        }
 
-      if (!path) {
-        context.logger?.warn("room.movement.rejected", {
-          ...socketFields(ws),
-          targetX: parsed.value.target.x,
-          targetY: parsed.value.target.y,
+        const path = room.moveUser(ws.data.userId, parsed.value.target);
+
+        if (!path) {
+          context.metrics?.increment("movement.rejected.invalid_tile");
+          context.logger?.warn("room.movement.rejected", {
+            ...socketFields(ws),
+            targetX: parsed.value.target.x,
+            targetY: parsed.value.target.y,
+          });
+          sendError(ws, "INVALID_TILE", "Target tile is not walkable");
+          return;
+        }
+
+        context.publish(roomTopic(room.id), {
+          type: "avatar.moved",
+          userId: ws.data.userId,
+          path,
         });
-        sendError(ws, "INVALID_TILE", "Target tile is not walkable");
-        return;
-      }
-
-      context.publish(roomTopic(room.id), {
-        type: "avatar.moved",
-        userId: ws.data.userId,
-        path,
-      });
-      context.logger?.debug("room.movement.accepted", {
-        ...socketFields(ws),
-        roomId: room.id,
-        pathLength: path.length,
-      });
-      break;
-    }
-
-    case "avatar.appearance.update": {
-      if (!consumeRateLimit(ws, "default")) {
-        context.logger?.warn("websocket.rate_limited", {
+        context.metrics?.increment("movement.accepted");
+        context.logger?.debug("room.movement.accepted", {
           ...socketFields(ws),
-          kind: "appearance",
+          roomId: room.id,
+          pathLength: path.length,
         });
-        sendError(ws, "RATE_LIMITED", "Slow down before updating your character again");
-        return;
+        break;
       }
 
-      const room = getJoinedRoom(ws, context.rooms);
+      case "avatar.appearance.update": {
+        if (!consumeRateLimit(ws, "default")) {
+          context.metrics?.increment("rate_limited.appearance");
+          context.logger?.warn("websocket.rate_limited", {
+            ...socketFields(ws),
+            kind: "appearance",
+          });
+          sendError(ws, "RATE_LIMITED", "Slow down before updating your character again");
+          return;
+        }
 
-      if (!room) {
-        context.logger?.warn("room.appearance.not_in_room", socketFields(ws));
-        sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
-        return;
+        const room = getJoinedRoom(ws, context.rooms);
+
+        if (!room) {
+          context.metrics?.increment("appearance.rejected.not_in_room");
+          context.logger?.warn("room.appearance.not_in_room", socketFields(ws));
+          sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
+          return;
+        }
+
+        ws.data.appearance = parsed.value.appearance;
+
+        if (!room.updateAppearance(ws.data.userId, parsed.value.appearance)) {
+          context.metrics?.increment("appearance.rejected.not_in_room");
+          context.logger?.warn("room.appearance.rejected", socketFields(ws));
+          sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
+          return;
+        }
+
+        context.publish(roomTopic(room.id), {
+          type: "avatar.appearance.updated",
+          userId: ws.data.userId,
+          appearance: parsed.value.appearance,
+        });
+        context.metrics?.increment("appearance.accepted");
+        break;
       }
 
-      ws.data.appearance = parsed.value.appearance;
+      case "chat.say": {
+        if (!consumeRateLimit(ws, "chat")) {
+          context.metrics?.increment("rate_limited.chat");
+          context.logger?.warn("websocket.rate_limited", {
+            ...socketFields(ws),
+            kind: "chat",
+          });
+          sendError(ws, "RATE_LIMITED", "Slow down before chatting again");
+          return;
+        }
 
-      if (!room.updateAppearance(ws.data.userId, parsed.value.appearance)) {
-        context.logger?.warn("room.appearance.rejected", socketFields(ws));
-        sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
-        return;
-      }
+        const room = getJoinedRoom(ws, context.rooms);
 
-      context.publish(roomTopic(room.id), {
-        type: "avatar.appearance.updated",
-        userId: ws.data.userId,
-        appearance: parsed.value.appearance,
-      });
-      break;
-    }
+        if (!room || !ws.data.username) {
+          context.metrics?.increment("chat.rejected.not_in_room");
+          context.logger?.warn("room.chat.not_in_room", socketFields(ws));
+          sendError(ws, "NOT_IN_ROOM", "Join a room before chatting");
+          return;
+        }
 
-    case "chat.say": {
-      if (!consumeRateLimit(ws, "chat")) {
-        context.logger?.warn("websocket.rate_limited", {
+        context.publish(roomTopic(room.id), {
+          type: "chat.message",
+          userId: ws.data.userId,
+          username: ws.data.username,
+          text: parsed.value.text,
+          sentAt: new Date().toISOString(),
+        });
+        context.metrics?.increment("chat.accepted");
+        context.logger?.debug("room.chat.accepted", {
           ...socketFields(ws),
-          kind: "chat",
+          roomId: room.id,
+          textLength: parsed.value.text.length,
         });
-        sendError(ws, "RATE_LIMITED", "Slow down before chatting again");
-        return;
+        break;
       }
 
-      const room = getJoinedRoom(ws, context.rooms);
+      case "chat.typing": {
+        if (!consumeRateLimit(ws, "typing")) {
+          context.metrics?.increment("rate_limited.typing");
+          return;
+        }
 
-      if (!room || !ws.data.username) {
-        context.logger?.warn("room.chat.not_in_room", socketFields(ws));
-        sendError(ws, "NOT_IN_ROOM", "Join a room before chatting");
-        return;
+        const room = getJoinedRoom(ws, context.rooms);
+
+        if (!room || !ws.data.username) {
+          context.metrics?.increment("typing.rejected.not_in_room");
+          context.logger?.warn("room.typing.not_in_room", socketFields(ws));
+          sendError(ws, "NOT_IN_ROOM", "Join a room before typing");
+          return;
+        }
+
+        if (ws.data.lastTypingState === parsed.value.isTyping) {
+          return;
+        }
+
+        ws.data.lastTypingState = parsed.value.isTyping;
+
+        context.publish(roomTopic(room.id), {
+          type: "chat.typing",
+          userId: ws.data.userId,
+          username: ws.data.username,
+          isTyping: parsed.value.isTyping,
+        });
+        context.metrics?.increment("typing.accepted");
+        break;
       }
 
-      context.publish(roomTopic(room.id), {
-        type: "chat.message",
-        userId: ws.data.userId,
-        username: ws.data.username,
-        text: parsed.value.text,
-        sentAt: new Date().toISOString(),
-      });
-      context.logger?.debug("room.chat.accepted", {
-        ...socketFields(ws),
-        roomId: room.id,
-        textLength: parsed.value.text.length,
-      });
-      break;
+      case "ping":
+        if (!consumeRateLimit(ws, "default")) {
+          context.metrics?.increment("rate_limited.ping");
+          sendError(ws, "RATE_LIMITED", "Slow down before pinging again");
+          return;
+        }
+
+        send(ws, {
+          type: "pong",
+          sentAt: parsed.value.sentAt,
+        });
+        break;
     }
-
-    case "chat.typing": {
-      if (!consumeRateLimit(ws, "typing")) {
-        return;
-      }
-
-      const room = getJoinedRoom(ws, context.rooms);
-
-      if (!room || !ws.data.username) {
-        context.logger?.warn("room.typing.not_in_room", socketFields(ws));
-        sendError(ws, "NOT_IN_ROOM", "Join a room before typing");
-        return;
-      }
-
-      if (ws.data.lastTypingState === parsed.value.isTyping) {
-        return;
-      }
-
-      ws.data.lastTypingState = parsed.value.isTyping;
-
-      context.publish(roomTopic(room.id), {
-        type: "chat.typing",
-        userId: ws.data.userId,
-        username: ws.data.username,
-        isTyping: parsed.value.isTyping,
-      });
-      break;
-    }
-
-    case "ping":
-      if (!consumeRateLimit(ws, "default")) {
-        sendError(ws, "RATE_LIMITED", "Slow down before pinging again");
-        return;
-      }
-
-      send(ws, {
-        type: "pong",
-        sentAt: parsed.value.sentAt,
-      });
-      break;
+  } finally {
+    context.metrics?.observe(
+      `message.${parsed.value.type}.duration`,
+      performance.now() - startedAt,
+    );
   }
 }
 
 export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): void {
+  context.metrics?.socketOpened();
   context.logger?.info("websocket.opened", socketFields(ws));
   send(ws, {
     type: "connected",
@@ -220,7 +251,9 @@ export function handleClose(
   rooms: RoomManager,
   publish: Context["publish"],
   logger?: Logger,
+  metrics?: Metrics,
 ) {
+  metrics?.socketClosed();
   const { roomId, userId } = ws.data;
 
   if (!roomId) {
@@ -239,6 +272,7 @@ export function handleClose(
     userId,
   });
   rooms.removeIfEmpty(roomId);
+  metrics?.increment("room.left");
   logger?.info("room.left", socketFields(ws));
 }
 
@@ -248,92 +282,102 @@ async function joinRoom(
   context: Context,
   options: { sendUnavailableError: boolean },
 ): Promise<void> {
-  const room = context.rooms.getOrCreate(roomId, ws.data.userId);
+  const startedAt = performance.now();
 
-  if (!room) {
-    context.logger?.warn("room.join.unavailable", {
-      ...socketFields(ws),
-      requestedRoomId: roomId,
-    });
-    if (options.sendUnavailableError) {
-      sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
+  try {
+    const room = context.rooms.getOrCreate(roomId, ws.data.userId);
+
+    if (!room) {
+      context.metrics?.increment("room.join.unavailable");
+      context.logger?.warn("room.join.unavailable", {
+        ...socketFields(ws),
+        requestedRoomId: roomId,
+      });
+      if (options.sendUnavailableError) {
+        sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
+      }
+      await clearLastRoomId(context, ws.data.userId);
+      return;
     }
-    await clearLastRoomId(context, ws.data.userId);
-    return;
-  }
 
-  const previousRoomId = ws.data.roomId;
+    const previousRoomId = ws.data.roomId;
 
-  if (previousRoomId === room.id) {
+    if (previousRoomId === room.id) {
+      send(ws, {
+        type: "room.snapshot",
+        roomId: room.id,
+        users: room.getUsers(),
+        tiles: room.getSnapshot().tiles,
+      });
+      send(ws, {
+        type: "room.list",
+        rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
+      });
+      await saveLastRoomId(context, ws.data.userId, room.id);
+      context.metrics?.increment("room.join.snapshot_resent");
+      context.logger?.info("room.join.snapshot_resent", {
+        ...socketFields(ws),
+        roomId: room.id,
+      });
+      return;
+    }
+
+    if (previousRoomId) {
+      const previousRoom = context.rooms.get(previousRoomId);
+
+      if (previousRoom?.leave(ws.data.userId, ws.data.connectionId)) {
+        ws.unsubscribe(roomTopic(previousRoomId));
+        context.publish(roomTopic(previousRoomId), {
+          type: "user.left",
+          userId: ws.data.userId,
+        });
+        context.rooms.removeIfEmpty(previousRoomId);
+        context.metrics?.increment("room.left");
+        context.logger?.info("room.left", {
+          ...socketFields(ws),
+          roomId: previousRoomId,
+        });
+      }
+    }
+
+    const user = room.join({
+      id: ws.data.userId,
+      username: ws.data.username ?? ws.data.userId,
+      connectionId: ws.data.connectionId,
+      appearance: ws.data.appearance ?? DEFAULT_AVATAR_APPEARANCE,
+    });
+    const userSnapshot = {
+      id: user.id,
+      username: user.username,
+      position: user.position,
+      appearance: user.appearance,
+    };
+
+    ws.data.roomId = room.id;
+    ws.subscribe(roomTopic(room.id));
     send(ws, {
       type: "room.snapshot",
       roomId: room.id,
       users: room.getUsers(),
       tiles: room.getSnapshot().tiles,
     });
+    context.publish(roomTopic(room.id), {
+      type: "user.joined",
+      user: userSnapshot,
+    });
     send(ws, {
       type: "room.list",
       rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
     });
     await saveLastRoomId(context, ws.data.userId, room.id);
-    context.logger?.info("room.join.snapshot_resent", {
+    context.metrics?.increment("room.joined");
+    context.logger?.info("room.joined", {
       ...socketFields(ws),
       roomId: room.id,
     });
-    return;
+  } finally {
+    context.metrics?.observe("room.join.duration", performance.now() - startedAt);
   }
-
-  if (previousRoomId) {
-    const previousRoom = context.rooms.get(previousRoomId);
-
-    if (previousRoom?.leave(ws.data.userId, ws.data.connectionId)) {
-      ws.unsubscribe(roomTopic(previousRoomId));
-      context.publish(roomTopic(previousRoomId), {
-        type: "user.left",
-        userId: ws.data.userId,
-      });
-      context.rooms.removeIfEmpty(previousRoomId);
-      context.logger?.info("room.left", {
-        ...socketFields(ws),
-        roomId: previousRoomId,
-      });
-    }
-  }
-
-  const user = room.join({
-    id: ws.data.userId,
-    username: ws.data.username ?? ws.data.userId,
-    connectionId: ws.data.connectionId,
-    appearance: ws.data.appearance ?? DEFAULT_AVATAR_APPEARANCE,
-  });
-  const userSnapshot = {
-    id: user.id,
-    username: user.username,
-    position: user.position,
-    appearance: user.appearance,
-  };
-
-  ws.data.roomId = room.id;
-  ws.subscribe(roomTopic(room.id));
-  send(ws, {
-    type: "room.snapshot",
-    roomId: room.id,
-    users: room.getUsers(),
-    tiles: room.getSnapshot().tiles,
-  });
-  context.publish(roomTopic(room.id), {
-    type: "user.joined",
-    user: userSnapshot,
-  });
-  send(ws, {
-    type: "room.list",
-    rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
-  });
-  await saveLastRoomId(context, ws.data.userId, room.id);
-  context.logger?.info("room.joined", {
-    ...socketFields(ws),
-    roomId: room.id,
-  });
 }
 
 async function saveLastRoomId(context: Context, userId: string, roomId: string): Promise<void> {

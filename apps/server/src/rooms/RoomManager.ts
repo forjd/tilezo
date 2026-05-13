@@ -6,6 +6,7 @@ import {
   type PersistenceStore,
   type RoomDirectory,
 } from "../db/persistence";
+import type { RoomMetrics } from "../observability/metrics";
 import { Room } from "./Room";
 
 type RawRoomLayout = {
@@ -89,6 +90,22 @@ export class RoomManager {
     if (room?.isEmpty) {
       this.rooms.delete(roomId);
     }
+  }
+
+  getMetrics(): RoomMetrics {
+    return {
+      activeRooms: this.rooms.size,
+      rooms: [...this.rooms.values()]
+        .map((room) => ({
+          id: room.id,
+          userCount: room.userCount,
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      layouts: {
+        public: this.publicLayouts.size,
+        private: this.privateLayouts.size,
+      },
+    };
   }
 
   private getAccessibleLayout(roomId: string, userId: string | undefined): RoomLayout | undefined {
