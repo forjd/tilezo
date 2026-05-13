@@ -40,7 +40,8 @@ describe("RoomScene", () => {
     const world = app.stage.children[0];
     expect(avatar?.view.x).toBe(16);
     expect(avatar?.view.y).toBe(8);
-    expect(world?.x).toBe(500);
+    expect(world?.x).toBe(484);
+    expect(world?.y).toBe(292);
   });
 
   test("shows chat messages above the matching avatar", () => {
@@ -77,9 +78,9 @@ describe("RoomScene", () => {
     );
 
     scene.loadSnapshot(snapshot([]));
-    app.canvas.mousedown({ clientX: 400, clientY: 120 });
-    app.canvas.click({ clientX: 400, clientY: 120 });
-    app.canvas.click({ clientX: 432, clientY: 120 });
+    app.canvas.mousedown({ clientX: 384, clientY: 292 });
+    app.canvas.click({ clientX: 384, clientY: 292 });
+    app.canvas.click({ clientX: 416, clientY: 308 });
 
     expect(moves).toEqual([{ x: 0, y: 0 }]);
     expect(app.canvas.defaultPrevented).toBe(true);
@@ -91,11 +92,45 @@ describe("RoomScene", () => {
     const scene = new RoomScene(app, () => {});
 
     scene.loadSnapshot(snapshot([]));
-    app.canvas.mousemove({ clientX: 400, clientY: 120 });
+    app.canvas.mousemove({ clientX: 384, clientY: 292 });
     expect(sceneState(scene).hover).toEqual({ x: 0, y: 0 });
 
     app.canvas.mouseleave({});
     expect(sceneState(scene).hover).toBeUndefined();
+  });
+
+  test("pans the room without sending a movement click", () => {
+    const app = createApp();
+    const moves: unknown[] = [];
+    const scene = new RoomScene(app, (target) => moves.push(target));
+
+    scene.loadSnapshot(snapshot([]));
+    app.canvas.mousedown({ clientX: 384, clientY: 292 });
+    app.canvas.mousemove({ clientX: 420, clientY: 312 });
+    app.canvas.mouseup({});
+    app.canvas.click({ clientX: 420, clientY: 312 });
+
+    const world = app.stage.children[0];
+    expect(world?.x).toBe(420);
+    expect(world?.y).toBe(312);
+    expect(moves).toEqual([]);
+  });
+
+  test("zooms around the pointer and keeps tile picking aligned", () => {
+    const app = createApp();
+    const moves: unknown[] = [];
+    const scene = new RoomScene(app, (target) => moves.push(target));
+
+    scene.loadSnapshot(snapshot([]));
+    app.canvas.wheel({ clientX: 384, clientY: 292, deltaY: -100 });
+    app.canvas.click({ clientX: 384, clientY: 292 });
+
+    const world = app.stage.children[0];
+    expect(world?.scale.x).toBe(1.15);
+    expect(world?.scale.y).toBe(1.15);
+    expect(world?.x).toBe(384);
+    expect(world?.y).toBe(292);
+    expect(moves).toEqual([{ x: 0, y: 0 }]);
   });
 });
 
@@ -175,24 +210,27 @@ class FakeCanvas {
   }
 
   click(event: { clientX: number; clientY: number }): void {
-    this.dispatch("click", event);
+    this.dispatch("click", this.withPreventDefault(event));
   }
 
   mousedown(event: { clientX: number; clientY: number }): void {
-    this.dispatch("mousedown", {
-      ...event,
-      preventDefault: () => {
-        this.defaultPrevented = true;
-      },
-    });
+    this.dispatch("mousedown", this.withPreventDefault(event));
   }
 
   mousemove(event: { clientX: number; clientY: number }): void {
-    this.dispatch("mousemove", event);
+    this.dispatch("mousemove", this.withPreventDefault(event));
   }
 
   mouseleave(event: Record<string, never>): void {
     this.dispatch("mouseleave", event);
+  }
+
+  mouseup(event: Record<string, never>): void {
+    this.dispatch("mouseup", event);
+  }
+
+  wheel(event: { clientX: number; clientY: number; deltaY: number }): void {
+    this.dispatch("wheel", this.withPreventDefault(event));
   }
 
   private dispatch(type: string, event: FakePointerEvent): void {
@@ -200,10 +238,20 @@ class FakeCanvas {
       listener(event);
     }
   }
+
+  private withPreventDefault<T extends object>(event: T): T & { preventDefault: () => void } {
+    return {
+      ...event,
+      preventDefault: () => {
+        this.defaultPrevented = true;
+      },
+    };
+  }
 }
 
 type FakePointerEvent = {
   clientX?: number;
   clientY?: number;
+  deltaY?: number;
   preventDefault?: () => void;
 };

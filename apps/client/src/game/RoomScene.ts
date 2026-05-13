@@ -1,4 +1,4 @@
-import { screenToTile, type TilePosition } from "@tilezo/engine";
+import { type RoomTile, screenToTile, type TilePosition, tileToScreen } from "@tilezo/engine";
 import type { AvatarAppearance, RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol";
 import { type Application, Container } from "pixi.js";
 import { Avatar } from "./Avatar";
@@ -6,6 +6,15 @@ import { TileMap } from "./TileMap";
 
 type MoveRequestHandler = (target: TilePosition) => void;
 type CanvasInteractionHandler = () => void;
+type Point = {
+  x: number;
+  y: number;
+};
+
+const MIN_CAMERA_SCALE = 0.5;
+const MAX_CAMERA_SCALE = 2.25;
+const ZOOM_STEP = 0.0015;
+const PAN_THRESHOLD_PIXELS = 4;
 
 export class RoomScene {
   private readonly world = new Container();
@@ -13,6 +22,11 @@ export class RoomScene {
   private readonly avatarLayer = new Container();
   private readonly avatars = new Map<string, Avatar>();
   private hover?: TilePosition;
+  private roomBounds?: RoomBounds;
+  private dragStart?: Point;
+  private dragWorldStart?: Point;
+  private isPanning = false;
+  private suppressNextClick = false;
 
   constructor(
     private readonly app: Application,
@@ -27,6 +41,8 @@ export class RoomScene {
 
   loadSnapshot(snapshot: RoomSnapshotMessage): void {
     this.tiles.load(snapshot.tiles);
+    this.roomBounds = calculateRoomBounds(snapshot.tiles);
+    this.resetCamera();
     this.avatarLayer.removeChildren();
     this.avatars.clear();
 
@@ -70,7 +86,7 @@ export class RoomScene {
   }
 
   resize(): void {
-    this.centerWorld();
+    this.centerRoom();
   }
 
   private addAvatar(
@@ -101,25 +117,56 @@ export class RoomScene {
     this.world.y = 120;
   }
 
+  private centerRoom(): void {
+    if (!this.roomBounds) {
+      this.centerWorld();
+      return;
+    }
+
+    const scale = this.world.scale.x;
+    this.world.x = this.app.screen.width / 2 - this.roomBounds.center.x * scale;
+    this.world.y = this.app.screen.height / 2 - this.roomBounds.center.y * scale;
+  }
+
+  private resetCamera(): void {
+    this.world.scale.set(1);
+    this.centerRoom();
+  }
+
   private bindPointer(): void {
     const canvas = this.app.canvas;
 
     canvas.addEventListener("mousemove", (event) => {
+      this.updatePan(event);
       this.hover = this.eventToTile(event);
       this.tiles.setHover(this.hover);
     });
 
     canvas.addEventListener("mouseleave", () => {
+      this.endPan();
       this.hover = undefined;
       this.tiles.setHover(undefined);
     });
 
     canvas.addEventListener("mousedown", (event) => {
       event.preventDefault();
+      this.dragStart = this.eventToCanvasPoint(event);
+      this.dragWorldStart = { x: this.world.x, y: this.world.y };
+      this.isPanning = false;
       this.onCanvasInteraction?.();
     });
 
+    canvas.addEventListener("mouseup", () => {
+      this.endPan();
+    });
+
     canvas.addEventListener("click", (event) => {
+      if (this.suppressNextClick) {
+        event.preventDefault();
+        this.suppressNextClick = false;
+        return;
+      }
+
       const target = this.eventToTile(event);
 
       if (this.tiles.isWalkable(target)) {
@@ -128,12 +175,110 @@ export class RoomScene {
 
       this.onCanvasInteraction?.();
     });
+
+    canvas.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      this.zoomAt(event);
+    });
   }
 
   private eventToTile(event: MouseEvent): TilePosition {
-    const rect = this.app.canvas.getBoundingClientRect();
-    const worldX = event.clientX - rect.left - this.world.x;
-    const worldY = event.clientY - rect.top - this.world.y;
-    return screenToTile(worldX, worldY);
+    const world = this.eventToWorldPoint(event);
+    return screenToTile(world.x, world.y);
   }
+
+  private eventToCanvasPoint(event: MouseEvent): Point {
+    const rect = this.app.canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  }
+
+  private eventToWorldPoint(event: MouseEvent): Point {
+    const point = this.eventToCanvasPoint(event);
+    const scale = this.world.scale.x;
+    return {
+      x: (point.x - this.world.x) / scale,
+      y: (point.y - this.world.y) / scale,
+    };
+  }
+
+  private updatePan(event: MouseEvent): void {
+    if (!this.dragStart || !this.dragWorldStart) {
+      return;
+    }
+
+    const current = this.eventToCanvasPoint(event);
+    const delta = {
+      x: current.x - this.dragStart.x,
+      y: current.y - this.dragStart.y,
+    };
+
+    if (!this.isPanning && Math.hypot(delta.x, delta.y) < PAN_THRESHOLD_PIXELS) {
+      return;
+    }
+
+    this.isPanning = true;
+    this.suppressNextClick = true;
+    this.world.x = this.dragWorldStart.x + delta.x;
+    this.world.y = this.dragWorldStart.y + delta.y;
+    event.preventDefault();
+  }
+
+  private endPan(): void {
+    this.dragStart = undefined;
+    this.dragWorldStart = undefined;
+    this.isPanning = false;
+  }
+
+  private zoomAt(event: WheelEvent): void {
+    const point = this.eventToCanvasPoint(event);
+    const worldPoint = this.eventToWorldPoint(event);
+    const nextScale = clamp(
+      this.world.scale.x * (1 - event.deltaY * ZOOM_STEP),
+      MIN_CAMERA_SCALE,
+      MAX_CAMERA_SCALE,
+    );
+
+    this.world.scale.set(nextScale);
+    this.world.x = point.x - worldPoint.x * nextScale;
+    this.world.y = point.y - worldPoint.y * nextScale;
+  }
+}
+
+type RoomBounds = {
+  center: Point;
+};
+
+function calculateRoomBounds(tiles: RoomTile[]): RoomBounds | undefined {
+  if (tiles.length === 0) {
+    return undefined;
+  }
+
+  const bounds = {
+    minX: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    minY: Number.POSITIVE_INFINITY,
+    maxY: Number.NEGATIVE_INFINITY,
+  };
+
+  for (const tile of tiles) {
+    const screen = tileToScreen(tile.x, tile.y);
+    bounds.minX = Math.min(bounds.minX, screen.x - 32);
+    bounds.maxX = Math.max(bounds.maxX, screen.x + 32);
+    bounds.minY = Math.min(bounds.minY, screen.y - 16);
+    bounds.maxY = Math.max(bounds.maxY, screen.y + 16);
+  }
+
+  return {
+    center: {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2,
+    },
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
