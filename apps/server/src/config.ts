@@ -13,7 +13,7 @@ export type ServerConfig = {
 
 export const DEFAULT_AUTH_PASSWORD_CONCURRENCY = Math.max(
   1,
-  Math.min(8, availableParallelism() - 1),
+  Math.min(12, availableParallelism() - 1),
 );
 export const DEFAULT_AUTH_PASSWORD_QUEUE_LIMIT = DEFAULT_AUTH_PASSWORD_CONCURRENCY * 32;
 export const DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS = 10_000;
