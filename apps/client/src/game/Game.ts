@@ -23,7 +23,7 @@ export class Game {
 
   async start(token: string): Promise<void> {
     await this.app.init({
-      antialias: true,
+      antialias: false,
       autoDensity: true,
       backgroundAlpha: 0,
       resizeTo: this.options.stage,

@@ -7,6 +7,7 @@ const TILE_HALF_WIDTH = 32;
 const TILE_HALF_HEIGHT = 16;
 const FLOOR_THICKNESS = 10;
 const WALL_CAP_THICKNESS = 4;
+const WALL_SEAM_OVERLAP = 1;
 const FLOOR_TOP = 0xa8aa71;
 const FLOOR_TOP_BLOCKED = 0x707861;
 const FLOOR_GRID = 0x969761;
@@ -14,10 +15,10 @@ const FLOOR_GRID_BLOCKED = 0x515a49;
 const FLOOR_SIDE_LEFT = 0x7f8158;
 const FLOOR_SIDE_RIGHT = 0x5f6545;
 const FLOOR_BOTTOM_EDGE = 0x474c35;
-const WALL_LEFT = 0x9ba0ac;
-const WALL_RIGHT = 0xb6bbc7;
-const WALL_LEFT_SIDE = 0x7f8490;
-const WALL_RIGHT_SIDE = 0x8d94a0;
+const WALL_LEFT_FACE = 0xb6bbc7;
+const WALL_RIGHT_FACE = 0xa8aebb;
+const WALL_LEFT_END = 0x9ca2ae;
+const WALL_RIGHT_END = 0x8b929e;
 const WALL_LEFT_SHADOW = 0x858b98;
 const WALL_TOP = 0x6f7480;
 const WALL_OUTLINE = 0x5e6470;
@@ -54,19 +55,21 @@ type Doorway = {
 
 export class TileMap {
   readonly view = new Container();
-  private readonly shell = new Graphics();
+  private readonly floorThickness = new Graphics();
   private readonly floor = new Graphics();
+  private readonly walls = new Graphics();
   private readonly highlight = new Graphics();
   private tiles = new Map<string, RoomTile>();
   private hoverKey?: string;
 
   constructor() {
-    this.view.addChild(this.shell, this.floor, this.highlight);
+    this.view.addChild(this.floorThickness, this.floor, this.walls, this.highlight);
   }
 
   load(tiles: RoomTile[]): void {
-    this.shell.clear();
+    this.floorThickness.clear();
     this.floor.clear();
+    this.walls.clear();
     this.highlight.clear();
     this.hoverKey = undefined;
     this.tiles = new Map(tiles.map((tile) => [key(tile), tile]));
@@ -74,7 +77,7 @@ export class TileMap {
     const footprint = calculateFootprint(tiles);
 
     if (footprint) {
-      drawRoomShell(this.shell, footprint);
+      drawFloorThickness(this.floorThickness, footprint);
     }
 
     const doorTile = footprint ? getDoorTile(footprint) : undefined;
@@ -89,6 +92,10 @@ export class TileMap {
         isDoorTile ? DOOR_TILE : tile.walkable ? FLOOR_TOP : FLOOR_TOP_BLOCKED,
         isDoorTile ? DOOR_TILE_STROKE : tile.walkable ? FLOOR_GRID : FLOOR_GRID_BLOCKED,
       );
+    }
+
+    if (footprint) {
+      drawWalls(this.walls, footprint);
     }
   }
 
@@ -145,11 +152,6 @@ function drawDiamond(graphic: Graphics, x: number, y: number, fill: number, stro
     .stroke({ color: stroke, width: 1 });
 }
 
-function drawRoomShell(graphic: Graphics, footprint: RoomFootprint): void {
-  drawFloorThickness(graphic, footprint);
-  drawWalls(graphic, footprint);
-}
-
 function drawFloorThickness(graphic: Graphics, { east, south, west }: RoomFootprint): void {
   const eastLower = lower(east, FLOOR_THICKNESS);
   const southLower = lower(south, FLOOR_THICKNESS);
@@ -167,91 +169,83 @@ function drawFloorThickness(graphic: Graphics, { east, south, west }: RoomFootpr
 }
 
 function drawWalls(graphic: Graphics, footprint: RoomFootprint): void {
+  const baseNorth = lower(footprint.north, WALL_SEAM_OVERLAP);
+  const baseWest = lower(footprint.west, WALL_SEAM_OVERLAP);
+  const baseEast = lower(footprint.east, WALL_SEAM_OVERLAP);
   const northTop = raise(footprint.north, ROOM_WALL_HEIGHT);
   const westTop = raise(footprint.west, ROOM_WALL_HEIGHT);
   const eastTop = raise(footprint.east, ROOM_WALL_HEIGHT);
-  const westOuter = {
-    x: footprint.west.x - WALL_CAP_THICKNESS,
-    y: footprint.west.y,
-  };
-  const eastOuter = {
-    x: footprint.east.x + WALL_CAP_THICKNESS,
-    y: footprint.east.y,
-  };
+  const westOuter = left(footprint.west, WALL_CAP_THICKNESS);
+  const eastOuter = right(footprint.east, WALL_CAP_THICKNESS);
+  const baseWestOuter = lower(westOuter, WALL_SEAM_OVERLAP);
+  const baseEastOuter = lower(eastOuter, WALL_SEAM_OVERLAP);
   const westTopOuter = raise(westOuter, ROOM_WALL_HEIGHT);
   const eastTopOuter = raise(eastOuter, ROOM_WALL_HEIGHT);
 
   graphic
     .poly([
-      footprint.west.x,
-      footprint.west.y,
-      westOuter.x,
-      westOuter.y,
+      baseNorth.x,
+      baseNorth.y,
+      baseWestOuter.x,
+      baseWestOuter.y,
+      westTopOuter.x,
+      westTopOuter.y,
+      northTop.x,
+      northTop.y,
+    ])
+    .fill(WALL_LEFT_FACE);
+
+  graphic
+    .poly([
+      baseNorth.x,
+      baseNorth.y,
+      baseEastOuter.x,
+      baseEastOuter.y,
+      eastTopOuter.x,
+      eastTopOuter.y,
+      northTop.x,
+      northTop.y,
+    ])
+    .fill(WALL_RIGHT_FACE);
+
+  graphic
+    .poly([
+      baseWest.x,
+      baseWest.y,
+      baseWestOuter.x,
+      baseWestOuter.y,
       westTopOuter.x,
       westTopOuter.y,
       westTop.x,
       westTop.y,
     ])
-    .fill(WALL_LEFT_SIDE);
-
-  graphic
-    .moveTo(westOuter.x, westOuter.y)
-    .lineTo(westTopOuter.x, westTopOuter.y)
-    .stroke({ color: WALL_OUTLINE, width: 1 });
+    .fill(WALL_LEFT_END);
 
   graphic
     .poly([
-      footprint.east.x,
-      footprint.east.y,
-      eastOuter.x,
-      eastOuter.y,
+      baseEast.x,
+      baseEast.y,
+      baseEastOuter.x,
+      baseEastOuter.y,
       eastTopOuter.x,
       eastTopOuter.y,
       eastTop.x,
       eastTop.y,
     ])
-    .fill(WALL_RIGHT_SIDE);
-
-  graphic
-    .moveTo(eastOuter.x, eastOuter.y)
-    .lineTo(eastTopOuter.x, eastTopOuter.y)
-    .stroke({ color: WALL_OUTLINE, width: 1 });
-
-  graphic
-    .poly([
-      footprint.north.x,
-      footprint.north.y,
-      footprint.west.x,
-      footprint.west.y,
-      westTop.x,
-      westTop.y,
-      northTop.x,
-      northTop.y,
-    ])
-    .fill(WALL_LEFT)
-    .stroke({ color: WALL_OUTLINE, width: 1 });
-
-  graphic
-    .poly([
-      footprint.north.x,
-      footprint.north.y,
-      footprint.east.x,
-      footprint.east.y,
-      eastTop.x,
-      eastTop.y,
-      northTop.x,
-      northTop.y,
-    ])
-    .fill(WALL_RIGHT)
-    .stroke({ color: WALL_OUTLINE, width: 1 });
+    .fill(WALL_RIGHT_END);
 
   drawWallCap(graphic, northTop, westTop, "left");
   drawWallCap(graphic, northTop, eastTop, "right");
   drawDoorwayCutout(graphic, footprint);
 
   graphic
-    .moveTo(footprint.north.x, footprint.north.y)
+    .moveTo(baseWestOuter.x, baseWestOuter.y)
+    .lineTo(westTopOuter.x, westTopOuter.y)
+    .moveTo(westTop.x, westTop.y)
     .lineTo(northTop.x, northTop.y)
+    .lineTo(eastTop.x, eastTop.y)
+    .moveTo(eastTopOuter.x, eastTopOuter.y)
+    .lineTo(baseEastOuter.x, baseEastOuter.y)
     .stroke({ color: WALL_OUTLINE, width: 1 });
 }
 
@@ -333,16 +327,18 @@ function calculateDoorway(footprint: RoomFootprint): Doorway | undefined {
     x: footprint.north.x + unit.x * centerDistance,
     y: footprint.north.y + unit.y * centerDistance,
   };
-  const start = {
+  const startBase = {
     x: center.x - unit.x * (doorWidth / 2),
     y: center.y - unit.y * (doorWidth / 2),
   };
-  const end = {
+  const endBase = {
     x: center.x + unit.x * (doorWidth / 2),
     y: center.y + unit.y * (doorWidth / 2),
   };
-  const startTop = raise(start, doorHeight);
-  const endTop = raise(end, doorHeight);
+  const start = lower(startBase, WALL_SEAM_OVERLAP);
+  const end = lower(endBase, WALL_SEAM_OVERLAP);
+  const startTop = raise(startBase, doorHeight);
+  const endTop = raise(endBase, doorHeight);
 
   return { start, end, startTop, endTop, unit };
 }
@@ -381,6 +377,14 @@ function raise(point: Point, amount: number): Point {
 
 function lower(point: Point, amount: number): Point {
   return { x: point.x, y: point.y + amount };
+}
+
+function left(point: Point, amount: number): Point {
+  return { x: point.x - amount, y: point.y };
+}
+
+function right(point: Point, amount: number): Point {
+  return { x: point.x + amount, y: point.y };
 }
 
 function key(position: TilePosition): string {
