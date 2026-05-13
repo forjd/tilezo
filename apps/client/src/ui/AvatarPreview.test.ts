@@ -3,42 +3,33 @@ import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
 
 describe("AvatarPreview", () => {
-  test("renders manifest layers for a selected appearance", () => {
+  test("renders a simple drawn preview for a selected appearance", () => {
     const documentRef = new FakeDocument();
     const preview = createAvatarPreview(
       documentRef as unknown as Document,
     ) as unknown as FakeElement;
 
-    updateAvatarPreview(
-      preview as unknown as HTMLElement,
-      {
-        ...DEFAULT_AVATAR_APPEARANCE,
-        hair: "bob",
-        hairColor: "#3b2418",
-        shirt: "hoodie",
-        shirtColor: "#7f3b44",
-      },
-      { state: "walk", direction: "east", elapsedSeconds: 0.13 },
-    );
+    updateAvatarPreview(preview as unknown as HTMLElement, {
+      ...DEFAULT_AVATAR_APPEARANCE,
+      hair: "bob",
+      hairColor: "#3b2418",
+      shirt: "hoodie",
+      shirtColor: "#7f3b44",
+    });
 
-    expect(preview.children.length).toBeGreaterThanOrEqual(6);
-    expect(preview.children.map((layer) => layer.getAttribute("data-slot"))).toEqual([
-      "body",
-      "shoes",
-      "bottoms",
-      "top",
-      "face",
-      "hair",
-    ]);
+    expect(preview.className).toBe("avatar-preview-drawn");
+    expect(preview.children.map((part) => part.getAttribute("data-part"))).toContain("hair");
+    expect(preview.dataset.hair).toBe("bob");
+    expect(preview.dataset.shirt).toBe("hoodie");
+    expect(preview.style.getPropertyValue("--avatar-hair")).toBe("#3b2418");
+    expect(preview.style.getPropertyValue("--avatar-shirt")).toBe("#7f3b44");
     expect(
-      preview.children.some((layer) => layer.style.getPropertyValue("--layer-tint") === "#3b2418"),
+      preview.children.some(
+        (part) =>
+          part.getAttribute("data-part") === "hair" &&
+          part.style.getPropertyValue("--avatar-part-color") === "#3b2418",
+      ),
     ).toBe(true);
-    expect(
-      preview.children.some((layer) => layer.style.getPropertyValue("--layer-tint") === "#7f3b44"),
-    ).toBe(true);
-    expect(preview.children.every((layer) => layer.getAttribute("data-frame-index") === "14")).toBe(
-      true,
-    );
   });
 });
 
@@ -58,12 +49,6 @@ class FakeElement {
     readonly tagName: string,
     readonly ownerDocument: FakeDocument,
   ) {}
-
-  set innerHTML(value: string) {
-    if (value === "") {
-      this.children.length = 0;
-    }
-  }
 
   append(...children: FakeElement[]): void {
     this.children.push(...children);

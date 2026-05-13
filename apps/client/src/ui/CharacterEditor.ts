@@ -43,7 +43,7 @@ export class CharacterEditor {
     const intro = document.createElement("p");
     header.className = "login-header";
     title.textContent = "Create your character";
-    intro.textContent = "Pick a layered look before you enter the room.";
+    intro.textContent = "Pick a simple look before you enter the room.";
     header.append(title, intro);
 
     const preview = document.createElement("div");
@@ -144,7 +144,7 @@ export class CharacterEditor {
   }
 
   private updatePreview(): void {
-    updateAvatarPreview(this.previewBody, this.readAppearance(), { direction: "south-east" });
+    updateAvatarPreview(this.previewBody, this.readAppearance());
     this.syncSwatches();
   }
 

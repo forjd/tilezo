@@ -1,24 +1,23 @@
 import { type TilePosition, tileToScreen } from "@tilezo/engine";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
-import avatarManifest from "../../../../assets/avatars/avatar-manifest.json";
-import {
-  type AvatarAnimationState,
-  type AvatarManifest,
-  type AvatarRenderDirection,
-  parseAvatarManifest,
-  type ResolvedAvatarLayer,
-  resolveAvatarAssetUrl,
-  resolveAvatarFrame,
-  resolveAvatarLayers,
-  resolveLayerFrameIndex,
-  toPixiColor,
-} from "./avatarAssets";
+import { Container, Graphics, Text } from "pixi.js";
 
 type ScreenPosition = {
   x: number;
   y: number;
 };
+
+type AvatarAnimationState = "idle" | "walk";
+
+type AvatarRenderDirection =
+  | "south"
+  | "south-east"
+  | "east"
+  | "north-east"
+  | "north"
+  | "north-west"
+  | "west"
+  | "south-west";
 
 export class Avatar {
   readonly view = new Container();
@@ -27,24 +26,19 @@ export class Avatar {
   position: TilePosition;
   appearance: AvatarAppearance;
 
-  private readonly spriteLayer = new Container();
-  private readonly fallbackBody = new Graphics();
+  private readonly body = new Graphics();
   private readonly chatBubble = new Container();
   private readonly chatBubbleBackground = new Graphics();
   private readonly chatBubbleText: Text;
   private readonly label: Text;
-  private spriteManifest?: AvatarManifest;
-  private spriteLayers: ResolvedAvatarLayer[] = [];
-  private spriteTextures: Texture[] = [];
   private path: TilePosition[] = [];
   private fromScreen: ScreenPosition;
   private to?: TilePosition;
   private progress = 0;
-  private bodyVersion = 0;
   private animationState: AvatarAnimationState = "idle";
   private direction: AvatarRenderDirection = "south";
   private animationSeconds = 0;
-  private renderedFrameKey = "";
+  private renderedBodyKey = "";
   private chatBubbleSecondsRemaining = 0;
   private readonly secondsPerTile = 0.36;
   private readonly chatBubbleDurationSeconds = 4.5;
@@ -95,13 +89,14 @@ export class Avatar {
     this.chatBubble.visible = false;
     this.chatBubble.addChild(this.chatBubbleBackground, this.chatBubbleText);
 
-    this.view.addChild(this.spriteLayer, this.fallbackBody, this.label, this.chatBubble);
+    this.view.addChild(this.body, this.label, this.chatBubble);
     this.rebuildBody();
     this.syncViewToTile(position);
   }
 
   setAppearance(appearance: AvatarAppearance): void {
     this.appearance = { ...appearance };
+    this.renderedBodyKey = "";
     this.rebuildBody();
   }
 
@@ -155,7 +150,7 @@ export class Avatar {
 
       if (!next) {
         this.setAnimationState("idle");
-        this.refreshSpriteFrame();
+        this.rebuildBody();
         return;
       }
 
@@ -175,7 +170,7 @@ export class Avatar {
 
     this.view.x = lerp(this.fromScreen.x, screenTo.x, this.progress);
     this.view.y = lerp(this.fromScreen.y, screenTo.y, this.progress);
-    this.refreshSpriteFrame();
+    this.rebuildBody();
 
     if (this.progress >= 1) {
       this.position = { ...target };
@@ -183,7 +178,7 @@ export class Avatar {
 
       if (this.path.length === 0) {
         this.setAnimationState("idle");
-        this.refreshSpriteFrame();
+        this.rebuildBody();
       }
     }
   }
@@ -249,109 +244,92 @@ export class Avatar {
   }
 
   private rebuildBody(): void {
-    this.spriteLayer.removeChildren();
-    this.fallbackBody.clear();
-    this.spriteManifest = undefined;
-    this.spriteLayers = [];
-    this.spriteTextures = [];
-    this.renderedFrameKey = "";
-    this.bodyVersion += 1;
+    const stepFrame =
+      this.animationState === "walk" ? Math.floor(this.animationSeconds / 0.12) % 2 : 0;
+    const bodyKey = JSON.stringify({
+      appearance: this.appearance,
+      direction: this.direction,
+      state: this.animationState,
+      stepFrame,
+    });
 
-    const manifest = getBundledAvatarManifest();
-
-    if (!manifest) {
-      this.drawFallbackBody();
+    if (bodyKey === this.renderedBodyKey) {
       return;
     }
 
-    const layers = resolveAvatarLayers(manifest, this.appearance);
-
-    if (layers.length === 0) {
-      this.drawFallbackBody();
-      return;
-    }
-
-    const assetUrls = layers.map((layer) => resolveAvatarAssetUrl(layer.src));
-    this.spriteManifest = manifest;
-    this.spriteLayers = layers;
-    this.spriteTextures = layers.map(() => Texture.EMPTY);
-    this.refreshSpriteFrame();
-
-    const version = this.bodyVersion;
-    void Promise.all(assetUrls.map((url) => Assets.load<Texture>(url)))
-      .then((textures) => {
-        if (version !== this.bodyVersion) {
-          return;
-        }
-
-        this.spriteTextures = textures.map((texture) => texture ?? Texture.EMPTY);
-        this.renderedFrameKey = "";
-        this.refreshSpriteFrame();
-      })
-      .catch(() => {
-        if (version !== this.bodyVersion) {
-          return;
-        }
-
-        this.drawFallbackBody();
-      });
+    this.renderedBodyKey = bodyKey;
+    this.body.clear();
+    this.drawBody(stepFrame);
   }
 
-  private refreshSpriteFrame(): void {
+  private drawBody(stepFrame: number): void {
+    const skinTone = toPixiColor(this.appearance.skinTone);
+    const hairColor = toPixiColor(this.appearance.hairColor);
+    const shirtColor = toPixiColor(this.appearance.shirtColor);
+    const pantsColor = toPixiColor(this.appearance.pantsColor);
+    const shoesColor = toPixiColor(this.appearance.shoesColor);
+    const stride = this.animationState === "walk" && stepFrame === 1 ? 2 : 0;
+    const bob = this.animationState === "walk" && stepFrame === 1 ? -1 : 0;
+    const facingScale = this.direction.includes("west") ? -1 : 1;
+
+    this.body.scale.x = facingScale;
+    this.body.ellipse(0, 3, 12, 4).fill({ color: 0x1d2324, alpha: 0.22 });
+    this.body.roundRect(-5, -11 + bob - stride, 5, 13, 2).fill(pantsColor);
+    this.body.roundRect(2, -11 + bob + stride, 5, 13, 2).fill(pantsColor);
+    this.body.roundRect(-9, -1 - stride, 9, 4, 2).fill(shoesColor);
+    this.body.roundRect(1, -1 + stride, 10, 4, 2).fill(shoesColor);
+    this.body.roundRect(-9, -29 + bob, 18, 21, 5).fill(shirtColor);
+    this.drawTopDetail(shirtColor, bob);
+    this.body.roundRect(-13, -26 + bob, 5, 15, 2).fill(skinTone);
+    this.body.roundRect(8, -26 + bob, 5, 15, 2).fill(skinTone);
+    this.body.circle(0, -38 + bob, 11).fill(skinTone);
+    this.drawHair(hairColor, bob);
+    this.drawFace(bob);
+  }
+
+  private drawTopDetail(color: number, bob: number): void {
+    if (this.appearance.shirt === "hoodie") {
+      this.body.roundRect(-6, -31 + bob, 12, 6, 3).fill(darken(color, 0.78));
+      this.body.rect(-1, -26 + bob, 2, 15).fill(darken(color, 0.72));
+      this.body.circle(-4, -23 + bob, 1).fill(0xf1e7d2);
+      this.body.circle(4, -23 + bob, 1).fill(0xf1e7d2);
+      return;
+    }
+
+    this.body.roundRect(-5, -29 + bob, 10, 4, 2).fill(darken(color, 0.78));
+  }
+
+  private drawFace(bob: number): void {
     if (
-      !this.spriteManifest ||
-      this.spriteLayers.length === 0 ||
-      this.spriteTextures.length === 0
+      this.direction === "north" ||
+      this.direction === "north-east" ||
+      this.direction === "north-west"
     ) {
       return;
     }
 
-    const frame = resolveAvatarFrame(
-      this.spriteManifest,
-      this.animationState,
-      this.direction,
-      this.animationSeconds,
-    );
-    const textureKey = this.spriteTextures.map((texture) => texture?.uid ?? "empty").join(",");
-    const frameKey = `${frame.index}:${frame.mirrored}:${textureKey}`;
-
-    if (frameKey === this.renderedFrameKey) {
-      return;
-    }
-
-    this.renderedFrameKey = frameKey;
-    this.composeSpriteLayers(frame);
+    this.body.circle(-4, -39 + bob, 1.5).fill(0x1d2324);
+    this.body.circle(4, -39 + bob, 1.5).fill(0x1d2324);
+    this.body.rect(-2, -34 + bob, 4, 1).fill(0x9d5f46);
   }
 
-  private composeSpriteLayers(frame: ReturnType<typeof resolveAvatarFrame>): void {
-    const manifest = this.spriteManifest;
-
-    if (!manifest) {
+  private drawHair(color: number, bob: number): void {
+    if (this.appearance.hair === "side-part") {
+      this.body.circle(-2, -43 + bob, 10).fill(color);
+      this.body.rect(-12, -42 + bob, 9, 8).fill(color);
+      this.body.rect(5, -40 + bob, 7, 5).fill(color);
       return;
     }
 
-    this.spriteLayer.removeChildren();
-    this.fallbackBody.clear();
-
-    for (const [index, layer] of this.spriteLayers.entries()) {
-      const texture = createFrameTexture(
-        this.spriteTextures[index] ?? Texture.EMPTY,
-        manifest,
-        resolveLayerFrameIndex(layer, frame.index),
-      );
-      const sprite = new Sprite(texture);
-      sprite.anchor.set(
-        manifest.frame.anchorX / manifest.frame.width,
-        manifest.frame.anchorY / manifest.frame.height,
-      );
-      sprite.scale.x = frame.mirrored ? -1 : 1;
-
-      if (layer.tintColor !== undefined) {
-        sprite.tint = layer.tintColor;
-      }
-
-      this.spriteLayer.addChild(sprite);
+    if (this.appearance.hair === "bob") {
+      this.body.circle(0, -42 + bob, 11).fill(color);
+      this.body.roundRect(-12, -40 + bob, 5, 15, 2).fill(color);
+      this.body.roundRect(7, -40 + bob, 5, 15, 2).fill(color);
+      return;
     }
+
+    this.body.circle(0, -43 + bob, 10).fill(color);
+    this.body.rect(-10, -42 + bob, 20, 7).fill(color);
   }
 
   private beginSegment(next: TilePosition, fromScreen: ScreenPosition): void {
@@ -360,7 +338,7 @@ export class Avatar {
     this.progress = 0;
     this.direction = directionBetween(fromScreen, tileToScreen(next.x, next.y));
     this.setAnimationState("walk");
-    this.refreshSpriteFrame();
+    this.rebuildBody();
   }
 
   private setAnimationState(state: AvatarAnimationState): void {
@@ -370,47 +348,7 @@ export class Avatar {
 
     this.animationState = state;
     this.animationSeconds = 0;
-    this.renderedFrameKey = "";
-  }
-
-  private drawFallbackBody(): void {
-    const skinTone = toPixiColor(this.appearance.skinTone);
-    const hairColor = toPixiColor(this.appearance.hairColor);
-    const shirtColor = toPixiColor(this.appearance.shirtColor);
-    const pantsColor = toPixiColor(this.appearance.pantsColor);
-    const shoesColor = toPixiColor(this.appearance.shoesColor);
-
-    this.fallbackBody.rect(-5, -10, 4, 10).fill(pantsColor);
-    this.fallbackBody.rect(2, -10, 4, 10).fill(pantsColor);
-    this.fallbackBody.roundRect(-8, -1, 8, 4, 2).fill(shoesColor);
-    this.fallbackBody.roundRect(1, -1, 8, 4, 2).fill(shoesColor);
-    this.fallbackBody.roundRect(-8, -28, 16, 20, 4).fill(shirtColor);
-    this.fallbackBody.rect(-11, -25, 4, 13).fill(skinTone);
-    this.fallbackBody.rect(8, -25, 4, 13).fill(skinTone);
-    this.fallbackBody.circle(0, -34, 10).fill(skinTone);
-    this.drawHair(hairColor);
-    this.fallbackBody.circle(-4, -35, 1.5).fill(0x1d2324);
-    this.fallbackBody.circle(4, -35, 1.5).fill(0x1d2324);
-    this.fallbackBody.rect(-2, -30, 4, 1).fill(0x9d5f46);
-  }
-
-  private drawHair(color: number): void {
-    if (this.appearance.hair === "side-part") {
-      this.fallbackBody.circle(-2, -39, 9).fill(color);
-      this.fallbackBody.rect(-11, -38, 8, 8).fill(color);
-      this.fallbackBody.rect(6, -36, 6, 5).fill(color);
-      return;
-    }
-
-    if (this.appearance.hair === "bob") {
-      this.fallbackBody.circle(0, -38, 10).fill(color);
-      this.fallbackBody.roundRect(-11, -36, 5, 13, 2).fill(color);
-      this.fallbackBody.roundRect(6, -36, 5, 13, 2).fill(color);
-      return;
-    }
-
-    this.fallbackBody.circle(0, -39, 9).fill(color);
-    this.fallbackBody.rect(-9, -38, 18, 7).fill(color);
+    this.renderedBodyKey = "";
   }
 }
 
@@ -514,34 +452,18 @@ function chunkLongWord(word: string, maxLength: number): string[] {
   return chunks;
 }
 
-function createFrameTexture(
-  texture: Texture,
-  manifest: AvatarManifest,
-  frameIndex: number,
-): Texture {
-  if (
-    texture === Texture.EMPTY ||
-    texture.source.width < manifest.frame.width * (frameIndex + 1) ||
-    texture.source.height < manifest.frame.height
-  ) {
-    return texture;
+function toPixiColor(value: string): number {
+  if (!/^#[\da-fA-F]{6}$/.test(value)) {
+    return 0xffffff;
   }
 
-  return new Texture({
-    source: texture.source,
-    frame: new Rectangle(
-      manifest.frame.width * frameIndex,
-      0,
-      manifest.frame.width,
-      manifest.frame.height,
-    ),
-  });
+  return Number.parseInt(value.slice(1), 16);
 }
 
-function getBundledAvatarManifest(): AvatarManifest | undefined {
-  try {
-    return parseAvatarManifest(avatarManifest);
-  } catch {
-    return undefined;
-  }
+function darken(color: number, amount: number): number {
+  const red = Math.round(((color >> 16) & 0xff) * amount);
+  const green = Math.round(((color >> 8) & 0xff) * amount);
+  const blue = Math.round((color & 0xff) * amount);
+
+  return (red << 16) + (green << 8) + blue;
 }

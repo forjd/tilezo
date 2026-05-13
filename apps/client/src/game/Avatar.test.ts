@@ -68,7 +68,7 @@ describe("Avatar", () => {
     expect({ x: avatar.view.x, y: avatar.view.y }).toEqual({ x: 48, y: 24 });
   });
 
-  test("stores and updates the layered appearance without moving the avatar", () => {
+  test("stores and updates the drawn appearance without moving the avatar", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 1, y: 1 }, DEFAULT_AVATAR_APPEARANCE);
     const before = { x: avatar.view.x, y: avatar.view.y };
 
@@ -88,7 +88,7 @@ describe("Avatar", () => {
     expect({ x: avatar.view.x, y: avatar.view.y }).toEqual(before);
   });
 
-  test("rebuilds sprite layers when appearance changes", () => {
+  test("rebuilds the drawn body when appearance changes", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 }, DEFAULT_AVATAR_APPEARANCE);
 
     avatar.setAppearance({
@@ -100,12 +100,11 @@ describe("Avatar", () => {
     });
 
     const state = avatar as unknown as {
-      spriteLayer?: { children: Array<{ tint?: number }> };
+      renderedBodyKey?: string;
     };
 
-    expect(state.spriteLayer?.children.length).toBeGreaterThanOrEqual(6);
-    expect(state.spriteLayer?.children.some((child) => child.tint === 0x3b2418)).toBe(true);
-    expect(state.spriteLayer?.children.some((child) => child.tint === 0x7f3b44)).toBe(true);
+    expect(state.renderedBodyKey).toContain("#3b2418");
+    expect(state.renderedBodyKey).toContain("#7f3b44");
   });
 
   test("shows chat bubbles briefly above the avatar", () => {

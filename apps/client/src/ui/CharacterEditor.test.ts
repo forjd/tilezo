@@ -9,7 +9,7 @@ describe("CharacterEditor", () => {
     restoreDocument();
   });
 
-  test("submits the selected layered appearance", () => {
+  test("submits the selected drawn appearance", () => {
     installDocument();
     const submissions: unknown[] = [];
     const editor = new CharacterEditor({
@@ -55,7 +55,7 @@ describe("CharacterEditor", () => {
     expect(pantsColor.value).toBe("#77684b");
   });
 
-  test("renders a manifest-driven preview and updates it when controls change", () => {
+  test("renders a drawn preview and updates it when controls change", () => {
     installDocument();
     const editor = new CharacterEditor({
       initialAppearance: DEFAULT_AVATAR_APPEARANCE,
@@ -76,22 +76,16 @@ describe("CharacterEditor", () => {
     expect(preview.children[0]?.className).toBe("character-preview-views");
     expect(previewAvatar.className).toBe("character-preview-avatar");
     expect(previewAvatar.children).toHaveLength(1);
-    expect(previewBody.className).toBe("avatar-preview-sprite");
-    expect(previewBody.children.map((child) => child.className)).toContain("avatar-preview-layer");
-    expect(
-      previewBody.children.some(
-        (child) => child.style.getPropertyValue("--layer-tint") === "#8b4a24",
-      ),
-    ).toBe(true);
+    expect(previewBody.className).toBe("avatar-preview-drawn");
+    expect(previewBody.children.map((child) => child.getAttribute("data-part"))).toContain("hair");
+    expect(previewBody.style.getPropertyValue("--avatar-hair")).toBe("#8b4a24");
 
     hair.value = "bob";
     form.dispatch("change", {});
 
     expect(hairColor.value).toBe("#8b4a24");
     expect(hair.value).toBe("bob");
-    expect(
-      previewBody.children.some((child) => child.getAttribute("data-layer-id") === "bob"),
-    ).toBe(true);
+    expect(previewBody.getAttribute("data-hair")).toBe("bob");
   });
 });
 
