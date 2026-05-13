@@ -19,6 +19,9 @@ export type StressOptions = {
   roomId: string;
   moves: number;
   messages: number;
+  durationSeconds: number;
+  moveIntervalMs: number;
+  chatIntervalMs: number;
 };
 
 type BotResult = {
@@ -26,6 +29,7 @@ type BotResult = {
   username: string;
   ok: boolean;
   timings: Record<string, number>;
+  counters: BotCounters;
   error?: string;
 };
 
@@ -33,6 +37,11 @@ type BotSession = {
   token: string;
   userId: string;
   username: string;
+};
+
+type BotCounters = {
+  moves: number;
+  messages: number;
 };
 
 const DEFAULT_OPTIONS: StressOptions = {
@@ -46,6 +55,9 @@ const DEFAULT_OPTIONS: StressOptions = {
   roomId: "lobby",
   moves: 6,
   messages: 2,
+  durationSeconds: 0,
+  moveIntervalMs: 1000,
+  chatIntervalMs: 5000,
 };
 
 if (import.meta.main) {
@@ -99,6 +111,8 @@ export function summarizeResults(results: BotResult[]): {
   failed: number;
   averageMs: number;
   p95Ms: number;
+  moves: number;
+  messages: number;
 } {
   const durations = results
     .map((result) => result.timings.total)
@@ -113,12 +127,15 @@ export function summarizeResults(results: BotResult[]): {
     failed: results.filter((result) => !result.ok).length,
     averageMs: durations.length === 0 ? 0 : totalDuration / durations.length,
     p95Ms: durations[p95Index] ?? 0,
+    moves: results.reduce((total, result) => total + result.counters.moves, 0),
+    messages: results.reduce((total, result) => total + result.counters.messages, 0),
   };
 }
 
 async function runBot(botId: number, options: StressOptions): Promise<BotResult> {
   const username = `${options.usernamePrefix}_${botId}`;
   const timings: Record<string, number> = {};
+  const counters: BotCounters = { moves: 0, messages: 0 };
   const totalStart = performance.now();
   let socket: WebSocket | undefined;
 
@@ -134,7 +151,7 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
 
     if (options.scenario === "auth") {
       timings.total = performance.now() - totalStart;
-      return { botId, username, ok: true, timings };
+      return { botId, username, ok: true, timings, counters };
     }
 
     await timed(timings, "appearance", () =>
@@ -146,25 +163,33 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
       joinRoom(socket as WebSocket, session.userId, options.roomId),
     );
 
+    if (options.durationSeconds > 0) {
+      await timed(timings, "steady", () =>
+        runSteady(socket as WebSocket, session.userId, username, snapshot, options, counters),
+      );
+      timings.total = performance.now() - totalStart;
+      return { botId, username, ok: true, timings, counters };
+    }
+
     if (options.scenario === "room") {
       timings.total = performance.now() - totalStart;
-      return { botId, username, ok: true, timings };
+      return { botId, username, ok: true, timings, counters };
     }
 
     if (includesMovement(options.scenario)) {
-      await timed(timings, "movement", () =>
-        runMovement(socket as WebSocket, session.userId, snapshot, options.moves),
+      counters.moves += await timed(timings, "movement", () =>
+        runMovement(socket as WebSocket, session.userId, snapshot, options.moves, 0),
       );
     }
 
     if (includesChat(options.scenario)) {
-      await timed(timings, "chat", () =>
-        runChat(socket as WebSocket, session.userId, username, options.messages),
+      counters.messages += await timed(timings, "chat", () =>
+        runChat(socket as WebSocket, session.userId, username, options.messages, 0),
       );
     }
 
     timings.total = performance.now() - totalStart;
-    return { botId, username, ok: true, timings };
+    return { botId, username, ok: true, timings, counters };
   } catch (error) {
     timings.total = performance.now() - totalStart;
     return {
@@ -172,6 +197,7 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
       username,
       ok: false,
       timings,
+      counters,
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {
@@ -269,7 +295,8 @@ async function runMovement(
   userId: string,
   snapshot: RoomSnapshotMessage,
   moves: number,
-): Promise<void> {
+  startIndex: number,
+): Promise<number> {
   const targets = snapshot.tiles.filter((tile) => tile.walkable);
 
   if (targets.length === 0) {
@@ -277,16 +304,10 @@ async function runMovement(
   }
 
   for (let index = 0; index < moves; index += 1) {
-    const tile = targets[index % targets.length] as TilePosition;
-    const target = { x: tile.x, y: tile.y };
-    socket.send(JSON.stringify({ type: "avatar.move.request", target }));
-    await waitForMessage(
-      socket,
-      (message) =>
-        (message.type === "avatar.moved" && message.userId === userId) || message.type === "error",
-      userId,
-    );
+    await sendMove(socket, userId, targets, startIndex + index);
   }
+
+  return moves;
 }
 
 async function runChat(
@@ -294,17 +315,98 @@ async function runChat(
   userId: string,
   username: string,
   messages: number,
-): Promise<void> {
+  startIndex: number,
+): Promise<number> {
   for (let index = 0; index < messages; index += 1) {
-    const text = `stress message ${index + 1} from ${username}`;
-    socket.send(JSON.stringify({ type: "chat.say", text }));
-    await waitForMessage(
-      socket,
-      (message) =>
-        (message.type === "chat.message" && message.userId === userId) || message.type === "error",
-      userId,
-    );
+    await sendChat(socket, userId, username, startIndex + index + 1);
   }
+
+  return messages;
+}
+
+async function runSteady(
+  socket: WebSocket,
+  userId: string,
+  username: string,
+  snapshot: RoomSnapshotMessage,
+  options: StressOptions,
+  counters: BotCounters,
+): Promise<void> {
+  const targets = snapshot.tiles.filter((tile) => tile.walkable);
+  const runMovementLoop = includesMovement(options.scenario);
+  const runChatLoop = includesChat(options.scenario);
+  const deadline = performance.now() + options.durationSeconds * 1000;
+  let nextMoveAt = performance.now();
+  let nextChatAt = performance.now();
+  let moveIndex = 0;
+  let messageIndex = 0;
+
+  if (runMovementLoop && targets.length === 0) {
+    throw new Error("joined room has no walkable tiles");
+  }
+
+  while (performance.now() < deadline) {
+    const now = performance.now();
+    let acted = false;
+
+    if (runMovementLoop && now >= nextMoveAt) {
+      await sendMove(socket, userId, targets, moveIndex);
+      moveIndex += 1;
+      counters.moves += 1;
+      nextMoveAt = performance.now() + options.moveIntervalMs;
+      acted = true;
+    }
+
+    if (runChatLoop && performance.now() >= nextChatAt) {
+      messageIndex += 1;
+      await sendChat(socket, userId, username, messageIndex);
+      counters.messages += 1;
+      nextChatAt = performance.now() + options.chatIntervalMs;
+      acted = true;
+    }
+
+    if (!acted) {
+      const nextActionAt = Math.min(
+        runMovementLoop ? nextMoveAt : Number.POSITIVE_INFINITY,
+        runChatLoop ? nextChatAt : Number.POSITIVE_INFINITY,
+        deadline,
+      );
+      await sleep(Math.max(0, Math.min(100, nextActionAt - performance.now())));
+    }
+  }
+}
+
+async function sendMove(
+  socket: WebSocket,
+  userId: string,
+  targets: TilePosition[],
+  index: number,
+): Promise<void> {
+  const tile = targets[index % targets.length] as TilePosition;
+  const target = { x: tile.x, y: tile.y };
+  socket.send(JSON.stringify({ type: "avatar.move.request", target }));
+  await waitForMessage(
+    socket,
+    (message) =>
+      (message.type === "avatar.moved" && message.userId === userId) || message.type === "error",
+    userId,
+  );
+}
+
+async function sendChat(
+  socket: WebSocket,
+  userId: string,
+  username: string,
+  messageNumber: number,
+): Promise<void> {
+  const text = `stress message ${messageNumber} from ${username}`;
+  socket.send(JSON.stringify({ type: "chat.say", text }));
+  await waitForMessage(
+    socket,
+    (message) =>
+      (message.type === "chat.message" && message.userId === userId) || message.type === "error",
+    userId,
+  );
 }
 
 function waitForMessage<T extends ServerMessage>(
@@ -429,6 +531,15 @@ function applyOption(options: StressOptions, key: string, value: string): void {
     case "messages":
       options.messages = parseNonNegativeInteger(key, value);
       break;
+    case "duration":
+      options.durationSeconds = parseNonNegativeNumber(key, value);
+      break;
+    case "move-interval-ms":
+      options.moveIntervalMs = parsePositiveInteger(key, value);
+      break;
+    case "chat-interval-ms":
+      options.chatIntervalMs = parsePositiveInteger(key, value);
+      break;
     default:
       throw new Error(`Unknown option --${key}`);
   }
@@ -484,6 +595,16 @@ function parseNonNegativeInteger(key: string, value: string): number {
   return parsed;
 }
 
+function parseNonNegativeNumber(key: string, value: string): number {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`--${key} must be a non-negative number`);
+  }
+
+  return parsed;
+}
+
 function includesAuthLogin(scenario: Scenario): boolean {
   return scenario === "auth" || scenario === "full";
 }
@@ -511,13 +632,21 @@ async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function printSummary(options: StressOptions, results: BotResult[]): void {
   const summary = summarizeResults(results);
   const failures = results.filter((result) => !result.ok).slice(0, 10);
 
   console.log("Tilezo stress test");
   console.log(`Scenario: ${options.scenario}`);
+  if (options.durationSeconds > 0) {
+    console.log(`Duration: ${options.durationSeconds.toString()}s`);
+  }
   console.log(`Bots: ${summary.total} (${summary.succeeded} ok, ${summary.failed} failed)`);
+  console.log(`Actions: ${summary.moves} moves, ${summary.messages} messages`);
   console.log(`Average: ${summary.averageMs.toFixed(1)}ms`);
   console.log(`P95: ${summary.p95Ms.toFixed(1)}ms`);
 
@@ -544,5 +673,8 @@ Options:
   --room <room-id>         Room to join (default: lobby)
   --moves <count>          Movement requests per bot (default: 6)
   --messages <count>       Chat messages per bot (default: 2)
+  --duration <seconds>     Keep bots connected and active for this long
+  --move-interval-ms <ms>  Timed-mode movement interval (default: 1000)
+  --chat-interval-ms <ms>  Timed-mode chat interval (default: 5000)
 `);
 }
