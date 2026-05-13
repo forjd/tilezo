@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { createRectRoomLayout, findPath, screenToTile, TileGrid, tileToScreen } from ".";
+import {
+  createRectRoomLayout,
+  createRectRoomLayoutWithDoorTile,
+  findPath,
+  screenToTile,
+  TileGrid,
+  tileToScreen,
+} from ".";
 
 describe("isometric projection", () => {
   test("tileToScreen produces expected 2:1 coordinates", () => {
@@ -29,6 +36,33 @@ describe("grid and pathfinding", () => {
     expect(grid.isWalkable({ x: 0, y: 0 })).toBe(true);
     expect(grid.isWalkable({ x: 1, y: 1 })).toBe(false);
     expect(grid.isWalkable({ x: 10, y: 10 })).toBe(false);
+  });
+
+  test("rect rooms can attach one walkable door tile outside the left wall", () => {
+    const layout = createRectRoomLayoutWithDoorTile("lobby", "Lobby", 3, 3, 2);
+    const grid = new TileGrid(layout);
+
+    expect(layout.spawn).toEqual({ x: -1, y: 2 });
+    expect(layout.tiles.filter((tile) => tile.x < 0)).toEqual([
+      { x: -1, y: 2, z: 0, walkable: true },
+    ]);
+    expect(grid.isWalkable({ x: -1, y: 2 })).toBe(true);
+    expect(grid.isWalkable({ x: -1, y: 1 })).toBe(false);
+  });
+
+  test("pathfinding enters rooms through the attached door tile without diagonal shortcuts", () => {
+    const layout = createRectRoomLayoutWithDoorTile("lobby", "Lobby", 3, 4, 2);
+
+    expect(findPath(layout, { x: -1, y: 2 }, { x: 1, y: 2 })).toEqual([
+      { x: -1, y: 2 },
+      { x: 0, y: 2 },
+      { x: 1, y: 2 },
+    ]);
+    expect(findPath(layout, { x: -1, y: 2 }, { x: 0, y: 1 })).toEqual([
+      { x: -1, y: 2 },
+      { x: 0, y: 2 },
+      { x: 0, y: 1 },
+    ]);
   });
 
   test("pathfinding returns a diagonal route for valid movement", () => {

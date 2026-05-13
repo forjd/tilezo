@@ -1,4 +1,4 @@
-import { createRectRoomLayout, type RoomLayout } from "@tilezo/engine";
+import { createRectRoomLayoutWithDoorTile, type RoomLayout } from "@tilezo/engine";
 import type { PublicRoomSummary } from "@tilezo/protocol";
 import {
   loadOrSeedPublicRooms,
@@ -122,7 +122,14 @@ async function loadPublicRoomLayouts(): Promise<RoomLayout[]> {
   const rawLayouts = (await Bun.file(await resolvePublicRoomsPath()).json()) as RawRoomLayout[];
 
   return rawLayouts.map((raw) =>
-    createRectRoomLayout(raw.id, raw.name, raw.width, raw.height, raw.spawn, raw.blocked ?? []),
+    createRectRoomLayoutWithDoorTile(
+      raw.id,
+      raw.name,
+      raw.width,
+      raw.height,
+      raw.spawn.y,
+      raw.blocked ?? [],
+    ),
   );
 }
 

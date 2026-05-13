@@ -20,6 +20,17 @@ describe("RoomScene", () => {
     expect(sceneState(scene).avatars.has("user_2")).toBe(true);
   });
 
+  test("renders avatar overlays above wall occlusion", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.loadSnapshot(snapshot([user("user_1", "Dan", { x: -1, y: 2 })]));
+
+    const world = app.stage.children[0];
+    expect(world?.children.at(-1)).toBe(sceneState(scene).avatarOverlayLayer);
+    expect(sceneState(scene).avatarOverlayLayer.children).toHaveLength(1);
+  });
+
   test("updates avatars and recenters on resize", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});
@@ -204,10 +215,12 @@ function createApp(): FakeApp {
 
 function sceneState(scene: RoomScene): {
   avatars: Map<string, { view: Container }>;
+  avatarOverlayLayer: Container;
   hover?: unknown;
 } {
   return scene as unknown as {
     avatars: Map<string, { view: Container }>;
+    avatarOverlayLayer: Container;
     hover?: unknown;
   };
 }

@@ -40,7 +40,7 @@ describe("handleMessage", () => {
       {
         id: "user_db_1",
         username: "Dan",
-        position: { x: 0, y: 2 },
+        position: { x: -1, y: 2 },
         appearance: DEFAULT_AVATAR_APPEARANCE,
       },
     ]);
@@ -434,7 +434,7 @@ describe("handleClose", () => {
       {
         id: "user_db_1",
         username: "Dan",
-        position: { x: 0, y: 2 },
+        position: { x: -1, y: 2 },
         appearance: DEFAULT_AVATAR_APPEARANCE,
       },
     ]);
@@ -472,7 +472,7 @@ describe("handleOpen", () => {
           {
             id: "user_db_1",
             username: "Dan",
-            position: { x: 0, y: 2 },
+            position: { x: -1, y: 2 },
             appearance: DEFAULT_AVATAR_APPEARANCE,
           },
         ],
@@ -494,7 +494,7 @@ describe("handleOpen", () => {
         user: {
           id: "user_db_1",
           username: "Dan",
-          position: { x: 0, y: 2 },
+          position: { x: -1, y: 2 },
           appearance: DEFAULT_AVATAR_APPEARANCE,
         },
       },

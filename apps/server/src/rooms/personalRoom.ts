@@ -1,12 +1,12 @@
-import { createRectRoomLayout } from "@tilezo/engine";
+import { createRectRoomLayoutWithDoorTile } from "@tilezo/engine";
 
 export function createPersonalRoomLayout(user: { id: string; username: string }) {
-  return createRectRoomLayout(
+  return createRectRoomLayoutWithDoorTile(
     personalRoomId(user.id),
     `${user.username}'s Room`,
     8,
     8,
-    { x: 0, y: 2 },
+    2,
     [
       { x: 5, y: 1 },
       { x: 5, y: 2 },

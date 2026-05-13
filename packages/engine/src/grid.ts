@@ -29,6 +29,30 @@ export function createRectRoomLayout(
   return { id, name, width, height, spawn, tiles };
 }
 
+export function createRectRoomLayoutWithDoorTile(
+  id: string,
+  name: string,
+  width: number,
+  height: number,
+  doorY: number,
+  blocked: TilePosition[] = [],
+): RoomLayout {
+  const doorTile = { x: -1, y: clampTileCoordinate(doorY, height), z: 0, walkable: true };
+  const layout = createRectRoomLayout(
+    id,
+    name,
+    width,
+    height,
+    { x: doorTile.x, y: doorTile.y },
+    blocked,
+  );
+
+  return {
+    ...layout,
+    tiles: [doorTile, ...layout.tiles],
+  };
+}
+
 export class TileGrid {
   readonly width: number;
   readonly height: number;
@@ -88,4 +112,8 @@ export class TileGrid {
       this.isWalkable({ x: position.x, y: position.y + deltaY })
     );
   }
+}
+
+function clampTileCoordinate(value: number, size: number): number {
+  return Math.min(Math.max(Math.trunc(value), 0), Math.max(0, size - 1));
 }

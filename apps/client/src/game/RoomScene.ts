@@ -22,6 +22,7 @@ export class RoomScene {
   private readonly world = new Container();
   private readonly tiles = new TileMap();
   private readonly avatarLayer = new Container();
+  private readonly avatarOverlayLayer = new Container();
   private readonly avatars = new Map<string, Avatar>();
   private hover?: TilePosition;
   private roomBounds?: RoomBounds;
@@ -37,7 +38,12 @@ export class RoomScene {
     private readonly onMoveRequest: MoveRequestHandler,
     private readonly onCanvasInteraction?: CanvasInteractionHandler,
   ) {
-    this.world.addChild(this.tiles.view, this.avatarLayer);
+    this.world.addChild(
+      this.tiles.view,
+      this.avatarLayer,
+      this.tiles.occlusionView,
+      this.avatarOverlayLayer,
+    );
     this.app.stage.addChild(this.world);
     this.centerWorld();
     this.bindPointer();
@@ -51,6 +57,7 @@ export class RoomScene {
       avatar.destroy();
     }
     this.avatarLayer.removeChildren();
+    this.avatarOverlayLayer.removeChildren();
     this.avatars.clear();
 
     for (const user of snapshot.users) {
@@ -110,6 +117,7 @@ export class RoomScene {
     const avatar = new Avatar(userId, username, position, appearance);
     this.avatars.set(userId, avatar);
     this.avatarLayer.addChild(avatar.view);
+    this.avatarOverlayLayer.addChild(avatar.overlayView);
   }
 
   private removeAvatar(userId: string): void {
@@ -120,6 +128,7 @@ export class RoomScene {
     }
 
     avatar.view.removeFromParent();
+    avatar.overlayView.removeFromParent();
     avatar.destroy();
     this.avatars.delete(userId);
   }

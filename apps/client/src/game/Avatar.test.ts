@@ -25,6 +25,26 @@ describe("Avatar", () => {
     expect({ x: avatar.view.x, y: avatar.view.y }).toEqual({ x: 16, y: 8 });
   });
 
+  test("keeps name and chat overlays aligned with the rendered body", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: -1, y: 2 });
+
+    expect({ x: avatar.overlayView.x, y: avatar.overlayView.y }).toEqual({
+      x: avatar.view.x,
+      y: avatar.view.y,
+    });
+
+    avatar.setPath([
+      { x: -1, y: 2 },
+      { x: 0, y: 2 },
+    ]);
+    avatar.update(0.18);
+
+    expect({ x: avatar.overlayView.x, y: avatar.overlayView.y }).toEqual({
+      x: avatar.view.x,
+      y: avatar.view.y,
+    });
+  });
+
   test("rerouting away from the active segment starts from the current rendered position", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
 

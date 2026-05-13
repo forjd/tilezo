@@ -85,11 +85,11 @@ describe("RoomManager", () => {
     expect(store.seededRoomIds).toEqual(["lobby", "atrium", "studio"]);
   });
 
-  test("bundled public rooms spawn users on the door tile", async () => {
+  test("bundled public rooms spawn users on the attached door tile", async () => {
     const manager = await RoomManager.create();
 
     manager.getOrCreate("lobby")?.join({ id: "user_1", username: "Dan" });
 
-    expect(manager.get("lobby")?.getUsers()[0]?.position).toEqual({ x: 0, y: 2 });
+    expect(manager.get("lobby")?.getUsers()[0]?.position).toEqual({ x: -1, y: 2 });
   });
 });

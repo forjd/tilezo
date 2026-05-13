@@ -16,6 +16,21 @@ describe("TileMap", () => {
     expect(map.isWalkable({ x: 1, y: 0 })).toBe(false);
   });
 
+  test("keeps an attached door tile addressable without folding it into the room floor", () => {
+    const map = new TileMap();
+
+    map.load([
+      { x: -1, y: 2, z: 0, walkable: true },
+      { x: 0, y: 0, z: 0, walkable: true },
+      { x: 0, y: 1, z: 0, walkable: true },
+      { x: 0, y: 2, z: 0, walkable: true },
+    ]);
+
+    expect(map.has({ x: -1, y: 2 })).toBe(true);
+    expect(map.isWalkable({ x: -1, y: 2 })).toBe(true);
+    expect(map.occlusionView.children).toHaveLength(1);
+  });
+
   test("positions the hover highlight only for known tiles", () => {
     const map = new TileMap();
 

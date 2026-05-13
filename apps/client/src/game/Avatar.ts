@@ -22,6 +22,7 @@ type AvatarRenderDirection =
 
 export class Avatar {
   readonly view = new Container();
+  readonly overlayView = new Container();
   readonly userId: string;
   username: string;
   position: TilePosition;
@@ -112,7 +113,8 @@ export class Avatar {
     this.typingIndicator.addChild(this.typingIndicatorBackground, this.typingIndicatorText);
     this.drawTypingIndicator();
 
-    this.view.addChild(this.body, this.label, this.chatBubble, this.typingIndicator);
+    this.view.addChild(this.body);
+    this.overlayView.addChild(this.label, this.chatBubble, this.typingIndicator);
     this.rebuildBody();
     this.syncViewToTile(position);
   }
@@ -198,6 +200,7 @@ export class Avatar {
 
     this.view.x = lerp(this.fromScreen.x, screenTo.x, this.progress);
     this.view.y = lerp(this.fromScreen.y, screenTo.y, this.progress);
+    this.syncOverlayToView();
     this.rebuildBody();
 
     if (this.progress >= 1) {
@@ -215,6 +218,12 @@ export class Avatar {
     const screen = tileToScreen(position.x, position.y);
     this.view.x = screen.x;
     this.view.y = screen.y;
+    this.syncOverlayToView();
+  }
+
+  private syncOverlayToView(): void {
+    this.overlayView.x = this.view.x;
+    this.overlayView.y = this.view.y;
   }
 
   private getUnreachedPath(path: TilePosition[]): TilePosition[] {
@@ -408,6 +417,7 @@ export class Avatar {
 
   destroy(): void {
     this.view.destroy({ children: true });
+    this.overlayView.destroy({ children: true });
   }
 }
 
