@@ -1,0 +1,4 @@
+interface:
+  display_name: "Idea Capture"
+  short_description: "Append structured ideas to docs/IDEAS.md with timestamps."
+  default_prompt: "Use this skill when I ask you to note down, capture, record, or add an idea for Tilezo in docs/IDEAS.md."
