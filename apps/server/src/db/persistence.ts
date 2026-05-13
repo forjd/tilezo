@@ -1,7 +1,7 @@
 import type { RoomLayout } from "@tilezo/engine";
 import { asc, eq } from "drizzle-orm";
 import type { TilezoDatabase } from "./db";
-import { rooms } from "./schema";
+import { rooms, userRoomSessions } from "./schema";
 
 export type RoomVisibility = "public" | "private";
 
@@ -30,6 +30,9 @@ export type PersistenceStore = {
   listRooms?(): Promise<PersistedRoomLayout[]>;
   listPublicRooms?(): Promise<RoomLayout[]>;
   listOwnedRooms?(ownerUserId: string): Promise<OwnedRoomLayout[]>;
+  getLastRoomIdForUser?(userId: string): Promise<string | undefined>;
+  saveLastRoomIdForUser?(userId: string, roomId: string): Promise<void>;
+  clearLastRoomIdForUser?(userId: string): Promise<void>;
 };
 
 export async function loadOrSeedDefaultRoom(
@@ -159,6 +162,34 @@ export class DrizzlePersistenceStore implements PersistenceStore {
       .where(eq(rooms.ownerUserId, ownerUserId))
       .orderBy(asc(rooms.name), asc(rooms.id));
     return storedRooms.map((room) => ({ layout: room.layout, ownerUserId }));
+  }
+
+  async getLastRoomIdForUser(userId: string): Promise<string | undefined> {
+    const [session] = await this.db
+      .select({ roomId: userRoomSessions.roomId })
+      .from(userRoomSessions)
+      .where(eq(userRoomSessions.userId, userId));
+    return session?.roomId;
+  }
+
+  async saveLastRoomIdForUser(userId: string, roomId: string): Promise<void> {
+    await this.db
+      .insert(userRoomSessions)
+      .values({
+        userId,
+        roomId,
+      })
+      .onConflictDoUpdate({
+        target: userRoomSessions.userId,
+        set: {
+          roomId,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async clearLastRoomIdForUser(userId: string): Promise<void> {
+    await this.db.delete(userRoomSessions).where(eq(userRoomSessions.userId, userId));
   }
 }
 

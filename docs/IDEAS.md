@@ -19,6 +19,7 @@ Keep the first version scoped to room presence, movement, and chat foundations: 
 ## Persistent Room Sessions
 
 Added: 2026-05-13 19:21 BST
+Implemented: 2026-05-13
 
 Persist enough session and room-presence state that a logged-in player can reload the page and respawn back into the same room instead of returning to a blank or disconnected starting state.
 

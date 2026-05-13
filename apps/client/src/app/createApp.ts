@@ -1,5 +1,5 @@
-import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
-import { authenticate, updateAppearance } from "../auth/AuthClient";
+import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
+import { type AuthSession, authenticate, updateAppearance } from "../auth/AuthClient";
 import type { Game } from "../game/Game";
 import { CharacterEditor } from "../ui/CharacterEditor";
 import { ChatPanel } from "../ui/ChatPanel";
@@ -19,14 +19,7 @@ export function createApp(root: HTMLElement): void {
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
   const chat = new ChatPanel();
-  let session:
-    | {
-        token: string;
-        user: {
-          appearance: AvatarAppearance;
-        };
-      }
-    | undefined;
+  let session: AuthSession | undefined;
   let game: Game | undefined;
   let gameStarted = false;
   let joinedRoom = false;
@@ -106,6 +99,7 @@ export function createApp(root: HTMLElement): void {
       try {
         const savedAppearance = await updateAppearance(session.token, appearance);
         session.user.appearance = savedAppearance;
+        writeStoredSession(session);
         characterEditor.hide();
 
         if (joinedRoom) {
@@ -142,6 +136,7 @@ export function createApp(root: HTMLElement): void {
 
     try {
       session = await authenticate({ mode, username, password });
+      writeStoredSession(session);
       logOut.classList.remove("hidden");
       characterEditor.setSubmitLabel("Enter room");
       characterEditor.show(session.user.appearance);
@@ -170,6 +165,8 @@ export function createApp(root: HTMLElement): void {
   });
 
   logOut.addEventListener("click", () => {
+    clearStoredSession();
+
     if (gameStarted) {
       game?.stop();
     }
@@ -186,4 +183,76 @@ export function createApp(root: HTMLElement): void {
     chat.element,
   );
   root.replaceChildren(shell);
+
+  const storedSession = readStoredSession();
+
+  if (storedSession) {
+    void restoreSession(storedSession);
+  }
+
+  async function restoreSession(stored: AuthSession): Promise<void> {
+    session = stored;
+    login.hide();
+    logOut.classList.remove("hidden");
+    status.textContent = "connecting";
+
+    try {
+      await (await ensureGame()).start(stored.token);
+      gameStarted = true;
+      browseRooms.classList.remove("hidden");
+      roomBrowser.show();
+      status.textContent = "choose room";
+    } catch (error) {
+      session = undefined;
+      clearStoredSession();
+      login.element.classList.remove("hidden");
+      logOut.classList.add("hidden");
+      chat.hide();
+      status.textContent = error instanceof Error ? error.message : "connection failed";
+    }
+  }
+}
+
+const SESSION_STORAGE_KEY = "tilezo.authSession";
+
+function readStoredSession(): AuthSession | undefined {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+
+    if (!raw) {
+      return undefined;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<AuthSession>;
+
+    if (
+      typeof parsed.token !== "string" ||
+      !parsed.user ||
+      typeof parsed.user.id !== "string" ||
+      typeof parsed.user.username !== "string"
+    ) {
+      return undefined;
+    }
+
+    return parsed as AuthSession;
+  } catch {
+    clearStoredSession();
+    return undefined;
+  }
+}
+
+function writeStoredSession(session: AuthSession): void {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    // Private browsing or storage quota errors should not block play.
+  }
+}
+
+function clearStoredSession(): void {
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // Ignore unavailable browser storage.
+  }
 }

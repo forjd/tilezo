@@ -104,7 +104,9 @@ Simple ping/pong support.
 
 ### `connected`
 
-Sent immediately after a WebSocket connection opens.
+Sent immediately after a WebSocket connection opens. When the authenticated user has a valid
+persisted last room, the server may immediately follow this with `room.snapshot`, `user.joined`,
+and `room.list` messages for the resumed room.
 
 ```json
 {
@@ -115,7 +117,7 @@ Sent immediately after a WebSocket connection opens.
 
 ### `room.snapshot`
 
-Sent after a successful join.
+Sent after a successful join or automatic room resume.
 
 ```json
 {
@@ -130,7 +132,7 @@ Each room user includes `id`, `username`, `position`, and `appearance`.
 
 ### `room.list`
 
-Sent after a room list request and after a successful join.
+Sent after a room list request, a successful join, and an automatic room resume.
 
 ```json
 {

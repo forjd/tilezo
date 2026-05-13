@@ -19,7 +19,7 @@ export function handleMessage(
   ws: ServerWebSocket<SocketData>,
   raw: string | Buffer,
   context: Context,
-) {
+): void {
   const parsed = parseRawClientMessage(raw);
 
   if (!parsed.ok) {
@@ -41,61 +41,7 @@ export function handleMessage(
         return;
       }
 
-      const room = context.rooms.getOrCreate(parsed.value.roomId, ws.data.userId);
-
-      if (!room) {
-        sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
-        return;
-      }
-
-      const previousRoomId = ws.data.roomId;
-
-      if (previousRoomId === room.id) {
-        send(ws, {
-          type: "room.snapshot",
-          roomId: room.id,
-          users: room.getUsers(),
-          tiles: room.getSnapshot().tiles,
-        });
-        send(ws, {
-          type: "room.list",
-          rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
-        });
-        return;
-      }
-
-      if (previousRoomId) {
-        context.rooms.get(previousRoomId)?.leave(ws.data.userId);
-        ws.unsubscribe(roomTopic(previousRoomId));
-        context.publish(roomTopic(previousRoomId), {
-          type: "user.left",
-          userId: ws.data.userId,
-        });
-        context.rooms.removeIfEmpty(previousRoomId);
-      }
-
-      const user = room.join({
-        id: ws.data.userId,
-        username: ws.data.username,
-        appearance: ws.data.appearance ?? DEFAULT_AVATAR_APPEARANCE,
-      });
-
-      ws.data.roomId = room.id;
-      ws.subscribe(roomTopic(room.id));
-      send(ws, {
-        type: "room.snapshot",
-        roomId: room.id,
-        users: room.getUsers(),
-        tiles: room.getSnapshot().tiles,
-      });
-      context.publish(roomTopic(room.id), {
-        type: "user.joined",
-        user,
-      });
-      send(ws, {
-        type: "room.list",
-        rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
-      });
+      void joinRoom(ws, parsed.value.roomId, context, { sendUnavailableError: true });
       break;
     }
 
@@ -219,6 +165,19 @@ export function handleMessage(
   }
 }
 
+export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): void {
+  send(ws, {
+    type: "connected",
+    userId: ws.data.userId,
+  });
+
+  if (!ws.data.resumeRoomId) {
+    return;
+  }
+
+  void joinRoom(ws, ws.data.resumeRoomId, context, { sendUnavailableError: false });
+}
+
 export function handleClose(
   ws: ServerWebSocket<SocketData>,
   rooms: RoomManager,
@@ -231,13 +190,109 @@ export function handleClose(
   }
 
   const room = rooms.get(roomId);
-  room?.leave(userId);
+  if (!room?.leave(userId, ws.data.connectionId)) {
+    return;
+  }
   ws.unsubscribe(roomTopic(roomId));
   publish(roomTopic(roomId), {
     type: "user.left",
     userId,
   });
   rooms.removeIfEmpty(roomId);
+}
+
+async function joinRoom(
+  ws: ServerWebSocket<SocketData>,
+  roomId: string,
+  context: Context,
+  options: { sendUnavailableError: boolean },
+): Promise<void> {
+  const room = context.rooms.getOrCreate(roomId, ws.data.userId);
+
+  if (!room) {
+    if (options.sendUnavailableError) {
+      sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
+    }
+    await clearLastRoomId(context, ws.data.userId);
+    return;
+  }
+
+  const previousRoomId = ws.data.roomId;
+
+  if (previousRoomId === room.id) {
+    send(ws, {
+      type: "room.snapshot",
+      roomId: room.id,
+      users: room.getUsers(),
+      tiles: room.getSnapshot().tiles,
+    });
+    send(ws, {
+      type: "room.list",
+      rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
+    });
+    await saveLastRoomId(context, ws.data.userId, room.id);
+    return;
+  }
+
+  if (previousRoomId) {
+    const previousRoom = context.rooms.get(previousRoomId);
+
+    if (previousRoom?.leave(ws.data.userId, ws.data.connectionId)) {
+      ws.unsubscribe(roomTopic(previousRoomId));
+      context.publish(roomTopic(previousRoomId), {
+        type: "user.left",
+        userId: ws.data.userId,
+      });
+      context.rooms.removeIfEmpty(previousRoomId);
+    }
+  }
+
+  const user = room.join({
+    id: ws.data.userId,
+    username: ws.data.username ?? ws.data.userId,
+    connectionId: ws.data.connectionId,
+    appearance: ws.data.appearance ?? DEFAULT_AVATAR_APPEARANCE,
+  });
+  const userSnapshot = {
+    id: user.id,
+    username: user.username,
+    position: user.position,
+    appearance: user.appearance,
+  };
+
+  ws.data.roomId = room.id;
+  ws.subscribe(roomTopic(room.id));
+  send(ws, {
+    type: "room.snapshot",
+    roomId: room.id,
+    users: room.getUsers(),
+    tiles: room.getSnapshot().tiles,
+  });
+  context.publish(roomTopic(room.id), {
+    type: "user.joined",
+    user: userSnapshot,
+  });
+  send(ws, {
+    type: "room.list",
+    rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
+  });
+  await saveLastRoomId(context, ws.data.userId, room.id);
+}
+
+async function saveLastRoomId(context: Context, userId: string, roomId: string): Promise<void> {
+  try {
+    await context.persistence?.saveLastRoomIdForUser?.(userId, roomId);
+  } catch (error) {
+    console.warn("Unable to persist last joined room", error);
+  }
+}
+
+async function clearLastRoomId(context: Context, userId: string): Promise<void> {
+  try {
+    await context.persistence?.clearLastRoomIdForUser?.(userId);
+  } catch (error) {
+    console.warn("Unable to clear last joined room", error);
+  }
 }
 
 function getJoinedRoom(ws: ServerWebSocket<SocketData>, rooms: RoomManager) {

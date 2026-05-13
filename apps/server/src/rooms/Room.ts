@@ -39,9 +39,16 @@ export class Room {
     return roomUser;
   }
 
-  leave(userId: string): void {
+  leave(userId: string, connectionId?: string): boolean {
+    const user = this.users.get(userId);
+
+    if (!user || (user.connectionId && user.connectionId !== connectionId)) {
+      return false;
+    }
+
     this.users.delete(userId);
     this.movements.delete(userId);
+    return true;
   }
 
   moveUser(userId: string, target: TilePosition): TilePosition[] | null {

@@ -11,12 +11,21 @@ When a browser opens `ws://localhost:3000/ws?token=<auth-token>`, the server:
 1. Verifies the auth token.
 2. Stores socket metadata from the authenticated database user.
 3. Sends a `connected` message.
+4. If persistence has a valid last joined room for the user, rejoins that room automatically.
 
 Socket metadata currently includes:
 
 - `userId`
 - `username`
 - `roomId`
+- `connectionId`
+- `resumeRoomId`
+
+When a browser reloads with a stored auth token, the client opens a new WebSocket with that token.
+If the previous room is still available and joinable by the same user, the server restores room
+membership at the room spawn position, sends a `room.snapshot`, broadcasts `user.joined`, and sends
+an updated `room.list`. If the persisted room is no longer available, the server clears the saved
+room and leaves the client at the room browser.
 
 ## Join
 
@@ -35,6 +44,7 @@ When the client sends `room.join`, the server:
 7. Sends a `room.snapshot` to the joining socket.
 8. Broadcasts `user.joined` to the room topic.
 9. Sends an updated `room.list` to the joining socket.
+10. Persists the room as the user's last joined room when database persistence is available.
 
 Public rooms are loaded from `assets/rooms/public-rooms.json` and expanded into rectangular tile
 layouts at server startup. When persistence is available, the bundled public rooms are seeded into
@@ -81,7 +91,7 @@ The client renders chat with DOM text nodes, not `innerHTML`.
 
 When a WebSocket closes, the server:
 
-1. Removes the user from the joined room.
+1. Removes the user from the joined room only if the closing socket is still the active socket for that user.
 2. Unsubscribes the socket from the room topic.
 3. Broadcasts `user.left`.
 4. Deletes the in-memory room if it is empty.

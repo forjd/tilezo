@@ -54,3 +54,17 @@ export const roomItems = pgTable(
     index("room_items_room_id_position_idx").on(table.roomId, table.x, table.y, table.z),
   ],
 );
+
+export const userRoomSessions = pgTable(
+  "user_room_sessions",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roomId: text("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("user_room_sessions_room_id_idx").on(table.roomId)],
+);

@@ -3,7 +3,9 @@ import type { AvatarAppearance } from "@tilezo/protocol";
 export type SocketData = {
   userId: string;
   username?: string;
+  connectionId?: string;
   roomId?: string;
+  resumeRoomId?: string;
   appearance?: AvatarAppearance;
   rateLimits?: Partial<Record<RateLimitedMessageKind, RateLimitState>>;
   lastTypingState?: boolean;

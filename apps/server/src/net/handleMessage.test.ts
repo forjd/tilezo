@@ -3,7 +3,7 @@ import { createRectRoomLayout } from "@tilezo/engine";
 import { DEFAULT_AVATAR_APPEARANCE, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import { RoomManager } from "../rooms/RoomManager";
-import { handleClose, handleMessage } from "./handleMessage";
+import { handleClose, handleMessage, handleOpen } from "./handleMessage";
 import type { SocketData } from "./socketTypes";
 
 describe("handleMessage", () => {
@@ -40,7 +40,7 @@ describe("handleMessage", () => {
       {
         id: "user_db_1",
         username: "Dan",
-        position: { x: 2, y: 2 },
+        position: { x: 0, y: 2 },
         appearance: DEFAULT_AVATAR_APPEARANCE,
       },
     ]);
@@ -104,6 +104,29 @@ describe("handleMessage", () => {
       type: "room.snapshot",
       roomId: "home_user_db_1",
     });
+  });
+
+  test("persists the last joined room", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const saved: { userId: string; roomId: string }[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "studio" }), {
+      rooms,
+      publish() {},
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {},
+        async saveLastRoomIdForUser(userId, roomId) {
+          saved.push({ userId, roomId });
+        },
+      },
+    });
+    await Promise.resolve();
+
+    expect(saved).toEqual([{ userId: "user_db_1", roomId: "studio" }]);
   });
 
   test("rejects private rooms owned by another user", async () => {
@@ -381,6 +404,101 @@ describe("handleClose", () => {
 
     expect(ws.unsubscribed).toEqual([]);
     expect(published).toEqual([]);
+  });
+
+  test("does not remove a newer reconnect when a stale socket closes", async () => {
+    const rooms = await RoomManager.create();
+    const oldSocket = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_old",
+    });
+    const newSocket = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_new",
+    });
+    const published: ServerMessage[] = [];
+
+    handleMessage(oldSocket, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    handleMessage(newSocket, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    handleClose(oldSocket, rooms, (_topic, message) => published.push(message));
+
+    expect(rooms.get("lobby")?.getUsers()).toEqual([
+      {
+        id: "user_db_1",
+        username: "Dan",
+        position: { x: 0, y: 2 },
+        appearance: DEFAULT_AVATAR_APPEARANCE,
+      },
+    ]);
+    expect(published).toEqual([]);
+  });
+});
+
+describe("handleOpen", () => {
+  test("sends connected and resumes a valid persisted room", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_1",
+      resumeRoomId: "studio",
+    });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const studioTiles = rooms.getOrCreate("studio")?.getSnapshot().tiles ?? [];
+
+    handleOpen(ws, {
+      rooms,
+      publish(topic, message) {
+        published.push({ topic, message });
+      },
+    });
+    await Promise.resolve();
+
+    expect(ws.subscribed).toEqual(["room:studio"]);
+    expect(ws.sent).toEqual([
+      { type: "connected", userId: "user_db_1" },
+      {
+        type: "room.snapshot",
+        roomId: "studio",
+        users: [
+          {
+            id: "user_db_1",
+            username: "Dan",
+            position: { x: 0, y: 2 },
+            appearance: DEFAULT_AVATAR_APPEARANCE,
+          },
+        ],
+        tiles: studioTiles,
+      },
+      {
+        type: "room.list",
+        rooms: [
+          { id: "lobby", name: "Lobby", userCount: 0, joined: false },
+          { id: "atrium", name: "Atrium", userCount: 0, joined: false },
+          { id: "studio", name: "Studio", userCount: 1, joined: true },
+        ],
+      },
+    ]);
+    expect(published).toContainEqual({
+      topic: "room:studio",
+      message: {
+        type: "user.joined",
+        user: {
+          id: "user_db_1",
+          username: "Dan",
+          position: { x: 0, y: 2 },
+          appearance: DEFAULT_AVATAR_APPEARANCE,
+        },
+      },
+    });
   });
 });
 

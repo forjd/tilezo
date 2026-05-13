@@ -6,6 +6,7 @@ export type RoomUser = {
   username: string;
   position: TilePosition;
   appearance: AvatarAppearance;
+  connectionId?: string;
 };
 
 export type RoomSnapshot = {

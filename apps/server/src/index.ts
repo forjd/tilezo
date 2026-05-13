@@ -4,10 +4,11 @@ import { AuthError, AuthService, DrizzleAuthStore } from "./auth/auth";
 import { getConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
-import { handleClose, handleMessage } from "./net/handleMessage";
+import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { createPersonalRoomLayout } from "./rooms/personalRoom";
 import { RoomManager } from "./rooms/RoomManager";
+import { createId } from "./util/ids";
 import { encodeServerMessage } from "./util/safeJson";
 
 const config = getConfig();
@@ -54,6 +55,8 @@ const server = Bun.serve<SocketData>({
         data: {
           userId: user.id,
           username: user.username,
+          connectionId: createId("socket"),
+          resumeRoomId: await readResumeRoomId(user.id, persistence),
           appearance: user.appearance,
         },
       });
@@ -79,12 +82,11 @@ const server = Bun.serve<SocketData>({
     backpressureLimit: MAX_RAW_MESSAGE_BYTES * 4,
     closeOnBackpressureLimit: true,
     open(ws) {
-      ws.send(
-        encodeServerMessage({
-          type: "connected",
-          userId: ws.data.userId,
-        }),
-      );
+      handleOpen(ws, {
+        rooms,
+        publish,
+        persistence,
+      });
     },
     message(ws, message) {
       if (typeof message === "string" || Buffer.isBuffer(message)) {
@@ -115,6 +117,18 @@ function publish(topic: string, message: ServerMessage): void {
 
   if (result === -1) {
     console.warn(`Dropped message for topic ${topic} due to WebSocket backpressure`);
+  }
+}
+
+async function readResumeRoomId(
+  userId: string,
+  store: PersistenceStore | undefined,
+): Promise<string | undefined> {
+  try {
+    return await store?.getLastRoomIdForUser?.(userId);
+  } catch (error) {
+    console.warn("Unable to read last joined room", error);
+    return undefined;
   }
 }
 
