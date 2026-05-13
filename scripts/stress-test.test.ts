@@ -11,6 +11,7 @@ describe("stress-test CLI", () => {
     const output = decoder.decode(result.stdout);
 
     expect(output).toContain("Usage: bun run stress -- [options]");
+    expect(output).toContain("--auth-mode <name>");
     expect(output).toContain("--duration <seconds>");
     expect(output).toContain("--preseed-users");
     expect(output).toContain("--request-timeout-ms <ms>");
@@ -35,6 +36,16 @@ describe("stress-test CLI", () => {
     expect(options.setupConcurrency).toBe(2);
   });
 
+  test("parses explicit auth benchmark modes", () => {
+    const loginOptions = parseArgs(["--scenario", "auth", "--auth-mode", "login"]);
+    const registerOptions = parseArgs(["--scenario", "auth", "--auth-mode", "register"]);
+    const preseedOptions = parseArgs(["--scenario", "auth", "--preseed-users"]);
+
+    expect(loginOptions.authMode).toBe("login");
+    expect(registerOptions.authMode).toBe("register");
+    expect(preseedOptions.authMode).toBe("login");
+  });
+
   test("rejects invalid scenarios before running load", () => {
     const result = Bun.spawnSync([
       "bun",
@@ -47,6 +58,15 @@ describe("stress-test CLI", () => {
     expect(result.exitCode).not.toBe(0);
     expect(decoder.decode(result.stderr)).toContain(
       "--scenario must be one of auth, room, movement, chat, full",
+    );
+  });
+
+  test("rejects auth modes outside the auth scenario", () => {
+    expect(() => parseArgs(["--scenario", "full", "--auth-mode", "login"])).toThrow(
+      "--auth-mode can only be used with --scenario auth",
+    );
+    expect(() => parseArgs(["--scenario", "auth", "--auth-mode", "refresh"])).toThrow(
+      "--auth-mode must be one of register, login, register-login",
     );
   });
 

@@ -7,9 +7,11 @@ import {
 } from "../packages/protocol/src";
 
 type Scenario = "auth" | "room" | "movement" | "chat" | "full";
+type AuthMode = "register" | "login" | "register-login";
 
 export type StressOptions = {
   apiUrl: string;
+  authMode: AuthMode;
   wsUrl: string;
   bots: number;
   concurrency: number;
@@ -62,6 +64,7 @@ type LatencySummary = {
 
 const DEFAULT_OPTIONS: StressOptions = {
   apiUrl: "http://localhost:3000",
+  authMode: "register-login",
   wsUrl: "ws://localhost:3000/ws",
   bots: 25,
   concurrency: 10,
@@ -128,8 +131,10 @@ export function parseArgs(args: string[]): StressOptions {
 
 export async function runStressTest(options: StressOptions): Promise<BotResult[]> {
   const botIds = Array.from({ length: options.bots }, (_, index) => index + 1);
+  const shouldPreseedUsers =
+    options.preseedUsers || (options.scenario === "auth" && options.authMode === "login");
 
-  if (options.preseedUsers) {
+  if (shouldPreseedUsers) {
     const setupResults = await runConcurrent(botIds, options.setupConcurrency, (botId) =>
       preseedBot(botId, options),
     );
@@ -181,6 +186,12 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
   let socket: WebSocket | undefined;
 
   try {
+    if (options.scenario === "auth") {
+      await runAuthScenario(username, options, timings, samples);
+      timings.total = performance.now() - totalStart;
+      return { botId, username, ok: true, timings, samples, counters };
+    }
+
     let session: BotSession;
 
     if (options.preseedUsers) {
@@ -208,11 +219,6 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
             ),
           )
         : registered;
-    }
-
-    if (options.scenario === "auth") {
-      timings.total = performance.now() - totalStart;
-      return { botId, username, ok: true, timings, samples, counters };
     }
 
     if (!options.preseedUsers) {
@@ -282,6 +288,30 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
     };
   } finally {
     socket?.close();
+  }
+}
+
+async function runAuthScenario(
+  username: string,
+  options: StressOptions,
+  timings: Record<string, number>,
+  samples: SampleBag,
+): Promise<void> {
+  if (options.authMode === "login") {
+    await timed(timings, samples, "login", () =>
+      authenticate(options.apiUrl, "login", username, options.password, options.requestTimeoutMs),
+    );
+    return;
+  }
+
+  await timed(timings, samples, "register", () =>
+    authenticate(options.apiUrl, "register", username, options.password, options.requestTimeoutMs),
+  );
+
+  if (options.authMode === "register-login") {
+    await timed(timings, samples, "login", () =>
+      authenticate(options.apiUrl, "login", username, options.password, options.requestTimeoutMs),
+    );
   }
 }
 
@@ -679,6 +709,9 @@ function applyOption(options: StressOptions, key: string, value: string): void {
     case "api":
       options.apiUrl = value;
       break;
+    case "auth-mode":
+      options.authMode = parseAuthMode(value);
+      break;
     case "ws":
       options.wsUrl = value;
       break;
@@ -749,7 +782,27 @@ function validateOptions(options: StressOptions): StressOptions {
     throw new Error("--room cannot be empty");
   }
 
+  if (options.scenario !== "auth" && options.authMode !== DEFAULT_OPTIONS.authMode) {
+    throw new Error("--auth-mode can only be used with --scenario auth");
+  }
+
+  if (
+    options.scenario === "auth" &&
+    options.preseedUsers &&
+    options.authMode === "register-login"
+  ) {
+    options.authMode = "login";
+  }
+
   return options;
+}
+
+function parseAuthMode(value: string): AuthMode {
+  if (value === "register" || value === "login" || value === "register-login") {
+    return value;
+  }
+
+  throw new Error("--auth-mode must be one of register, login, register-login");
 }
 
 function parseScenario(value: string): Scenario {
@@ -813,7 +866,7 @@ function isBooleanFlag(key: string): boolean {
 }
 
 function includesAuthLogin(scenario: Scenario): boolean {
-  return scenario === "auth" || scenario === "full";
+  return scenario === "full";
 }
 
 function includesMovement(scenario: Scenario): boolean {
@@ -894,6 +947,9 @@ function printSummary(options: StressOptions, results: BotResult[]): void {
 
   console.log("Tilezo stress test");
   console.log(`Scenario: ${options.scenario}`);
+  if (options.scenario === "auth") {
+    console.log(`Auth mode: ${options.authMode}`);
+  }
   console.log(`Seed: ${options.seed.toString()}`);
   if (options.preseedUsers) {
     console.log(`Preseed: enabled (setup concurrency: ${options.setupConcurrency.toString()})`);
@@ -996,6 +1052,7 @@ function printUsage(): void {
 
 Options:
   --api <url>              HTTP API URL (default: http://localhost:3000)
+  --auth-mode <name>       Auth scenario mode: register, login, or register-login
   --ws <url>               WebSocket URL (default: ws://localhost:3000/ws)
   --bots <count>           Number of simulated users (default: 25)
   --concurrency <count>    Concurrent simulated users (default: 10)
