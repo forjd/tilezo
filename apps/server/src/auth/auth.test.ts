@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { AuthService, normalizeUsername } from "./auth";
+import { AuthBackpressureError, AuthPasswordLimiter, AuthService, normalizeUsername } from "./auth";
 
 describe("normalizeUsername", () => {
   test("trims and lowercases usernames for uniqueness checks", () => {
@@ -90,6 +90,47 @@ describe("AuthService", () => {
   });
 });
 
+describe("AuthPasswordLimiter", () => {
+  test("caps active password work and rejects when the wait queue is full", async () => {
+    const limiter = new AuthPasswordLimiter({ concurrency: 1, maxQueue: 1, timeoutMs: 1000 });
+    const firstTask = createDeferred<string>();
+
+    const first = limiter.run(() => firstTask.promise);
+    const second = limiter.run(async () => "second");
+
+    await expect(limiter.run(async () => "third")).rejects.toBeInstanceOf(AuthBackpressureError);
+
+    firstTask.resolve("first");
+
+    expect(await first).toBe("first");
+    expect(await second).toBe("second");
+  });
+
+  test("records password and store timings through AuthService metrics", async () => {
+    let now = 0;
+    const observed: { histogram: string; valueMs: number }[] = [];
+    const auth = new AuthService(createAuthStore(), {
+      secret: "test-secret",
+      now: () => now,
+      passwordHash: async () => {
+        now += 25;
+        return "hashed-password";
+      },
+      metrics: {
+        increment() {},
+        observe(histogram, valueMs) {
+          observed.push({ histogram, valueMs });
+        },
+      },
+    });
+
+    await auth.createUser("Dan", "correct horse battery staple");
+
+    expect(observed).toContainEqual({ histogram: "auth.password_hash.duration", valueMs: 25 });
+    expect(observed.some((sample) => sample.histogram === "auth.user_create.duration")).toBe(true);
+  });
+});
+
 const RANDOM_APPEARANCE: AvatarAppearance = {
   hair: "bob",
   hairColor: "#3b2418",
@@ -150,4 +191,15 @@ function createAuthStore() {
 function createSequenceRandom(values: readonly number[]): () => number {
   let index = 0;
   return () => values[index++] ?? 0;
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
 }

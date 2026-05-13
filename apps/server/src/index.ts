@@ -1,6 +1,6 @@
 import type { ServerMessage } from "@tilezo/protocol";
 import { avatarAppearanceSchema, MAX_RAW_MESSAGE_BYTES } from "@tilezo/protocol";
-import { AuthError, AuthService, DrizzleAuthStore } from "./auth/auth";
+import { AuthError, AuthPasswordLimiter, AuthService, DrizzleAuthStore } from "./auth/auth";
 import { getConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
@@ -28,7 +28,15 @@ metrics.startEventLoopMonitor();
 const database = createDatabase(config.databaseUrl);
 const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
 const auth = database
-  ? new AuthService(new DrizzleAuthStore(database), { secret: config.authSecret })
+  ? new AuthService(new DrizzleAuthStore(database), {
+      secret: config.authSecret,
+      metrics,
+      passwordLimiter: new AuthPasswordLimiter({
+        concurrency: config.authPasswordConcurrency,
+        maxQueue: config.authPasswordQueueLimit,
+        timeoutMs: config.authPasswordWaitTimeoutMs,
+      }),
+    })
   : undefined;
 const rooms = await RoomManager.create({ persistence });
 
@@ -234,7 +242,11 @@ async function handleAuthRequest(
   } catch (error) {
     if (error instanceof AuthError) {
       roomProvisioning.logger.warn("auth.failed", { mode, code: error.code });
-      return authJson({ error: { code: error.code, message: error.message } }, authStatus(error));
+      return authJson(
+        { error: { code: error.code, message: error.message } },
+        authStatus(error),
+        authHeaders(error),
+      );
     }
 
     roomProvisioning.logger.warn("auth.invalid_request", { mode, error });
@@ -478,6 +490,10 @@ function sanitizeClientFields(value: unknown): Record<string, unknown> {
 }
 
 function authStatus(error: AuthError): number {
+  if (error.code === "AUTH_BUSY") {
+    return 429;
+  }
+
   if (error.code === "USERNAME_TAKEN") {
     return 409;
   }
@@ -493,14 +509,18 @@ function authStatus(error: AuthError): number {
   return 400;
 }
 
+function authHeaders(error: AuthError): Record<string, string> {
+  return error.code === "AUTH_BUSY" ? { "retry-after": "1" } : {};
+}
+
 function readBearerToken(request: Request): string | undefined {
   const authorization = request.headers.get("authorization");
   const [scheme, token] = authorization?.split(" ") ?? [];
   return scheme?.toLocaleLowerCase("en-US") === "bearer" ? token : undefined;
 }
 
-function authJson(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: corsHeaders() });
+function authJson(body: unknown, status: number, headers: Record<string, string> = {}): Response {
+  return Response.json(body, { status, headers: { ...corsHeaders(), ...headers } });
 }
 
 function corsHeaders(): Record<string, string> {

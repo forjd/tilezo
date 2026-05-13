@@ -41,17 +41,41 @@ export type AuthStore = {
 };
 
 type AuthOptions = {
+  metrics?: AuthMetrics;
+  now?: () => number;
+  passwordHash?: (password: string) => Promise<string>;
+  passwordLimiter?: AuthPasswordLimiter;
+  passwordVerify?: (password: string, passwordHash: string) => Promise<boolean>;
   random?: () => number;
   secret: string;
+};
+
+type AuthMetrics = {
+  increment(counter: string, amount?: number): void;
+  observe(histogram: string, valueMs: number): void;
+};
+
+type AuthPasswordWaiter = {
+  reject: (error: AuthBackpressureError) => void;
+  resolve: (release: () => void) => void;
+  timeout: ReturnType<typeof setTimeout>;
 };
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export class AuthService {
+  private readonly now: () => number;
+  private readonly passwordHash: (password: string) => Promise<string>;
+  private readonly passwordVerify: (password: string, passwordHash: string) => Promise<boolean>;
+
   constructor(
     private readonly store: AuthStore,
     private readonly options: AuthOptions,
-  ) {}
+  ) {
+    this.now = options.now ?? (() => performance.now());
+    this.passwordHash = options.passwordHash ?? Bun.password.hash;
+    this.passwordVerify = options.passwordVerify ?? verifyPassword;
+  }
 
   async createUser(usernameInput: string, password: string): Promise<AuthSession> {
     const username = usernameInput.trim();
@@ -61,13 +85,17 @@ export class AuthService {
       throw new AuthError("INVALID_AUTH_INPUT", "Username and password are required");
     }
 
+    const passwordHash = await this.runPasswordTask("hash", () => this.passwordHash(password));
+
     try {
-      const user = await this.store.createUser({
-        appearance: createRandomAvatarAppearance(this.options.random),
-        username,
-        usernameKey,
-        passwordHash: await Bun.password.hash(password),
-      });
+      const user = await this.measure("auth.user_create.duration", () =>
+        this.store.createUser({
+          appearance: createRandomAvatarAppearance(this.options.random),
+          username,
+          usernameKey,
+          passwordHash,
+        }),
+      );
       return this.createSession(user);
     } catch {
       throw new AuthError("USERNAME_TAKEN", "Username is already taken");
@@ -75,9 +103,14 @@ export class AuthService {
   }
 
   async login(username: string, password: string): Promise<AuthSession> {
-    const user = await this.store.findUserByUsernameKey(normalizeUsername(username));
+    const user = await this.measure("auth.user_lookup.duration", () =>
+      this.store.findUserByUsernameKey(normalizeUsername(username)),
+    );
+    const passwordMatches = user
+      ? await this.runPasswordTask("verify", () => this.passwordVerify(password, user.passwordHash))
+      : false;
 
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    if (!user || !passwordMatches) {
       throw new AuthError("INVALID_CREDENTIALS", "Invalid username or password");
     }
 
@@ -91,7 +124,9 @@ export class AuthService {
       return undefined;
     }
 
-    const user = await this.store.findUserById(parsed.userId);
+    const user = await this.measure("auth.user_token_lookup.duration", () =>
+      this.store.findUserById(parsed.userId),
+    );
     return user ? toAuthUser(user) : undefined;
   }
 
@@ -102,7 +137,9 @@ export class AuthService {
       throw new AuthError("INVALID_APPEARANCE", "Invalid character appearance");
     }
 
-    const user = await this.store.updateUserAppearance(userId, parsed.data);
+    const user = await this.measure("auth.appearance_update.duration", () =>
+      this.store.updateUserAppearance(userId, parsed.data),
+    );
 
     if (!user) {
       throw new AuthError("USER_NOT_FOUND", "User not found");
@@ -142,7 +179,110 @@ export class AuthService {
   private sign(payload: string): string {
     return createHmac("sha256", this.options.secret).update(payload).digest("base64url");
   }
+
+  private async runPasswordTask<T>(operation: "hash" | "verify", task: () => Promise<T>) {
+    const limiter = this.options.passwordLimiter;
+    const queueStartedAt = this.now();
+
+    try {
+      return await this.measure(`auth.password_${operation}.duration`, async () => {
+        if (!limiter) {
+          return await task();
+        }
+
+        return await limiter.run(async () => {
+          this.options.metrics?.observe(
+            `auth.password_${operation}.queue_wait.duration`,
+            this.now() - queueStartedAt,
+          );
+          return await task();
+        });
+      });
+    } catch (error) {
+      if (error instanceof AuthBackpressureError) {
+        this.options.metrics?.increment(`auth.password_${operation}.rejected`);
+        throw new AuthError("AUTH_BUSY", "Authentication is busy, try again shortly");
+      }
+
+      throw error;
+    }
+  }
+
+  private async measure<T>(histogram: string, task: () => Promise<T>): Promise<T> {
+    const startedAt = this.now();
+
+    try {
+      return await task();
+    } finally {
+      this.options.metrics?.observe(histogram, this.now() - startedAt);
+    }
+  }
 }
+
+export class AuthPasswordLimiter {
+  private active = 0;
+  private readonly queue: AuthPasswordWaiter[] = [];
+
+  constructor(
+    private readonly options: {
+      concurrency: number;
+      maxQueue: number;
+      timeoutMs: number;
+    },
+  ) {}
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    const release = await this.acquire();
+
+    try {
+      return await task();
+    } finally {
+      release();
+    }
+  }
+
+  private acquire(): Promise<() => void> {
+    if (this.active < this.options.concurrency) {
+      this.active += 1;
+      return Promise.resolve(() => this.release());
+    }
+
+    if (this.queue.length >= this.options.maxQueue) {
+      return Promise.reject(new AuthBackpressureError("Auth password queue is full"));
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter: AuthPasswordWaiter = {
+        reject,
+        resolve,
+        timeout: setTimeout(() => {
+          const index = this.queue.indexOf(waiter);
+
+          if (index >= 0) {
+            this.queue.splice(index, 1);
+          }
+
+          reject(new AuthBackpressureError("Auth password queue timed out"));
+        }, this.options.timeoutMs),
+      };
+      this.queue.push(waiter);
+    });
+  }
+
+  private release(): void {
+    const waiter = this.queue.shift();
+
+    if (!waiter) {
+      this.active = Math.max(0, this.active - 1);
+      return;
+    }
+
+    clearTimeout(waiter.timeout);
+    waiter.resolve(() => this.release());
+  }
+}
+
+export class AuthBackpressureError extends Error {}
 
 export class DrizzleAuthStore implements AuthStore {
   constructor(private readonly db: TilezoDatabase) {}

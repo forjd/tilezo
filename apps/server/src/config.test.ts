@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { getConfig } from "./config";
+import {
+  DEFAULT_AUTH_PASSWORD_CONCURRENCY,
+  DEFAULT_AUTH_PASSWORD_QUEUE_LIMIT,
+  DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS,
+  getConfig,
+} from "./config";
 
 describe("getConfig", () => {
   test("uses Docker-friendly host and local defaults", () => {
@@ -8,6 +13,9 @@ describe("getConfig", () => {
       port: 3000,
       databaseUrl: undefined,
       authSecret: "tilezo-development-secret",
+      authPasswordConcurrency: DEFAULT_AUTH_PASSWORD_CONCURRENCY,
+      authPasswordQueueLimit: DEFAULT_AUTH_PASSWORD_QUEUE_LIMIT,
+      authPasswordWaitTimeoutMs: DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS,
       nodeEnv: "development",
     });
   });
@@ -19,6 +27,9 @@ describe("getConfig", () => {
         PORT: "4000",
         DATABASE_URL: "postgres://postgres:postgres@localhost:5432/tilezo",
         AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        AUTH_PASSWORD_CONCURRENCY: "2",
+        AUTH_PASSWORD_QUEUE_LIMIT: "8",
+        AUTH_PASSWORD_WAIT_TIMEOUT_MS: "1500",
         NODE_ENV: "production",
       }),
     ).toEqual({
@@ -26,6 +37,9 @@ describe("getConfig", () => {
       port: 4000,
       databaseUrl: "postgres://postgres:postgres@localhost:5432/tilezo",
       authSecret: "0123456789abcdef0123456789abcdef",
+      authPasswordConcurrency: 2,
+      authPasswordQueueLimit: 8,
+      authPasswordWaitTimeoutMs: 1500,
       nodeEnv: "production",
     });
   });
@@ -33,6 +47,18 @@ describe("getConfig", () => {
   test("rejects invalid ports", () => {
     expect(() => getConfig({ PORT: "nan" })).toThrow("PORT must be an integer");
     expect(() => getConfig({ PORT: "70000" })).toThrow("PORT must be an integer");
+  });
+
+  test("rejects invalid auth password backpressure settings", () => {
+    expect(() => getConfig({ AUTH_PASSWORD_CONCURRENCY: "0" })).toThrow(
+      "AUTH_PASSWORD_CONCURRENCY must be a positive integer",
+    );
+    expect(() => getConfig({ AUTH_PASSWORD_QUEUE_LIMIT: "-1" })).toThrow(
+      "AUTH_PASSWORD_QUEUE_LIMIT must be a non-negative integer",
+    );
+    expect(() => getConfig({ AUTH_PASSWORD_WAIT_TIMEOUT_MS: "0" })).toThrow(
+      "AUTH_PASSWORD_WAIT_TIMEOUT_MS must be a positive integer",
+    );
   });
 
   test("requires production database and strong auth secret", () => {
