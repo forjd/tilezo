@@ -30,6 +30,9 @@ export class Avatar {
   private readonly chatBubble = new Container();
   private readonly chatBubbleBackground = new Graphics();
   private readonly chatBubbleText: Text;
+  private readonly typingIndicator = new Container();
+  private readonly typingIndicatorBackground = new Graphics();
+  private readonly typingIndicatorText: Text;
   private readonly label: Text;
   private path: TilePosition[] = [];
   private fromScreen: ScreenPosition;
@@ -40,6 +43,7 @@ export class Avatar {
   private animationSeconds = 0;
   private renderedBodyKey = "";
   private chatBubbleSecondsRemaining = 0;
+  private isTyping = false;
   private readonly secondsPerTile = 0.36;
   private readonly chatBubbleDurationSeconds = 4.5;
 
@@ -89,7 +93,25 @@ export class Avatar {
     this.chatBubble.visible = false;
     this.chatBubble.addChild(this.chatBubbleBackground, this.chatBubbleText);
 
-    this.view.addChild(this.body, this.label, this.chatBubble);
+    this.typingIndicatorText = new Text({
+      text: "...",
+      style: {
+        align: "center",
+        fill: 0x1d2324,
+        fontFamily: "Verdana, Arial, sans-serif",
+        fontSize: 15,
+        fontWeight: "900",
+        letterSpacing: 1,
+        padding: 2,
+      },
+    });
+    this.typingIndicatorText.anchor.set(0.5, 1);
+    this.typingIndicatorText.y = -102;
+    this.typingIndicator.visible = false;
+    this.typingIndicator.addChild(this.typingIndicatorBackground, this.typingIndicatorText);
+    this.drawTypingIndicator();
+
+    this.view.addChild(this.body, this.label, this.chatBubble, this.typingIndicator);
     this.rebuildBody();
     this.syncViewToTile(position);
   }
@@ -111,7 +133,13 @@ export class Avatar {
     this.chatBubbleText.text = lines.join("\n");
     this.chatBubbleSecondsRemaining = this.chatBubbleDurationSeconds;
     this.chatBubble.visible = true;
+    this.syncTypingIndicatorVisibility();
     this.drawChatBubble(lines);
+  }
+
+  setTyping(isTyping: boolean): void {
+    this.isTyping = isTyping;
+    this.syncTypingIndicatorVisibility();
   }
 
   setPath(path: TilePosition[]): void {
@@ -221,6 +249,7 @@ export class Avatar {
 
     if (this.chatBubbleSecondsRemaining === 0) {
       this.chatBubble.visible = false;
+      this.syncTypingIndicatorVisibility();
     }
   }
 
@@ -241,6 +270,24 @@ export class Avatar {
       color: 0x442f24,
       width: 2,
     });
+  }
+
+  private drawTypingIndicator(): void {
+    const width = 42;
+    const height = 24;
+    const x = -width / 2;
+    const y = this.typingIndicatorText.y - height + 3;
+
+    this.typingIndicatorBackground.clear();
+    this.typingIndicatorBackground.roundRect(x, y, width, height, 12).fill(0xffffff);
+    this.typingIndicatorBackground.roundRect(x, y, width, height, 12).stroke({
+      color: 0x442f24,
+      width: 2,
+    });
+  }
+
+  private syncTypingIndicatorVisibility(): void {
+    this.typingIndicator.visible = this.isTyping && !this.chatBubble.visible;
   }
 
   private rebuildBody(): void {

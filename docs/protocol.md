@@ -56,6 +56,17 @@ Send a plain room chat message.
 }
 ```
 
+### `chat.typing`
+
+Send transient typing state for the current room.
+
+```json
+{
+  "type": "chat.typing",
+  "isTyping": true
+}
+```
+
 ### `avatar.appearance.update`
 
 Broadcast the authenticated user's saved character appearance to the current room after the profile
@@ -229,6 +240,19 @@ Broadcast after the server accepts a chat message.
   "username": "Tom",
   "text": "Hi",
   "sentAt": "2026-05-10T12:00:00.000Z"
+}
+```
+
+### `chat.typing`
+
+Broadcast after the server accepts a typing state update.
+
+```json
+{
+  "type": "chat.typing",
+  "userId": "user_...",
+  "username": "Tom",
+  "isTyping": true
 }
 ```
 

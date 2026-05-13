@@ -127,6 +127,32 @@ describe("Avatar", () => {
     expect(state.label.visible).toBe(true);
   });
 
+  test("shows typing indicators when no chat bubble is visible", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubble: { visible: boolean };
+      typingIndicator: { visible: boolean };
+    };
+
+    avatar.setTyping(true);
+
+    expect(state.typingIndicator.visible).toBe(true);
+
+    avatar.say("hello room");
+
+    expect(state.chatBubble.visible).toBe(true);
+    expect(state.typingIndicator.visible).toBe(false);
+
+    avatar.update(5);
+
+    expect(state.chatBubble.visible).toBe(false);
+    expect(state.typingIndicator.visible).toBe(true);
+
+    avatar.setTyping(false);
+
+    expect(state.typingIndicator.visible).toBe(false);
+  });
+
   test("keeps long unbroken chat messages inside the bubble line budget", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {

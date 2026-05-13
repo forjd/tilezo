@@ -20,6 +20,11 @@ export type ChatSayMessage = {
   text: string;
 };
 
+export type ChatTypingMessage = {
+  type: "chat.typing";
+  isTyping: boolean;
+};
+
 export type AvatarAppearanceUpdateMessage = {
   type: "avatar.appearance.update";
   appearance: AvatarAppearance;
@@ -35,6 +40,7 @@ export type ClientMessage =
   | RoomListRequestMessage
   | AvatarMoveRequestMessage
   | ChatSayMessage
+  | ChatTypingMessage
   | AvatarAppearanceUpdateMessage
   | PingMessage;
 
@@ -99,6 +105,13 @@ export type ChatMessage = {
   sentAt: string;
 };
 
+export type ChatTypingStatusMessage = {
+  type: "chat.typing";
+  userId: string;
+  username: string;
+  isTyping: boolean;
+};
+
 export type PongMessage = {
   type: "pong";
   sentAt: string;
@@ -119,5 +132,6 @@ export type ServerMessage =
   | AvatarMovedMessage
   | AvatarAppearanceUpdatedMessage
   | ChatMessage
+  | ChatTypingStatusMessage
   | PongMessage
   | ErrorMessage;

@@ -48,6 +48,11 @@ export const chatSayMessageSchema = z.object({
   text: trimmedString(CHAT_MAX_LENGTH),
 });
 
+export const chatTypingMessageSchema = z.object({
+  type: z.literal("chat.typing"),
+  isTyping: z.boolean(),
+});
+
 export const avatarAppearanceSchema = z.object({
   hair: z.enum(AVATAR_HAIR_STYLES),
   hairColor: z.enum(AVATAR_HAIR_COLORS),
@@ -75,6 +80,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   roomListRequestMessageSchema,
   avatarMoveRequestMessageSchema,
   chatSayMessageSchema,
+  chatTypingMessageSchema,
   avatarAppearanceUpdateMessageSchema,
   pingMessageSchema,
 ]);

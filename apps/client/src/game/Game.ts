@@ -69,6 +69,9 @@ export class Game {
     this.options.chat.onSend((text) => {
       this.net.send({ type: "chat.say", text });
     });
+    this.options.chat.onTypingChange((isTyping) => {
+      this.net.send({ type: "chat.typing", isTyping });
+    });
 
     this.app.ticker.add((ticker) => {
       this.scene?.update(ticker.deltaMS / 1000);

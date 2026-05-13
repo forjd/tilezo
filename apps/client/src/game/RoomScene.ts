@@ -74,7 +74,11 @@ export class RoomScene {
         this.avatars.get(message.userId)?.setAppearance(message.appearance);
         break;
       case "chat.message":
+        this.avatars.get(message.userId)?.setTyping(false);
         this.avatars.get(message.userId)?.say(message.text);
+        break;
+      case "chat.typing":
+        this.avatars.get(message.userId)?.setTyping(message.isTyping);
         break;
     }
   }

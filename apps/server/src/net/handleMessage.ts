@@ -163,6 +163,23 @@ export function handleMessage(
       break;
     }
 
+    case "chat.typing": {
+      const room = getJoinedRoom(ws, context.rooms);
+
+      if (!room || !ws.data.username) {
+        sendError(ws, "NOT_IN_ROOM", "Join a room before typing");
+        return;
+      }
+
+      context.publish(roomTopic(room.id), {
+        type: "chat.typing",
+        userId: ws.data.userId,
+        username: ws.data.username,
+        isTyping: parsed.value.isTyping,
+      });
+      break;
+    }
+
     case "ping":
       send(ws, {
         type: "pong",

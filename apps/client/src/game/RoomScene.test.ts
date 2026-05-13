@@ -65,6 +65,33 @@ describe("RoomScene", () => {
     expect(avatarState(avatars.get("user_2")).chatBubbleText.text).toBe("hi there");
   });
 
+  test("shows and clears typing indicators above the matching avatar", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.handleServerMessage(snapshot([user("user_1", "Dan", { x: 0, y: 0 })]));
+    scene.handleServerMessage({
+      type: "chat.typing",
+      userId: "user_1",
+      username: "Dan",
+      isTyping: true,
+    });
+
+    const avatar = avatarState(sceneState(scene).avatars.get("user_1"));
+    expect(avatar.typingIndicator.visible).toBe(true);
+
+    scene.handleServerMessage({
+      type: "chat.message",
+      userId: "user_1",
+      username: "Dan",
+      text: "done",
+      sentAt: "2026-05-11T12:00:00.000Z",
+    });
+
+    expect(avatar.typingIndicator.visible).toBe(false);
+    expect(avatar.chatBubble.visible).toBe(true);
+  });
+
   test("requests movement only when clicking walkable tiles", () => {
     const app = createApp();
     const moves: unknown[] = [];
@@ -187,10 +214,12 @@ function sceneState(scene: RoomScene): {
 function avatarState(avatar?: { view: Container }): {
   chatBubble: { visible: boolean };
   chatBubbleText: { text: string };
+  typingIndicator: { visible: boolean };
 } {
   return avatar as unknown as {
     chatBubble: { visible: boolean };
     chatBubbleText: { text: string };
+    typingIndicator: { visible: boolean };
   };
 }
 

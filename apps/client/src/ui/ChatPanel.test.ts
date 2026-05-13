@@ -58,6 +58,22 @@ describe("ChatPanel", () => {
     expect(input.value).toBe("ignored");
   });
 
+  test("emits typing status from input changes and message sends", () => {
+    installDocument();
+    const panel = new ChatPanel();
+    const statuses: boolean[] = [];
+    const input = getInput(panel);
+
+    panel.onTypingChange((isTyping) => statuses.push(isTyping));
+    input.value = "h";
+    input.dispatch("input", {});
+    input.value = "hi";
+    input.dispatch("input", {});
+    input.dispatch("keydown", { key: "Enter" });
+
+    expect(statuses).toEqual([true, false]);
+  });
+
   test("appends chat messages and scrolls the list", () => {
     installDocument();
     const panel = new ChatPanel();

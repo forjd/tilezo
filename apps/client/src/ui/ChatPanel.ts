@@ -4,6 +4,9 @@ export class ChatPanel {
   private readonly list = document.createElement("div");
   private readonly input = document.createElement("input");
   private sendHandler?: (text: string) => void;
+  private typingHandler?: (isTyping: boolean) => void;
+  private typingTimeout?: ReturnType<typeof setTimeout>;
+  private isTyping = false;
 
   constructor() {
     this.element.className = "chat-panel hidden";
@@ -25,6 +28,11 @@ export class ChatPanel {
 
       this.sendHandler?.(text);
       this.input.value = "";
+      this.setTyping(false);
+    });
+
+    this.input.addEventListener("input", () => {
+      this.handleInputChanged();
     });
 
     this.element.append(this.list, this.input);
@@ -41,10 +49,16 @@ export class ChatPanel {
 
   clear(): void {
     this.list.replaceChildren();
+    this.input.value = "";
+    this.setTyping(false);
   }
 
   onSend(handler: (text: string) => void): void {
     this.sendHandler = handler;
+  }
+
+  onTypingChange(handler: (isTyping: boolean) => void): void {
+    this.typingHandler = handler;
   }
 
   focusInput(): void {
@@ -66,5 +80,33 @@ export class ChatPanel {
     message.append(author, body);
     this.list.append(message);
     this.list.scrollTop = this.list.scrollHeight;
+  }
+
+  private handleInputChanged(): void {
+    const hasText = this.input.value.trim().length > 0;
+
+    if (!hasText) {
+      this.setTyping(false);
+      return;
+    }
+
+    this.setTyping(true);
+    this.typingTimeout = setTimeout(() => {
+      this.setTyping(false);
+    }, 1800);
+  }
+
+  private setTyping(isTyping: boolean): void {
+    if (this.typingTimeout) {
+      clearTimeout(this.typingTimeout);
+      this.typingTimeout = undefined;
+    }
+
+    if (this.isTyping === isTyping) {
+      return;
+    }
+
+    this.isTyping = isTyping;
+    this.typingHandler?.(isTyping);
   }
 }

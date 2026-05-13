@@ -133,10 +133,15 @@ describe("handleMessage", () => {
       rooms,
       publish() {},
     });
+    handleMessage(ws, JSON.stringify({ type: "chat.typing", isTyping: true }), {
+      rooms,
+      publish() {},
+    });
 
     expect(ws.sent).toEqual([
       { type: "error", code: "NOT_IN_ROOM", message: "Join a room before moving" },
       { type: "error", code: "NOT_IN_ROOM", message: "Join a room before chatting" },
+      { type: "error", code: "NOT_IN_ROOM", message: "Join a room before typing" },
     ]);
   });
 
@@ -232,6 +237,32 @@ describe("handleMessage", () => {
       text: "hello",
     });
     expect(ws.sent).toEqual([{ type: "pong", sentAt: "2026-05-10T00:00:00.000Z" }]);
+  });
+
+  test("publishes typing status", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: ServerMessage[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    handleMessage(ws, JSON.stringify({ type: "chat.typing", isTyping: true }), {
+      rooms,
+      publish(_topic, message) {
+        published.push(message);
+      },
+    });
+
+    expect(published).toEqual([
+      {
+        type: "chat.typing",
+        userId: "user_db_1",
+        username: "Dan",
+        isTyping: true,
+      },
+    ]);
   });
 
   test("includes appearance in room snapshots and broadcasts updates", async () => {

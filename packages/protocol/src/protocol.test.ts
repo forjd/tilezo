@@ -24,6 +24,14 @@ describe("protocol parser", () => {
     });
   });
 
+  test("accepts typing status updates", () => {
+    expect(parseClientMessage({ type: "chat.typing", isTyping: true })).toEqual({
+      ok: true,
+      value: { type: "chat.typing", isTyping: true },
+    });
+    expect(parseClientMessage({ type: "chat.typing", isTyping: "yes" }).ok).toBe(false);
+  });
+
   test("rejects malformed raw messages", () => {
     expect(parseRawClientMessage("{bad json").ok).toBe(false);
   });
