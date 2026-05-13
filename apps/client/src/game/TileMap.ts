@@ -8,7 +8,6 @@ const TILE_HALF_HEIGHT = 16;
 const FLOOR_THICKNESS = 10;
 const WALL_CAP_THICKNESS = 4;
 const WALL_SEAM_OVERLAP = 1;
-const DOOR_JAMB_OCCLUSION_RATIO = 0.48;
 const FLOOR_TOP = 0x999966;
 const FLOOR_TOP_BLOCKED = FLOOR_TOP;
 const FLOOR_GRID = 0x8f8f5f;
@@ -59,26 +58,26 @@ type Doorway = {
 
 export class TileMap {
   readonly view = new Container();
-  readonly occlusionView = new Container();
+  readonly wallView = new Container();
   private readonly floorThickness = new Graphics();
   private readonly floor = new Graphics();
   private readonly walls = new Graphics();
-  private readonly doorOcclusion = new Graphics();
   private readonly highlight = new Graphics();
   private tiles = new Map<string, RoomTile>();
+  private attachedDoorTile?: DoorTilePosition;
   private hoverKey?: string;
 
   constructor() {
-    this.view.addChild(this.floorThickness, this.floor, this.walls, this.highlight);
-    this.occlusionView.addChild(this.doorOcclusion);
+    this.view.addChild(this.floorThickness, this.floor, this.highlight);
+    this.wallView.addChild(this.walls);
   }
 
   load(tiles: RoomTile[]): void {
     this.floorThickness.clear();
     this.floor.clear();
     this.walls.clear();
-    this.doorOcclusion.clear();
     this.highlight.clear();
+    this.attachedDoorTile = undefined;
     this.hoverKey = undefined;
     this.tiles = new Map(tiles.map((tile) => [key(tile), tile]));
 
@@ -88,11 +87,17 @@ export class TileMap {
       drawFloorThickness(this.floorThickness, footprint);
     }
 
-    const doorTile = footprint ? getDoorTile(tiles, footprint) : undefined;
+    this.attachedDoorTile = footprint ? getAttachedDoorTile(tiles, footprint) : undefined;
+    const doorwayTile = footprint
+      ? (this.attachedDoorTile ?? getFallbackDoorTile(footprint))
+      : undefined;
 
     for (const tile of tiles) {
       const screen = tileToScreen(tile.x, tile.y);
-      const isDoorTile = doorTile && tile.x === doorTile.x && tile.y === doorTile.y;
+      const isDoorTile =
+        this.attachedDoorTile &&
+        tile.x === this.attachedDoorTile.x &&
+        tile.y === this.attachedDoorTile.y;
       drawDiamond(
         this.floor,
         screen.x,
@@ -103,8 +108,7 @@ export class TileMap {
     }
 
     if (footprint) {
-      drawWalls(this.walls, footprint, doorTile);
-      drawDoorwayOcclusion(this.doorOcclusion, footprint, doorTile);
+      drawWalls(this.walls, footprint, doorwayTile);
     }
   }
 
@@ -114,6 +118,10 @@ export class TileMap {
 
   isWalkable(position: TilePosition): boolean {
     return this.tiles.get(key(position))?.walkable === true;
+  }
+
+  getAttachedDoorTile(): TilePosition | undefined {
+    return this.attachedDoorTile ? { ...this.attachedDoorTile } : undefined;
   }
 
   setHover(position?: TilePosition): void {
@@ -142,7 +150,7 @@ export class TileMap {
 
   destroy(): void {
     this.view.destroy({ children: true });
-    this.occlusionView.destroy({ children: true });
+    this.wallView.destroy({ children: true });
   }
 }
 
@@ -323,73 +331,6 @@ function drawDoorwayCutout(
     .stroke({ color: WALL_LEFT_SHADOW, width: 2 });
 }
 
-function drawDoorwayOcclusion(
-  graphic: Graphics,
-  footprint: RoomFootprint,
-  doorTile: DoorTilePosition | undefined,
-): void {
-  const doorway = calculateDoorway(footprint, doorTile);
-
-  if (!doorway) {
-    return;
-  }
-
-  const jambDepth = doorway.width * DOOR_JAMB_OCCLUSION_RATIO;
-  const beforeStart = offset(doorway.start, doorway.unit, -jambDepth);
-  const afterEnd = offset(doorway.end, doorway.unit, jambDepth);
-
-  drawWallFaceSegment(
-    graphic,
-    beforeStart,
-    doorway.start,
-    raise(beforeStart, ROOM_WALL_HEIGHT),
-    doorway.startWallTop,
-  );
-  drawWallFaceSegment(
-    graphic,
-    doorway.end,
-    afterEnd,
-    doorway.endWallTop,
-    raise(afterEnd, ROOM_WALL_HEIGHT),
-  );
-
-  graphic
-    .poly([
-      doorway.startTop.x,
-      doorway.startTop.y,
-      doorway.endTop.x,
-      doorway.endTop.y,
-      doorway.endWallTop.x,
-      doorway.endWallTop.y,
-      doorway.startWallTop.x,
-      doorway.startWallTop.y,
-    ])
-    .fill(WALL_LEFT_FACE);
-
-  graphic
-    .moveTo(doorway.startTop.x, doorway.startTop.y)
-    .lineTo(doorway.endTop.x, doorway.endTop.y)
-    .lineTo(doorway.end.x, doorway.end.y)
-    .stroke({ color: WALL_LEFT_SHADOW, width: 2 });
-
-  graphic
-    .moveTo(doorway.startTop.x, doorway.startTop.y)
-    .lineTo(doorway.start.x, doorway.start.y)
-    .stroke({ color: WALL_LEFT_SHADOW, width: 1 });
-}
-
-function drawWallFaceSegment(
-  graphic: Graphics,
-  start: Point,
-  end: Point,
-  startTop: Point,
-  endTop: Point,
-): void {
-  graphic
-    .poly([start.x, start.y, end.x, end.y, endTop.x, endTop.y, startTop.x, startTop.y])
-    .fill(WALL_LEFT_FACE);
-}
-
 function calculateDoorway(
   footprint: RoomFootprint,
   doorTile = getFallbackDoorTile(footprint),
@@ -435,9 +376,12 @@ function calculateDoorway(
   return { start, end, startTop, endTop, startWallTop, endWallTop, unit, width: doorWidth };
 }
 
-function getDoorTile(tiles: RoomTile[], footprint: RoomFootprint): DoorTilePosition {
+function getAttachedDoorTile(
+  tiles: RoomTile[],
+  footprint: RoomFootprint,
+): DoorTilePosition | undefined {
   const preferredY = Math.min(2, footprint.height - 1);
-  const attachedDoorTile = tiles
+  const tile = tiles
     .filter((tile) => tile.x < 0 && tile.walkable && tile.y >= 0 && tile.y < footprint.height)
     .sort(
       (leftTile, rightTile) =>
@@ -445,9 +389,7 @@ function getDoorTile(tiles: RoomTile[], footprint: RoomFootprint): DoorTilePosit
         rightTile.x - leftTile.x,
     )[0];
 
-  return attachedDoorTile
-    ? { x: attachedDoorTile.x, y: attachedDoorTile.y }
-    : getFallbackDoorTile(footprint);
+  return tile ? { x: tile.x, y: tile.y } : undefined;
 }
 
 function getFallbackDoorTile(footprint: RoomFootprint): DoorTilePosition {
@@ -492,10 +434,6 @@ function left(point: Point, amount: number): Point {
 
 function right(point: Point, amount: number): Point {
   return { x: point.x + amount, y: point.y };
-}
-
-function offset(point: Point, unit: Point, amount: number): Point {
-  return { x: point.x + unit.x * amount, y: point.y + unit.y * amount };
 }
 
 function key(position: TilePosition): string {

@@ -20,15 +20,56 @@ describe("RoomScene", () => {
     expect(sceneState(scene).avatars.has("user_2")).toBe(true);
   });
 
-  test("renders avatar overlays above wall occlusion", () => {
+  test("renders doorway avatar bodies behind walls while overlays stay above", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});
 
-    scene.loadSnapshot(snapshot([user("user_1", "Dan", { x: -1, y: 2 })]));
+    scene.loadSnapshot(snapshotWithDoor([user("user_1", "Dan", { x: -1, y: 2 })]));
 
     const world = app.stage.children[0];
-    expect(world?.children.at(-1)).toBe(sceneState(scene).avatarOverlayLayer);
-    expect(sceneState(scene).avatarOverlayLayer.children).toHaveLength(1);
+    const state = sceneState(scene);
+    const avatar = state.avatars.get("user_1");
+
+    if (!avatar) {
+      throw new Error("expected test avatar to be present");
+    }
+
+    expect(world?.children).toEqual([
+      state.tiles.view,
+      state.doorAvatarLayer,
+      state.tiles.wallView,
+      state.avatarLayer,
+      state.avatarOverlayLayer,
+    ]);
+    expect(state.doorAvatarLayer.children).toContain(avatar.view);
+    expect(state.avatarLayer.children).toHaveLength(0);
+    expect(state.avatarOverlayLayer.children).toContain(avatar.overlayView);
+  });
+
+  test("moves doorway avatar bodies in front of walls after they enter the room", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.loadSnapshot(snapshotWithDoor([user("user_1", "Dan", { x: -1, y: 2 })]));
+    scene.handleServerMessage({
+      type: "avatar.moved",
+      userId: "user_1",
+      path: [
+        { x: -1, y: 2 },
+        { x: 0, y: 2 },
+      ],
+    });
+    scene.update(0.36);
+
+    const state = sceneState(scene);
+    const avatar = state.avatars.get("user_1");
+
+    if (!avatar) {
+      throw new Error("expected test avatar to be present");
+    }
+
+    expect(state.avatarLayer.children).toContain(avatar.view);
+    expect(state.doorAvatarLayer.children).toHaveLength(0);
   });
 
   test("updates avatars and recenters on resize", () => {
@@ -185,6 +226,23 @@ function snapshot(users: RoomSnapshotMessage["users"]): RoomSnapshotMessage {
   };
 }
 
+function snapshotWithDoor(users: RoomSnapshotMessage["users"]): RoomSnapshotMessage {
+  return {
+    type: "room.snapshot",
+    roomId: "lobby",
+    users,
+    tiles: [
+      { x: -1, y: 2, z: 0, walkable: true },
+      { x: 0, y: 0, z: 0, walkable: true },
+      { x: 0, y: 1, z: 0, walkable: true },
+      { x: 0, y: 2, z: 0, walkable: true },
+      { x: 1, y: 0, z: 0, walkable: true },
+      { x: 1, y: 1, z: 0, walkable: true },
+      { x: 1, y: 2, z: 0, walkable: true },
+    ],
+  };
+}
+
 function user(
   id: string,
   username: string,
@@ -214,14 +272,20 @@ function createApp(): FakeApp {
 }
 
 function sceneState(scene: RoomScene): {
-  avatars: Map<string, { view: Container }>;
+  avatars: Map<string, { overlayView: Container; view: Container }>;
+  avatarLayer: Container;
+  doorAvatarLayer: Container;
   avatarOverlayLayer: Container;
   hover?: unknown;
+  tiles: { view: Container; wallView: Container };
 } {
   return scene as unknown as {
-    avatars: Map<string, { view: Container }>;
+    avatars: Map<string, { overlayView: Container; view: Container }>;
+    avatarLayer: Container;
+    doorAvatarLayer: Container;
     avatarOverlayLayer: Container;
     hover?: unknown;
+    tiles: { view: Container; wallView: Container };
   };
 }
 

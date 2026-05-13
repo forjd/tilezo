@@ -16,7 +16,7 @@ describe("TileMap", () => {
     expect(map.isWalkable({ x: 1, y: 0 })).toBe(false);
   });
 
-  test("keeps an attached door tile addressable without folding it into the room floor", () => {
+  test("keeps an attached door tile addressable for doorway depth sorting", () => {
     const map = new TileMap();
 
     map.load([
@@ -28,7 +28,8 @@ describe("TileMap", () => {
 
     expect(map.has({ x: -1, y: 2 })).toBe(true);
     expect(map.isWalkable({ x: -1, y: 2 })).toBe(true);
-    expect(map.occlusionView.children).toHaveLength(1);
+    expect(map.getAttachedDoorTile()).toEqual({ x: -1, y: 2 });
+    expect(map.wallView.children).toHaveLength(1);
   });
 
   test("positions the hover highlight only for known tiles", () => {

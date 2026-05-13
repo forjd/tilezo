@@ -17,14 +17,18 @@ const MIN_CAMERA_SCALE = 0.5;
 const MAX_CAMERA_SCALE = 2.25;
 const ZOOM_STEP = 0.0015;
 const PAN_THRESHOLD_PIXELS = 4;
+const DOOR_LAYER_SWITCH_PROGRESS = 0.55;
+const DOOR_LAYER_DISTANCE_TOLERANCE = 18;
 
 export class RoomScene {
   private readonly world = new Container();
   private readonly tiles = new TileMap();
+  private readonly doorAvatarLayer = new Container();
   private readonly avatarLayer = new Container();
   private readonly avatarOverlayLayer = new Container();
   private readonly avatars = new Map<string, Avatar>();
   private hover?: TilePosition;
+  private doorTile?: TilePosition;
   private roomBounds?: RoomBounds;
   private dragStart?: Point;
   private dragWorldStart?: Point;
@@ -40,8 +44,9 @@ export class RoomScene {
   ) {
     this.world.addChild(
       this.tiles.view,
+      this.doorAvatarLayer,
+      this.tiles.wallView,
       this.avatarLayer,
-      this.tiles.occlusionView,
       this.avatarOverlayLayer,
     );
     this.app.stage.addChild(this.world);
@@ -51,11 +56,13 @@ export class RoomScene {
 
   loadSnapshot(snapshot: RoomSnapshotMessage): void {
     this.tiles.load(snapshot.tiles);
+    this.doorTile = this.tiles.getAttachedDoorTile();
     this.roomBounds = calculateRoomBounds(snapshot.tiles);
     this.resetCamera();
     for (const avatar of this.avatars.values()) {
       avatar.destroy();
     }
+    this.doorAvatarLayer.removeChildren();
     this.avatarLayer.removeChildren();
     this.avatarOverlayLayer.removeChildren();
     this.avatars.clear();
@@ -100,6 +107,7 @@ export class RoomScene {
   update(deltaSeconds: number): void {
     for (const avatar of this.avatars.values()) {
       avatar.update(deltaSeconds);
+      this.placeAvatarBody(avatar);
     }
   }
 
@@ -116,7 +124,7 @@ export class RoomScene {
     this.removeAvatar(userId);
     const avatar = new Avatar(userId, username, position, appearance);
     this.avatars.set(userId, avatar);
-    this.avatarLayer.addChild(avatar.view);
+    this.placeAvatarBody(avatar);
     this.avatarOverlayLayer.addChild(avatar.overlayView);
   }
 
@@ -131,6 +139,51 @@ export class RoomScene {
     avatar.overlayView.removeFromParent();
     avatar.destroy();
     this.avatars.delete(userId);
+  }
+
+  private placeAvatarBody(avatar: Avatar): void {
+    const targetLayer = this.shouldRenderBehindDoorWall(avatar)
+      ? this.doorAvatarLayer
+      : this.avatarLayer;
+
+    if (avatar.view.parent !== targetLayer) {
+      targetLayer.addChild(avatar.view);
+    }
+  }
+
+  private shouldRenderBehindDoorWall(avatar: Avatar): boolean {
+    const doorTile = this.doorTile;
+
+    if (!doorTile || doorTile.x >= 0) {
+      return false;
+    }
+
+    const door = tileToScreen(doorTile.x, doorTile.y);
+    const roomSide = tileToScreen(doorTile.x + 1, doorTile.y);
+    const segment = {
+      x: roomSide.x - door.x,
+      y: roomSide.y - door.y,
+    };
+    const segmentLengthSquared = segment.x ** 2 + segment.y ** 2;
+
+    if (segmentLengthSquared === 0) {
+      return false;
+    }
+
+    const avatarOffset = {
+      x: avatar.view.x - door.x,
+      y: avatar.view.y - door.y,
+    };
+    const progress =
+      (avatarOffset.x * segment.x + avatarOffset.y * segment.y) / segmentLengthSquared;
+    const distanceFromDoorPath =
+      Math.abs(avatarOffset.x * segment.y - avatarOffset.y * segment.x) /
+      Math.sqrt(segmentLengthSquared);
+
+    return (
+      progress <= DOOR_LAYER_SWITCH_PROGRESS &&
+      distanceFromDoorPath <= DOOR_LAYER_DISTANCE_TOLERANCE
+    );
   }
 
   private centerWorld(): void {
