@@ -5,6 +5,7 @@ import {
 } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
+import type { Logger } from "../observability/logger";
 import type { RoomManager } from "../rooms/RoomManager";
 import { encodeServerMessage } from "../util/safeJson";
 import type { SocketData } from "./socketTypes";
@@ -13,6 +14,7 @@ type Context = {
   rooms: RoomManager;
   publish: (topic: string, message: ServerMessage) => void;
   persistence?: PersistenceStore;
+  logger?: Logger;
 };
 
 export function handleMessage(
@@ -23,6 +25,7 @@ export function handleMessage(
   const parsed = parseRawClientMessage(raw);
 
   if (!parsed.ok) {
+    context.logger?.warn("websocket.message.invalid", socketFields(ws));
     sendError(ws, "INVALID_MESSAGE", parsed.error);
     return;
   }
@@ -37,6 +40,7 @@ export function handleMessage(
 
     case "room.join": {
       if (!ws.data.username) {
+        context.logger?.warn("room.join.unauthenticated", socketFields(ws));
         sendError(ws, "UNAUTHENTICATED", "Log in before joining a room");
         return;
       }
@@ -47,6 +51,10 @@ export function handleMessage(
 
     case "avatar.move.request": {
       if (!consumeRateLimit(ws, "movement")) {
+        context.logger?.warn("websocket.rate_limited", {
+          ...socketFields(ws),
+          kind: "movement",
+        });
         sendError(ws, "RATE_LIMITED", "Slow down before moving again");
         return;
       }
@@ -54,6 +62,7 @@ export function handleMessage(
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room) {
+        context.logger?.warn("room.movement.not_in_room", socketFields(ws));
         sendError(ws, "NOT_IN_ROOM", "Join a room before moving");
         return;
       }
@@ -61,6 +70,11 @@ export function handleMessage(
       const path = room.moveUser(ws.data.userId, parsed.value.target);
 
       if (!path) {
+        context.logger?.warn("room.movement.rejected", {
+          ...socketFields(ws),
+          targetX: parsed.value.target.x,
+          targetY: parsed.value.target.y,
+        });
         sendError(ws, "INVALID_TILE", "Target tile is not walkable");
         return;
       }
@@ -70,11 +84,20 @@ export function handleMessage(
         userId: ws.data.userId,
         path,
       });
+      context.logger?.debug("room.movement.accepted", {
+        ...socketFields(ws),
+        roomId: room.id,
+        pathLength: path.length,
+      });
       break;
     }
 
     case "avatar.appearance.update": {
       if (!consumeRateLimit(ws, "default")) {
+        context.logger?.warn("websocket.rate_limited", {
+          ...socketFields(ws),
+          kind: "appearance",
+        });
         sendError(ws, "RATE_LIMITED", "Slow down before updating your character again");
         return;
       }
@@ -82,6 +105,7 @@ export function handleMessage(
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room) {
+        context.logger?.warn("room.appearance.not_in_room", socketFields(ws));
         sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
         return;
       }
@@ -89,6 +113,7 @@ export function handleMessage(
       ws.data.appearance = parsed.value.appearance;
 
       if (!room.updateAppearance(ws.data.userId, parsed.value.appearance)) {
+        context.logger?.warn("room.appearance.rejected", socketFields(ws));
         sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
         return;
       }
@@ -103,6 +128,10 @@ export function handleMessage(
 
     case "chat.say": {
       if (!consumeRateLimit(ws, "chat")) {
+        context.logger?.warn("websocket.rate_limited", {
+          ...socketFields(ws),
+          kind: "chat",
+        });
         sendError(ws, "RATE_LIMITED", "Slow down before chatting again");
         return;
       }
@@ -110,6 +139,7 @@ export function handleMessage(
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room || !ws.data.username) {
+        context.logger?.warn("room.chat.not_in_room", socketFields(ws));
         sendError(ws, "NOT_IN_ROOM", "Join a room before chatting");
         return;
       }
@@ -120,6 +150,11 @@ export function handleMessage(
         username: ws.data.username,
         text: parsed.value.text,
         sentAt: new Date().toISOString(),
+      });
+      context.logger?.debug("room.chat.accepted", {
+        ...socketFields(ws),
+        roomId: room.id,
+        textLength: parsed.value.text.length,
       });
       break;
     }
@@ -132,6 +167,7 @@ export function handleMessage(
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room || !ws.data.username) {
+        context.logger?.warn("room.typing.not_in_room", socketFields(ws));
         sendError(ws, "NOT_IN_ROOM", "Join a room before typing");
         return;
       }
@@ -166,6 +202,7 @@ export function handleMessage(
 }
 
 export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): void {
+  context.logger?.info("websocket.opened", socketFields(ws));
   send(ws, {
     type: "connected",
     userId: ws.data.userId,
@@ -182,15 +219,18 @@ export function handleClose(
   ws: ServerWebSocket<SocketData>,
   rooms: RoomManager,
   publish: Context["publish"],
+  logger?: Logger,
 ) {
   const { roomId, userId } = ws.data;
 
   if (!roomId) {
+    logger?.info("websocket.closed", socketFields(ws));
     return;
   }
 
   const room = rooms.get(roomId);
   if (!room?.leave(userId, ws.data.connectionId)) {
+    logger?.info("websocket.closed.stale", socketFields(ws));
     return;
   }
   ws.unsubscribe(roomTopic(roomId));
@@ -199,6 +239,7 @@ export function handleClose(
     userId,
   });
   rooms.removeIfEmpty(roomId);
+  logger?.info("room.left", socketFields(ws));
 }
 
 async function joinRoom(
@@ -210,6 +251,10 @@ async function joinRoom(
   const room = context.rooms.getOrCreate(roomId, ws.data.userId);
 
   if (!room) {
+    context.logger?.warn("room.join.unavailable", {
+      ...socketFields(ws),
+      requestedRoomId: roomId,
+    });
     if (options.sendUnavailableError) {
       sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
     }
@@ -231,6 +276,10 @@ async function joinRoom(
       rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
     });
     await saveLastRoomId(context, ws.data.userId, room.id);
+    context.logger?.info("room.join.snapshot_resent", {
+      ...socketFields(ws),
+      roomId: room.id,
+    });
     return;
   }
 
@@ -244,6 +293,10 @@ async function joinRoom(
         userId: ws.data.userId,
       });
       context.rooms.removeIfEmpty(previousRoomId);
+      context.logger?.info("room.left", {
+        ...socketFields(ws),
+        roomId: previousRoomId,
+      });
     }
   }
 
@@ -277,13 +330,17 @@ async function joinRoom(
     rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
   });
   await saveLastRoomId(context, ws.data.userId, room.id);
+  context.logger?.info("room.joined", {
+    ...socketFields(ws),
+    roomId: room.id,
+  });
 }
 
 async function saveLastRoomId(context: Context, userId: string, roomId: string): Promise<void> {
   try {
     await context.persistence?.saveLastRoomIdForUser?.(userId, roomId);
   } catch (error) {
-    console.warn("Unable to persist last joined room", error);
+    context.logger?.warn("persistence.room_session.save_failed", { userId, roomId, error });
   }
 }
 
@@ -291,7 +348,7 @@ async function clearLastRoomId(context: Context, userId: string): Promise<void> 
   try {
     await context.persistence?.clearLastRoomIdForUser?.(userId);
   } catch (error) {
-    console.warn("Unable to clear last joined room", error);
+    context.logger?.warn("persistence.room_session.clear_failed", { userId, error });
   }
 }
 
@@ -317,6 +374,15 @@ function sendError(ws: ServerWebSocket<SocketData>, code: string, message: strin
     code,
     message,
   });
+}
+
+function socketFields(ws: ServerWebSocket<SocketData>): Record<string, unknown> {
+  return {
+    userId: ws.data.userId,
+    username: ws.data.username,
+    roomId: ws.data.roomId,
+    connectionId: ws.data.connectionId,
+  };
 }
 
 const RATE_LIMITS = {

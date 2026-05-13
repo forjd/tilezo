@@ -2,6 +2,7 @@ import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { DEFAULT_ROOM_ID } from "../assets";
 import { type AuthSession, authenticate, updateAppearance } from "../auth/AuthClient";
 import type { Game } from "../game/Game";
+import { ClientLogger } from "../telemetry/ClientLogger";
 import { CharacterEditor } from "../ui/CharacterEditor";
 import { ChatPanel } from "../ui/ChatPanel";
 import { DisconnectedDialog } from "../ui/DisconnectedDialog";
@@ -21,6 +22,7 @@ export function createApp(root: HTMLElement): void {
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
   const chat = new ChatPanel();
+  const clientLogger = new ClientLogger({ getToken: () => session?.token });
   let session: AuthSession | undefined;
   let game: Game | undefined;
   let gameStarted = false;
@@ -93,6 +95,7 @@ export function createApp(root: HTMLElement): void {
           return;
         }
 
+        void clientLogger.event("room.connection.disconnected", { joinedRoom }, "warn");
         shell.classList.add("connection-paused");
         scheduleReconnect("The room connection dropped. The scene is paused while Tilezo retries.");
       },
@@ -158,6 +161,7 @@ export function createApp(root: HTMLElement): void {
 
     try {
       session = await authenticate({ mode, username, password });
+      void clientLogger.event(`auth.${mode}.succeeded`, { userId: session.user.id });
       writeStoredSession(session);
       logOut.classList.remove("hidden");
       characterEditor.setSubmitLabel("Enter room");
@@ -165,6 +169,7 @@ export function createApp(root: HTMLElement): void {
       status.textContent = "choose character";
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "connection failed";
+      void clientLogger.event(`auth.${mode}.failed`, { reason: status.textContent }, "warn");
       login.showError(status.textContent);
       login.element.classList.remove("hidden");
       logOut.classList.add("hidden");
@@ -265,6 +270,7 @@ export function createApp(root: HTMLElement): void {
 
     try {
       const activeGame = await ensureGame();
+      void clientLogger.event("room.connection.retry", { mode });
       await activeGame.reconnect(session.token);
       gameStarted = true;
       browseRooms.classList.remove("hidden");
@@ -277,9 +283,11 @@ export function createApp(root: HTMLElement): void {
       disconnectedDialog.hide();
       shell.classList.remove("connection-paused");
       status.textContent = mode === "lobby" ? "returning to lobby" : "reconnected";
+      void clientLogger.event("room.connection.reconnected", { mode });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Reconnect failed";
       status.textContent = message;
+      void clientLogger.event("room.connection.retry_failed", { mode, message }, "warn");
       scheduleReconnect(`Retry failed: ${message}`);
     } finally {
       reconnecting = false;
