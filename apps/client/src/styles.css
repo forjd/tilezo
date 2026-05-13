@@ -370,8 +370,8 @@ select {
   left: 15px;
   top: 5px;
   width: 28px;
-  height: 19px;
-  border-radius: 15px 15px 7px 7px;
+  height: 16px;
+  border-radius: 15px 15px 8px 8px;
 }
 
 .avatar-preview-drawn[data-hair="side-part"] .avatar-preview-hair {
@@ -386,11 +386,23 @@ select {
   width: 32px;
   height: 33px;
   border-radius: 16px 16px 9px 9px;
+  clip-path: polygon(
+    8% 0,
+    92% 0,
+    100% 38%,
+    100% 100%,
+    82% 100%,
+    82% 54%,
+    18% 54%,
+    18% 100%,
+    0 100%,
+    0 38%
+  );
 }
 
 .avatar-preview-left-eye,
 .avatar-preview-right-eye {
-  top: 20px;
+  top: 22px;
   width: 4px;
   height: 4px;
   border-radius: 50%;

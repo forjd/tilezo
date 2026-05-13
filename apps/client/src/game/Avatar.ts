@@ -308,28 +308,28 @@ export class Avatar {
       return;
     }
 
-    this.body.circle(-4, -39 + bob, 1.5).fill(0x1d2324);
-    this.body.circle(4, -39 + bob, 1.5).fill(0x1d2324);
-    this.body.rect(-2, -34 + bob, 4, 1).fill(0x9d5f46);
+    this.body.circle(-4, -37 + bob, 1.5).fill(0x1d2324);
+    this.body.circle(4, -37 + bob, 1.5).fill(0x1d2324);
+    this.body.rect(-2, -32 + bob, 4, 1).fill(0x9d5f46);
   }
 
   private drawHair(color: number, bob: number): void {
     if (this.appearance.hair === "side-part") {
-      this.body.circle(-2, -43 + bob, 10).fill(color);
-      this.body.rect(-12, -42 + bob, 9, 8).fill(color);
-      this.body.rect(5, -40 + bob, 7, 5).fill(color);
+      this.body.circle(-2, -45 + bob, 9).fill(color);
+      this.body.rect(-11, -43 + bob, 8, 6).fill(color);
+      this.body.rect(5, -41 + bob, 7, 4).fill(color);
       return;
     }
 
     if (this.appearance.hair === "bob") {
-      this.body.circle(0, -42 + bob, 11).fill(color);
+      this.body.circle(0, -44 + bob, 10).fill(color);
       this.body.roundRect(-12, -40 + bob, 5, 15, 2).fill(color);
       this.body.roundRect(7, -40 + bob, 5, 15, 2).fill(color);
       return;
     }
 
-    this.body.circle(0, -43 + bob, 10).fill(color);
-    this.body.rect(-10, -42 + bob, 20, 7).fill(color);
+    this.body.circle(0, -45 + bob, 9).fill(color);
+    this.body.rect(-9, -43 + bob, 18, 5).fill(color);
   }
 
   private beginSegment(next: TilePosition, fromScreen: ScreenPosition): void {
