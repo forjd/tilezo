@@ -52,6 +52,12 @@ export class Room {
     }
 
     const currentPosition = this.resolveUserPosition(userId, user);
+    const activeMovement = this.movements.get(userId);
+
+    if (activeMovement && sameTile(activeMovement.path.at(-1), target)) {
+      return activeMovement.path.map((position) => ({ ...position }));
+    }
+
     const path = findPath(this.layout, currentPosition, target);
 
     if (!path) {
@@ -137,4 +143,8 @@ export class Room {
 
     return { ...user.position };
   }
+}
+
+function sameTile(a: TilePosition | undefined, b: TilePosition): boolean {
+  return a?.x === b.x && a.y === b.y;
 }

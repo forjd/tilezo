@@ -46,6 +46,28 @@ describe("Avatar", () => {
     expect({ x: avatar.view.x, y: avatar.view.y }).toEqual({ x: 16, y: 8 });
   });
 
+  test("ignores stale path prefixes that are already behind the avatar", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+
+    avatar.setPath([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+    avatar.update(0.36);
+    avatar.update(0);
+
+    avatar.setPath([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+    avatar.update(0.18);
+
+    expect(avatar.position).toEqual({ x: 1, y: 0 });
+    expect({ x: avatar.view.x, y: avatar.view.y }).toEqual({ x: 48, y: 24 });
+  });
+
   test("stores and updates the layered appearance without moving the avatar", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 1, y: 1 }, DEFAULT_AVATAR_APPEARANCE);
     const before = { x: avatar.view.x, y: avatar.view.y };

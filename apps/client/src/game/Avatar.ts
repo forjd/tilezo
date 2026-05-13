@@ -120,25 +120,17 @@ export class Avatar {
   }
 
   setPath(path: TilePosition[]): void {
-    const first = path[0];
+    const nextPath = this.getUnreachedPath(path);
+    const first = nextPath[0];
 
     if (!first) {
       return;
     }
 
     if (this.to && sameTile(first, this.to)) {
-      this.path = path.slice(1);
+      this.path = nextPath.slice(1);
       return;
     }
-
-    const second = path[1];
-
-    if (this.to && sameTile(first, this.position) && second && sameTile(second, this.to)) {
-      this.path = path.slice(2);
-      return;
-    }
-
-    const nextPath = sameTile(first, this.position) ? path.slice(1) : [...path];
 
     if (this.to) {
       const next = nextPath.shift();
@@ -200,6 +192,26 @@ export class Avatar {
     const screen = tileToScreen(position.x, position.y);
     this.view.x = screen.x;
     this.view.y = screen.y;
+  }
+
+  private getUnreachedPath(path: TilePosition[]): TilePosition[] {
+    const currentIndex = path.findIndex((position) => sameTile(position, this.position));
+
+    if (currentIndex >= 0) {
+      return path.slice(currentIndex + 1);
+    }
+
+    const activeTarget = this.to;
+
+    if (activeTarget) {
+      const activeTargetIndex = path.findIndex((position) => sameTile(position, activeTarget));
+
+      if (activeTargetIndex >= 0) {
+        return path.slice(activeTargetIndex);
+      }
+    }
+
+    return [...path];
   }
 
   private updateChatBubble(deltaSeconds: number): void {
