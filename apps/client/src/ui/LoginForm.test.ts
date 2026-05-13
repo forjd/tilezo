@@ -16,7 +16,7 @@ describe("LoginForm", () => {
     expect(form.element.className).toBe("login-panel");
     expect(username.maxLength).toBe(24);
     expect(username.required).toBe(true);
-    expect(username.placeholder).toBe("dan");
+    expect(username.placeholder).toBe("");
     expect(password.required).toBe(true);
     expect(password.type).toBe("password");
     expect(loginModeButton.classList.contains("active")).toBe(true);

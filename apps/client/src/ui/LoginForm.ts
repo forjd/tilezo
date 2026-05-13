@@ -53,7 +53,6 @@ export class LoginForm {
     this.username.name = "tilezo-username";
     this.username.required = true;
     this.username.autocomplete = "username";
-    this.username.placeholder = "dan";
 
     this.password.name = "tilezo-password";
     this.password.required = true;
