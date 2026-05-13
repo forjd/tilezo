@@ -59,8 +59,23 @@ describe("persistence", () => {
       async seedRoom(layout: RoomLayout) {
         this.seededRooms.push(layout);
       },
-      async listPublicRooms() {
-        return [storedLobby, studio];
+      async listRooms() {
+        return [
+          {
+            layout: storedLobby,
+            visibility: "public" as const,
+            description: "",
+            capacity: 25,
+            access: "open" as const,
+          },
+          {
+            layout: studio,
+            visibility: "public" as const,
+            description: "",
+            capacity: 25,
+            access: "open" as const,
+          },
+        ];
       },
     } satisfies PersistenceStore & { seededRooms: RoomLayout[] };
 
@@ -81,7 +96,14 @@ describe("DrizzlePersistenceStore", () => {
     await expect(store.getRoom("lobby")).resolves.toBe(layout);
     await store.seedRoom(layout);
     await expect(store.listRooms()).resolves.toEqual([
-      { layout, ownerUserId: undefined, visibility: "public" },
+      {
+        layout,
+        ownerUserId: undefined,
+        visibility: "public",
+        description: "",
+        capacity: 25,
+        access: "open",
+      },
     ]);
     await expect(store.listPublicRooms()).resolves.toEqual([layout]);
     await expect(store.listOwnedRooms("user_1")).resolves.toEqual([
@@ -95,8 +117,11 @@ describe("DrizzlePersistenceStore", () => {
         id: layout.id,
         slug: layout.id,
         name: layout.name,
+        description: "",
         ownerUserId: null,
         visibility: "public",
+        access: "open",
+        capacity: 25,
         layout,
       },
     ]);

@@ -71,6 +71,18 @@ export class RoomManager {
     this.privateLayouts.set(layout.id, { layout, ownerUserId });
   }
 
+  addRoom(
+    layout: RoomLayout,
+    options: { ownerUserId?: string; visibility?: "public" | "private" } = {},
+  ): void {
+    if (options.visibility === "private" && options.ownerUserId) {
+      this.privateLayouts.set(layout.id, { layout, ownerUserId: options.ownerUserId });
+      return;
+    }
+
+    this.publicLayouts.set(layout.id, layout);
+  }
+
   removeIfEmpty(roomId: string): void {
     const room = this.rooms.get(roomId);
 

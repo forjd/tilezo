@@ -4,6 +4,7 @@ import type { TilezoDatabase } from "./db";
 import { rooms, userRoomSessions } from "./schema";
 
 export type RoomVisibility = "public" | "private";
+export type RoomAccess = "open" | "knock";
 
 export type OwnedRoomLayout = {
   layout: RoomLayout;
@@ -14,6 +15,9 @@ export type PersistedRoomLayout = {
   layout: RoomLayout;
   ownerUserId?: string;
   visibility: RoomVisibility;
+  description: string;
+  capacity: number;
+  access: RoomAccess;
 };
 
 export type RoomDirectory = {
@@ -25,7 +29,13 @@ export type PersistenceStore = {
   getRoom(roomId: string): Promise<RoomLayout | undefined>;
   seedRoom(
     layout: RoomLayout,
-    options?: { ownerUserId?: string; visibility?: RoomVisibility },
+    options?: {
+      ownerUserId?: string;
+      visibility?: RoomVisibility;
+      description?: string;
+      capacity?: number;
+      access?: RoomAccess;
+    },
   ): Promise<void>;
   listRooms?(): Promise<PersistedRoomLayout[]>;
   listPublicRooms?(): Promise<RoomLayout[]>;
@@ -75,10 +85,23 @@ export async function loadOrSeedPublicRooms(
       }
     }
 
-    const storedPublicLayouts = store.listPublicRooms ? await store.listPublicRooms() : [];
+    const storedRooms = store.listRooms ? await store.listRooms() : [];
+    const storedPublicLayouts =
+      storedRooms.length > 0
+        ? storedRooms.filter((room) => room.visibility === "public").map((room) => room.layout)
+        : store.listPublicRooms
+          ? await store.listPublicRooms()
+          : [];
+    const storedPrivateLayouts = storedRooms
+      .filter((room) => room.visibility === "private" && room.ownerUserId)
+      .map((room) => ({
+        layout: room.layout,
+        ownerUserId: room.ownerUserId as string,
+      }));
+
     return {
       publicLayouts: mergeRoomLayouts(fallbackLayouts, storedPublicLayouts),
-      privateLayouts: [],
+      privateLayouts: storedPrivateLayouts,
     };
   } catch (error) {
     console.warn("Room persistence unavailable; using bundled public rooms", error);
@@ -100,9 +123,18 @@ export class DrizzlePersistenceStore implements PersistenceStore {
 
   async seedRoom(
     layout: RoomLayout,
-    options: { ownerUserId?: string; visibility?: RoomVisibility } = {},
+    options: {
+      ownerUserId?: string;
+      visibility?: RoomVisibility;
+      description?: string;
+      capacity?: number;
+      access?: RoomAccess;
+    } = {},
   ): Promise<void> {
     const visibility = options.visibility ?? "public";
+    const description = options.description ?? "";
+    const capacity = options.capacity ?? 25;
+    const access = options.access ?? "open";
 
     await this.db
       .insert(rooms)
@@ -110,16 +142,22 @@ export class DrizzlePersistenceStore implements PersistenceStore {
         id: layout.id,
         slug: layout.id,
         name: layout.name,
+        description,
         ownerUserId: options.ownerUserId ?? null,
         visibility,
+        access,
+        capacity,
         layout,
       })
       .onConflictDoUpdate({
         target: rooms.id,
         set: {
           name: layout.name,
+          description,
           ownerUserId: options.ownerUserId ?? null,
           visibility,
+          access,
+          capacity,
           layout,
           updatedAt: new Date(),
         },
@@ -132,6 +170,9 @@ export class DrizzlePersistenceStore implements PersistenceStore {
         layout: rooms.layout,
         ownerUserId: rooms.ownerUserId,
         visibility: rooms.visibility,
+        description: rooms.description,
+        capacity: rooms.capacity,
+        access: rooms.access,
       })
       .from(rooms)
       .orderBy(asc(rooms.name), asc(rooms.id));
@@ -139,6 +180,9 @@ export class DrizzlePersistenceStore implements PersistenceStore {
       layout: room.layout,
       ownerUserId: room.ownerUserId ?? undefined,
       visibility: room.visibility === "private" ? "private" : "public",
+      description: room.description ?? "",
+      capacity: room.capacity ?? 25,
+      access: room.access === "knock" ? "knock" : "open",
     }));
   }
 

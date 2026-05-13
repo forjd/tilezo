@@ -43,6 +43,13 @@
       "when": 1778690000000,
       "tag": "0005_user_room_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778691000000,
+      "tag": "0006_created_room_settings",
+      "breakpoints": true
     }
   ]
 }

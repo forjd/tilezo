@@ -68,6 +68,28 @@ describe("RoomManager", () => {
     ]);
   });
 
+  test("adds created public and private rooms to the accessible directory", () => {
+    const manager = new RoomManager(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
+    const publicRoom = createRectRoomLayout("room_public", "Public Room", 4, 4, { x: 1, y: 1 });
+    const privateRoom = createRectRoomLayout("room_private", "Private Room", 4, 4, {
+      x: 1,
+      y: 1,
+    });
+
+    manager.addRoom(publicRoom, { ownerUserId: "user_1", visibility: "public" });
+    manager.addRoom(privateRoom, { ownerUserId: "user_1", visibility: "private" });
+
+    expect(manager.listPublicRooms(undefined, "user_2").map((room) => room.id)).toEqual([
+      "lobby",
+      "room_public",
+    ]);
+    expect(manager.listPublicRooms(undefined, "user_1").map((room) => room.id)).toEqual([
+      "lobby",
+      "room_public",
+      "room_private",
+    ]);
+  });
+
   test("loads and seeds the bundled default room through persistence", async () => {
     const store = {
       seededRoomIds: [] as string[],

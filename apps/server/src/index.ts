@@ -9,6 +9,11 @@ import type { SocketData } from "./net/socketTypes";
 import { createLogger, type Logger, type LogLevel, parseLogLevel } from "./observability/logger";
 import { createPersonalRoomLayout } from "./rooms/personalRoom";
 import { RoomManager } from "./rooms/RoomManager";
+import {
+  createRoomLayoutFromTemplate,
+  listRoomCreationTemplates,
+  parseCreateRoomInput,
+} from "./rooms/roomCreation";
 import { createId } from "./util/ids";
 import { encodeServerMessage } from "./util/safeJson";
 
@@ -62,6 +67,15 @@ const server = Bun.serve<SocketData>({
 
     if (url.pathname === "/client-events" && request.method === "POST") {
       return handleClientEventRequest(request, auth, requestLogger);
+    }
+
+    if (url.pathname === "/room-templates" && request.method === "GET") {
+      requestLogger.info("room_templates.listed");
+      return authJson({ templates: listRoomCreationTemplates() }, 200);
+    }
+
+    if (url.pathname === "/rooms" && request.method === "POST") {
+      return handleCreateRoomRequest(request, auth, persistence, rooms, requestLogger);
     }
 
     if (url.pathname === "/ws") {
@@ -335,6 +349,80 @@ async function handleClientEventRequest(
       { error: { code: "INVALID_CLIENT_EVENT", message: "Invalid client event" } },
       400,
     );
+  }
+}
+
+async function handleCreateRoomRequest(
+  request: Request,
+  authService: AuthService | undefined,
+  persistenceStore: PersistenceStore | undefined,
+  roomManager: RoomManager,
+  requestLogger: Logger,
+): Promise<Response> {
+  if (!authService || !persistenceStore) {
+    requestLogger.warn("room.create.database_required");
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required to create rooms" } },
+      503,
+    );
+  }
+
+  const user = await authService.verifyToken(readBearerToken(request) ?? "");
+
+  if (!user) {
+    requestLogger.warn("room.create.unauthenticated");
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before creating a room" } },
+      401,
+    );
+  }
+
+  try {
+    const parsed = parseCreateRoomInput(await request.json());
+
+    if (!parsed.ok) {
+      requestLogger.warn("room.create.invalid_input", { userId: user.id, message: parsed.message });
+      return authJson({ error: { code: "INVALID_ROOM", message: parsed.message } }, 400);
+    }
+
+    const roomId = createId("room");
+    const layout = createRoomLayoutFromTemplate(roomId, parsed.value);
+
+    await persistenceStore.seedRoom(layout, {
+      ownerUserId: user.id,
+      visibility: parsed.value.visibility,
+      description: parsed.value.description,
+      capacity: parsed.value.capacity,
+      access: parsed.value.access,
+    });
+    roomManager.addRoom(layout, {
+      ownerUserId: user.id,
+      visibility: parsed.value.visibility,
+    });
+    requestLogger.info("room.created", {
+      userId: user.id,
+      roomId,
+      templateId: parsed.value.templateId,
+      visibility: parsed.value.visibility,
+      access: parsed.value.access,
+      capacity: parsed.value.capacity,
+    });
+
+    return authJson(
+      {
+        roomId,
+        room: {
+          id: roomId,
+          name: parsed.value.name,
+          userCount: 0,
+          joined: false,
+        },
+      },
+      201,
+    );
+  } catch (error) {
+    requestLogger.warn("room.create.failed", { userId: user.id, error });
+    return authJson({ error: { code: "INVALID_ROOM", message: "Unable to create room" } }, 400);
   }
 }
 

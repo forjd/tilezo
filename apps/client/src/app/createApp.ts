@@ -2,9 +2,11 @@ import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { DEFAULT_ROOM_ID } from "../assets";
 import { type AuthSession, authenticate, updateAppearance } from "../auth/AuthClient";
 import type { Game } from "../game/Game";
+import { createRoom, listRoomTemplates } from "../rooms/RoomClient";
 import { ClientLogger } from "../telemetry/ClientLogger";
 import { CharacterEditor } from "../ui/CharacterEditor";
 import { ChatPanel } from "../ui/ChatPanel";
+import { CreateRoomDialog } from "../ui/CreateRoomDialog";
 import { DisconnectedDialog } from "../ui/DisconnectedDialog";
 import { LoginForm } from "../ui/LoginForm";
 import { RoomBrowser } from "../ui/RoomBrowser";
@@ -19,6 +21,7 @@ export function createApp(root: HTMLElement): void {
   const topActions = document.createElement("div");
   const status = document.createElement("div");
   const browseRooms = document.createElement("button");
+  const createRoomButton = document.createElement("button");
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
   const chat = new ChatPanel();
@@ -40,6 +43,9 @@ export function createApp(root: HTMLElement): void {
   browseRooms.className = "room-browser-button hidden";
   browseRooms.type = "button";
   browseRooms.textContent = "Rooms";
+  createRoomButton.className = "create-room-button hidden";
+  createRoomButton.type = "button";
+  createRoomButton.textContent = "Create room";
   editCharacter.className = "edit-character-button hidden";
   editCharacter.type = "button";
   editCharacter.textContent = "Edit character";
@@ -51,7 +57,7 @@ export function createApp(root: HTMLElement): void {
   status.textContent = "idle";
 
   brand.append(brandTitle, brandSubtitle);
-  topActions.append(browseRooms, editCharacter, logOut);
+  topActions.append(browseRooms, createRoomButton, editCharacter, logOut);
   topBar.append(brand, topActions, status);
 
   const roomBrowser = new RoomBrowser({
@@ -86,6 +92,7 @@ export function createApp(root: HTMLElement): void {
         chat.clear();
         chat.show();
         browseRooms.classList.remove("hidden");
+        createRoomButton.classList.remove("hidden");
         editCharacter.classList.remove("hidden");
         roomBrowser.setCurrentRoom(snapshot.roomId);
         roomBrowser.hide();
@@ -138,6 +145,7 @@ export function createApp(root: HTMLElement): void {
         await (await ensureGame()).start(session.token);
         gameStarted = true;
         browseRooms.classList.remove("hidden");
+        createRoomButton.classList.remove("hidden");
         roomBrowser.show();
         status.textContent = "choose room";
       } catch (error) {
@@ -177,6 +185,46 @@ export function createApp(root: HTMLElement): void {
     }
   });
 
+  const createRoomDialog = new CreateRoomDialog({
+    async onSubmit(room) {
+      if (!session) {
+        return;
+      }
+
+      status.textContent = "creating room";
+
+      try {
+        const created = await createRoom(session.token, room);
+        createRoomDialog.hide();
+        roomBrowser.hide();
+
+        if (!gameStarted) {
+          await (await ensureGame()).start(session.token);
+          gameStarted = true;
+        }
+
+        browseRooms.classList.remove("hidden");
+        createRoomButton.classList.remove("hidden");
+        editCharacter.classList.remove("hidden");
+        game?.joinRoom(created.roomId);
+        status.textContent = "joining new room";
+        void clientLogger.event("room.created", {
+          roomId: created.roomId,
+          templateId: room.templateId,
+          visibility: room.visibility,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Room creation failed";
+        status.textContent = message;
+        createRoomDialog.showError(message);
+        void clientLogger.event("room.create_failed", { message }, "warn");
+      }
+    },
+    onCancel() {
+      status.textContent = joinedRoom ? "room ready" : "choose room";
+    },
+  });
+
   editCharacter.addEventListener("click", () => {
     if (!session) {
       return;
@@ -189,6 +237,14 @@ export function createApp(root: HTMLElement): void {
 
   browseRooms.addEventListener("click", () => {
     roomBrowser.show();
+  });
+
+  createRoomButton.addEventListener("click", () => {
+    if (!session) {
+      return;
+    }
+
+    void openCreateRoomDialog();
   });
 
   logOut.addEventListener("click", () => {
@@ -207,6 +263,7 @@ export function createApp(root: HTMLElement): void {
     topBar,
     login.element,
     characterEditor.element,
+    createRoomDialog.element,
     roomBrowser.element,
     chat.element,
     disconnectedDialog.element,
@@ -229,6 +286,7 @@ export function createApp(root: HTMLElement): void {
       await (await ensureGame()).start(stored.token);
       gameStarted = true;
       browseRooms.classList.remove("hidden");
+      createRoomButton.classList.remove("hidden");
       roomBrowser.show();
       status.textContent = "choose room";
     } catch (error) {
@@ -274,6 +332,7 @@ export function createApp(root: HTMLElement): void {
       await activeGame.reconnect(session.token);
       gameStarted = true;
       browseRooms.classList.remove("hidden");
+      createRoomButton.classList.remove("hidden");
       editCharacter.classList.remove("hidden");
 
       if (mode === "lobby") {
@@ -291,6 +350,17 @@ export function createApp(root: HTMLElement): void {
       scheduleReconnect(`Retry failed: ${message}`);
     } finally {
       reconnecting = false;
+    }
+  }
+
+  async function openCreateRoomDialog(): Promise<void> {
+    status.textContent = "loading room templates";
+
+    try {
+      createRoomDialog.show(await listRoomTemplates());
+      status.textContent = "create room";
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "Room templates failed";
     }
   }
 
