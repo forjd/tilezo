@@ -9,23 +9,23 @@ const FLOOR_THICKNESS = 10;
 const WALL_CAP_THICKNESS = 4;
 const WALL_SEAM_OVERLAP = 1;
 const DOOR_JAMB_OCCLUSION_RATIO = 0.48;
-const FLOOR_TOP = 0xa8aa71;
-const FLOOR_TOP_BLOCKED = 0x707861;
-const FLOOR_GRID = 0x969761;
-const FLOOR_GRID_BLOCKED = 0x515a49;
-const FLOOR_SIDE_LEFT = 0x7f8158;
-const FLOOR_SIDE_RIGHT = 0x5f6545;
-const FLOOR_BOTTOM_EDGE = 0x474c35;
-const WALL_LEFT_FACE = 0xb6bbc7;
-const WALL_RIGHT_FACE = 0xa8aebb;
-const WALL_LEFT_END = 0x9ca2ae;
-const WALL_RIGHT_END = 0x8b929e;
-const WALL_LEFT_SHADOW = 0x858b98;
-const WALL_TOP = 0x6f7480;
-const WALL_OUTLINE = 0x5e6470;
-const DOOR_SHADOW = 0x070809;
-const DOOR_TILE = 0x070809;
-const DOOR_TILE_STROKE = 0x1b1d17;
+const FLOOR_TOP = 0x999966;
+const FLOOR_TOP_BLOCKED = FLOOR_TOP;
+const FLOOR_GRID = 0x8f8f5f;
+const FLOOR_GRID_BLOCKED = FLOOR_GRID;
+const FLOOR_SIDE_LEFT = 0x858458;
+const FLOOR_SIDE_RIGHT = 0x70704b;
+const FLOOR_BOTTOM_EDGE = 0x696946;
+const WALL_LEFT_FACE = 0x9295a0;
+const WALL_RIGHT_FACE = 0xb7bac8;
+const WALL_LEFT_END = 0xbcbfce;
+const WALL_RIGHT_END = 0x9699a5;
+const WALL_LEFT_SHADOW = 0x71737c;
+const WALL_TOP = 0x71737c;
+const WALL_OUTLINE = 0x71737c;
+const DOOR_SHADOW = 0x000000;
+const DOOR_TILE = 0x000000;
+const DOOR_TILE_STROKE = 0x050503;
 
 type Point = {
   x: number;
@@ -200,10 +200,10 @@ function drawWalls(
     .poly([
       baseNorth.x,
       baseNorth.y,
-      baseWestOuter.x,
-      baseWestOuter.y,
-      westTopOuter.x,
-      westTopOuter.y,
+      baseWest.x,
+      baseWest.y,
+      westTop.x,
+      westTop.y,
       northTop.x,
       northTop.y,
     ])
@@ -213,10 +213,10 @@ function drawWalls(
     .poly([
       baseNorth.x,
       baseNorth.y,
-      baseEastOuter.x,
-      baseEastOuter.y,
-      eastTopOuter.x,
-      eastTopOuter.y,
+      baseEast.x,
+      baseEast.y,
+      eastTop.x,
+      eastTop.y,
       northTop.x,
       northTop.y,
     ])
@@ -255,10 +255,11 @@ function drawWalls(
   graphic
     .moveTo(baseWestOuter.x, baseWestOuter.y)
     .lineTo(westTopOuter.x, westTopOuter.y)
-    .moveTo(westTop.x, westTop.y)
-    .lineTo(northTop.x, northTop.y)
-    .lineTo(eastTop.x, eastTop.y)
     .moveTo(eastTopOuter.x, eastTopOuter.y)
+    .lineTo(baseEastOuter.x, baseEastOuter.y)
+    .moveTo(baseWest.x, baseWest.y)
+    .lineTo(baseWestOuter.x, baseWestOuter.y)
+    .moveTo(baseEast.x, baseEast.y)
     .lineTo(baseEastOuter.x, baseEastOuter.y)
     .stroke({ color: WALL_OUTLINE, width: 1 });
 }
@@ -285,6 +286,8 @@ function drawWallCap(graphic: Graphics, start: Point, end: Point, side: "left" |
   graphic
     .moveTo(end.x + lift.x, end.y + lift.y)
     .lineTo(start.x + lift.x, start.y + lift.y)
+    .lineTo(start.x, start.y)
+    .lineTo(end.x, end.y)
     .stroke({ color: WALL_OUTLINE, width: 1 });
 }
 
