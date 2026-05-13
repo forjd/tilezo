@@ -22,7 +22,9 @@ export type StressOptions = {
   durationSeconds: number;
   moveIntervalMs: number;
   chatIntervalMs: number;
+  preseedUsers: boolean;
   seed: number;
+  setupConcurrency: number;
   requestTimeoutMs: number;
 };
 
@@ -72,7 +74,9 @@ const DEFAULT_OPTIONS: StressOptions = {
   durationSeconds: 0,
   moveIntervalMs: 1000,
   chatIntervalMs: 5000,
+  preseedUsers: false,
   seed: Date.now(),
+  setupConcurrency: 5,
   requestTimeoutMs: 30_000,
 };
 
@@ -100,6 +104,12 @@ export function parseArgs(args: string[]): StressOptions {
 
     const [rawKey, inlineValue] = arg.slice(2).split("=", 2);
     const key = rawKey ?? "";
+
+    if (isBooleanFlag(key)) {
+      applyOption(options, key, inlineValue ?? "true");
+      continue;
+    }
+
     const value = inlineValue ?? args[index + 1];
 
     if (inlineValue === undefined) {
@@ -118,6 +128,17 @@ export function parseArgs(args: string[]): StressOptions {
 
 export async function runStressTest(options: StressOptions): Promise<BotResult[]> {
   const botIds = Array.from({ length: options.bots }, (_, index) => index + 1);
+
+  if (options.preseedUsers) {
+    const setupResults = await runConcurrent(botIds, options.setupConcurrency, (botId) =>
+      preseedBot(botId, options),
+    );
+
+    if (setupResults.some((result) => !result.ok)) {
+      return setupResults;
+    }
+  }
+
   return runConcurrent(botIds, options.concurrency, (botId) => runBot(botId, options));
 }
 
@@ -160,40 +181,50 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
   let socket: WebSocket | undefined;
 
   try {
-    const registered = await timed(timings, samples, "register", () =>
-      authenticate(
-        options.apiUrl,
-        "register",
-        username,
-        options.password,
-        options.requestTimeoutMs,
-      ),
-    );
-    const session = includesAuthLogin(options.scenario)
-      ? await timed(timings, samples, "login", () =>
-          authenticate(
-            options.apiUrl,
-            "login",
-            username,
-            options.password,
-            options.requestTimeoutMs,
-          ),
-        )
-      : registered;
+    let session: BotSession;
+
+    if (options.preseedUsers) {
+      session = await timed(timings, samples, "login", () =>
+        authenticate(options.apiUrl, "login", username, options.password, options.requestTimeoutMs),
+      );
+    } else {
+      const registered = await timed(timings, samples, "register", () =>
+        authenticate(
+          options.apiUrl,
+          "register",
+          username,
+          options.password,
+          options.requestTimeoutMs,
+        ),
+      );
+      session = includesAuthLogin(options.scenario)
+        ? await timed(timings, samples, "login", () =>
+            authenticate(
+              options.apiUrl,
+              "login",
+              username,
+              options.password,
+              options.requestTimeoutMs,
+            ),
+          )
+        : registered;
+    }
 
     if (options.scenario === "auth") {
       timings.total = performance.now() - totalStart;
       return { botId, username, ok: true, timings, samples, counters };
     }
 
-    await timed(timings, samples, "appearance", () =>
-      updateAppearance(
-        options.apiUrl,
-        session.token,
-        botAppearance(botId),
-        options.requestTimeoutMs,
-      ),
-    );
+    if (!options.preseedUsers) {
+      await timed(timings, samples, "appearance", () =>
+        updateAppearance(
+          options.apiUrl,
+          session.token,
+          botAppearance(botId),
+          options.requestTimeoutMs,
+        ),
+      );
+    }
 
     socket = await timed(timings, samples, "connect", () =>
       connectWebSocket(options.wsUrl, session.token),
@@ -254,6 +285,61 @@ async function runBot(botId: number, options: StressOptions): Promise<BotResult>
   }
 }
 
+async function preseedBot(botId: number, options: StressOptions): Promise<BotResult> {
+  const username = `${options.usernamePrefix}_${botId}`;
+  const timings: Record<string, number> = {};
+  const samples: SampleBag = {};
+  const counters: BotCounters = { moves: 0, messages: 0 };
+  const totalStart = performance.now();
+
+  try {
+    let session: BotSession;
+
+    try {
+      session = await timed(timings, samples, "preseed.register", () =>
+        authenticate(
+          options.apiUrl,
+          "register",
+          username,
+          options.password,
+          options.requestTimeoutMs,
+        ),
+      );
+    } catch (error) {
+      if (!(error instanceof HttpRequestError) || error.code !== "USERNAME_TAKEN") {
+        throw error;
+      }
+
+      session = await timed(timings, samples, "preseed.login", () =>
+        authenticate(options.apiUrl, "login", username, options.password, options.requestTimeoutMs),
+      );
+    }
+
+    await timed(timings, samples, "preseed.appearance", () =>
+      updateAppearance(
+        options.apiUrl,
+        session.token,
+        botAppearance(botId),
+        options.requestTimeoutMs,
+      ),
+    );
+
+    timings.total = performance.now() - totalStart;
+    return { botId, username, ok: true, timings, samples, counters };
+  } catch (error) {
+    timings.total = performance.now() - totalStart;
+    return {
+      botId,
+      username,
+      ok: false,
+      timings,
+      samples,
+      counters,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function authenticate(
   apiUrl: string,
   mode: "register" | "login",
@@ -276,11 +362,14 @@ async function authenticate(
   const body = (await response.json()) as {
     token?: string;
     user?: { id?: string; username?: string };
-    error?: { message?: string };
+    error?: { code?: string; message?: string };
   };
 
   if (!response.ok || !body.token || !body.user?.id || !body.user.username) {
-    throw new Error(body.error?.message ?? `${mode} failed`);
+    throw new HttpRequestError(body.error?.message ?? `${mode} failed`, {
+      code: body.error?.code,
+      status: response.status,
+    });
   }
 
   return {
@@ -626,8 +715,14 @@ function applyOption(options: StressOptions, key: string, value: string): void {
     case "chat-interval-ms":
       options.chatIntervalMs = parsePositiveInteger(key, value);
       break;
+    case "preseed-users":
+      options.preseedUsers = parseBoolean(key, value);
+      break;
     case "seed":
       options.seed = parseNonNegativeInteger(key, value);
+      break;
+    case "setup-concurrency":
+      options.setupConcurrency = parsePositiveInteger(key, value);
       break;
     case "request-timeout-ms":
       options.requestTimeoutMs = parsePositiveInteger(key, value);
@@ -640,6 +735,10 @@ function applyOption(options: StressOptions, key: string, value: string): void {
 function validateOptions(options: StressOptions): StressOptions {
   if (options.concurrency > options.bots) {
     options.concurrency = options.bots;
+  }
+
+  if (options.setupConcurrency > options.bots) {
+    options.setupConcurrency = options.bots;
   }
 
   if (!options.usernamePrefix.trim()) {
@@ -695,6 +794,22 @@ function parseNonNegativeNumber(key: string, value: string): number {
   }
 
   return parsed;
+}
+
+function parseBoolean(key: string, value: string): boolean {
+  if (value === "true" || value === "1") {
+    return true;
+  }
+
+  if (value === "false" || value === "0") {
+    return false;
+  }
+
+  throw new Error(`--${key} must be true or false`);
+}
+
+function isBooleanFlag(key: string): boolean {
+  return key === "preseed-users";
 }
 
 function includesAuthLogin(scenario: Scenario): boolean {
@@ -758,6 +873,17 @@ async function fetchWithTimeout(
   }
 }
 
+class HttpRequestError extends Error {
+  readonly code?: string;
+  readonly status: number;
+
+  constructor(message: string, options: { code?: string; status: number }) {
+    super(message);
+    this.code = options.code;
+    this.status = options.status;
+  }
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -769,6 +895,9 @@ function printSummary(options: StressOptions, results: BotResult[]): void {
   console.log("Tilezo stress test");
   console.log(`Scenario: ${options.scenario}`);
   console.log(`Seed: ${options.seed.toString()}`);
+  if (options.preseedUsers) {
+    console.log(`Preseed: enabled (setup concurrency: ${options.setupConcurrency.toString()})`);
+  }
   if (options.durationSeconds > 0) {
     console.log(`Duration: ${options.durationSeconds.toString()}s`);
   }
@@ -879,6 +1008,8 @@ Options:
   --duration <seconds>     Keep bots connected and active for this long
   --move-interval-ms <ms>  Timed-mode movement interval (default: 1000)
   --chat-interval-ms <ms>  Timed-mode chat interval (default: 5000)
+  --preseed-users          Register/update bot users before the measured run
+  --setup-concurrency <n>  Preseed concurrency (default: 5)
   --seed <number>          Reproduce randomized bot movement
   --request-timeout-ms <ms> HTTP setup request timeout (default: 30000)
 `);
