@@ -29,6 +29,13 @@
       "when": 1778587200000,
       "tag": "0003_private_rooms",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778688000000,
+      "tag": "0004_room_directory_indexes",
+      "breakpoints": true
     }
   ]
 }

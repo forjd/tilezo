@@ -12,7 +12,11 @@
     "noUncheckedIndexedAccess": true,
     "paths": {
       "@tilezo/engine": ["./packages/engine/src/index.ts"],
-      "@tilezo/protocol": ["./packages/protocol/src/index.ts"]
+      "@tilezo/engine/iso": ["./packages/engine/src/iso.ts"],
+      "@tilezo/engine/types": ["./packages/engine/src/types.ts"],
+      "@tilezo/protocol": ["./packages/protocol/src/index.ts"],
+      "@tilezo/protocol/appearance": ["./packages/protocol/src/appearance.ts"],
+      "@tilezo/protocol/messages": ["./packages/protocol/src/messages.ts"]
     },
     "skipLibCheck": true,
     "strict": true,

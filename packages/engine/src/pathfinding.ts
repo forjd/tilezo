@@ -2,11 +2,11 @@ import { TileGrid, tileKey } from "./grid";
 import type { RoomLayout, TilePosition } from "./types";
 
 export function findPath(
-  layout: RoomLayout,
+  layoutOrGrid: RoomLayout | TileGrid,
   start: TilePosition,
   target: TilePosition,
 ): TilePosition[] | null {
-  const grid = new TileGrid(layout);
+  const grid = layoutOrGrid instanceof TileGrid ? layoutOrGrid : new TileGrid(layoutOrGrid);
 
   if (!grid.isWalkable(start) || !grid.isWalkable(target)) {
     return null;
@@ -16,22 +16,26 @@ export function findPath(
     return [];
   }
 
-  const openSet: TilePosition[] = [start];
-  const openKeys = new Set<string>([tileKey(start)]);
+  const openSet = new PriorityQueue();
   const cameFrom = new Map<string, TilePosition>();
   const gScore = new Map<string, number>([[tileKey(start), 0]]);
-  const hScore = new Map<string, number>([[tileKey(start), octileDistance(start, target)]]);
-  const fScore = new Map<string, number>([[tileKey(start), octileDistance(start, target)]]);
+  const closedKeys = new Set<string>();
+  openSet.push(start, octileDistance(start, target), octileDistance(start, target));
 
-  while (openSet.length > 0) {
-    const currentIndex = getLowestScoreIndex(openSet, fScore, hScore);
-    const current = openSet.splice(currentIndex, 1)[0];
+  while (openSet.size > 0) {
+    const current = openSet.pop();
 
     if (!current) {
       continue;
     }
 
-    openKeys.delete(tileKey(current));
+    const currentKey = tileKey(current);
+
+    if (closedKeys.has(currentKey)) {
+      continue;
+    }
+
+    closedKeys.add(currentKey);
 
     if (current.x === target.x && current.y === target.y) {
       return reconstructPath(cameFrom, start, current);
@@ -49,43 +53,12 @@ export function findPath(
 
       cameFrom.set(key, current);
       gScore.set(key, tentativeScore);
-      hScore.set(key, octileDistance(neighbor, target));
-      fScore.set(key, tentativeScore + octileDistance(neighbor, target));
-
-      if (!openKeys.has(key)) {
-        openSet.push(neighbor);
-        openKeys.add(key);
-      }
+      const heuristic = octileDistance(neighbor, target);
+      openSet.push(neighbor, tentativeScore + heuristic, heuristic);
     }
   }
 
   return null;
-}
-
-function getLowestScoreIndex(
-  positions: TilePosition[],
-  fScore: Map<string, number>,
-  hScore: Map<string, number>,
-): number {
-  let bestIndex = 0;
-  let bestScore = fScore.get(tileKey(positions[0] ?? { x: 0, y: 0 })) ?? Number.POSITIVE_INFINITY;
-  let bestHeuristic =
-    hScore.get(tileKey(positions[0] ?? { x: 0, y: 0 })) ?? Number.POSITIVE_INFINITY;
-
-  for (let index = 1; index < positions.length; index += 1) {
-    const score =
-      fScore.get(tileKey(positions[index] ?? { x: 0, y: 0 })) ?? Number.POSITIVE_INFINITY;
-    const heuristic =
-      hScore.get(tileKey(positions[index] ?? { x: 0, y: 0 })) ?? Number.POSITIVE_INFINITY;
-
-    if (score < bestScore || (score === bestScore && heuristic < bestHeuristic)) {
-      bestIndex = index;
-      bestScore = score;
-      bestHeuristic = heuristic;
-    }
-  }
-
-  return bestIndex;
 }
 
 function movementCost(start: TilePosition, target: TilePosition): number {
@@ -122,4 +95,103 @@ function reconstructPath(
 
   path.reverse();
   return path;
+}
+
+type QueueEntry = {
+  position: TilePosition;
+  score: number;
+  heuristic: number;
+};
+
+class PriorityQueue {
+  private readonly entries: QueueEntry[] = [];
+
+  get size(): number {
+    return this.entries.length;
+  }
+
+  push(position: TilePosition, score: number, heuristic: number): void {
+    this.entries.push({ position, score, heuristic });
+    this.bubbleUp(this.entries.length - 1);
+  }
+
+  pop(): TilePosition | undefined {
+    const first = this.entries[0];
+    const last = this.entries.pop();
+
+    if (!first || !last) {
+      return undefined;
+    }
+
+    if (this.entries.length > 0) {
+      this.entries[0] = last;
+      this.bubbleDown(0);
+    }
+
+    return first.position;
+  }
+
+  private bubbleUp(index: number): void {
+    let currentIndex = index;
+
+    while (currentIndex > 0) {
+      const parentIndex = Math.floor((currentIndex - 1) / 2);
+
+      if (!isBetter(this.entries[currentIndex], this.entries[parentIndex])) {
+        return;
+      }
+
+      this.swap(currentIndex, parentIndex);
+      currentIndex = parentIndex;
+    }
+  }
+
+  private bubbleDown(index: number): void {
+    let currentIndex = index;
+
+    while (true) {
+      const leftIndex = currentIndex * 2 + 1;
+      const rightIndex = leftIndex + 1;
+      let bestIndex = currentIndex;
+
+      if (isBetter(this.entries[leftIndex], this.entries[bestIndex])) {
+        bestIndex = leftIndex;
+      }
+
+      if (isBetter(this.entries[rightIndex], this.entries[bestIndex])) {
+        bestIndex = rightIndex;
+      }
+
+      if (bestIndex === currentIndex) {
+        return;
+      }
+
+      this.swap(currentIndex, bestIndex);
+      currentIndex = bestIndex;
+    }
+  }
+
+  private swap(a: number, b: number): void {
+    const left = this.entries[a];
+    const right = this.entries[b];
+
+    if (!left || !right) {
+      return;
+    }
+
+    this.entries[a] = right;
+    this.entries[b] = left;
+  }
+}
+
+function isBetter(a: QueueEntry | undefined, b: QueueEntry | undefined): boolean {
+  if (!a) {
+    return false;
+  }
+
+  if (!b) {
+    return true;
+  }
+
+  return a.score < b.score || (a.score === b.score && a.heuristic < b.heuristic);
 }

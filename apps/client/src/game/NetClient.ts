@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from "@tilezo/protocol";
+import type { ClientMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { DEFAULT_WS_URL } from "../assets";
 
 type MessageHandler = (message: ServerMessage) => void;
@@ -81,12 +81,30 @@ export class NetClient {
 }
 
 function getWebSocketUrl(token: string): string {
-  const configured = typeof process === "undefined" ? undefined : process.env.PUBLIC_WS_URL;
-  const baseUrl =
-    configured ??
-    (location.protocol === "https:" ? DEFAULT_WS_URL.replace("ws://", "wss://") : DEFAULT_WS_URL);
+  const runtimeConfigured =
+    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_WS_URL;
+  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_WS_URL;
+  const browserDefault = getBrowserWebSocketUrl();
+  const baseUrl = runtimeConfigured ?? buildConfigured ?? browserDefault ?? DEFAULT_WS_URL;
   const url = new URL(baseUrl);
   url.searchParams.set("token", token);
 
   return url.toString();
+}
+
+function getBrowserWebSocketUrl(): string | undefined {
+  if (typeof location === "undefined") {
+    return undefined;
+  }
+
+  return location.protocol === "https:" ? DEFAULT_WS_URL.replace("ws://", "wss://") : undefined;
+}
+
+declare global {
+  interface Window {
+    TILEZO_CONFIG?: {
+      PUBLIC_API_URL?: string;
+      PUBLIC_WS_URL?: string;
+    };
+  }
 }

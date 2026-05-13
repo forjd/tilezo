@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { PublicRoomSummary } from "@tilezo/protocol";
+import type { PublicRoomSummary } from "@tilezo/protocol/messages";
 import { RoomBrowser } from "./RoomBrowser";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -90,24 +90,34 @@ function restoreDocument() {
   }
 }
 
-type FakeEvent = Record<string, never>;
+type FakeEvent = { target?: FakeElement };
 
 class FakeElement {
   readonly children: FakeElement[] = [];
   readonly listeners = new Map<string, Set<(event: FakeEvent) => void>>();
   readonly classList = new FakeClassList(this);
+  readonly dataset: Record<string, string> = {};
   className = "";
   disabled = false;
+  parentElement?: FakeElement;
   textContent = "";
   type = "";
 
   constructor(readonly tagName: string) {}
 
   append(...children: FakeElement[]): void {
+    for (const child of children) {
+      child.parentElement = this;
+    }
+
     this.children.push(...children);
   }
 
   replaceChildren(...children: FakeElement[]): void {
+    for (const child of children) {
+      child.parentElement = this;
+    }
+
     this.children.splice(0, this.children.length, ...children);
   }
 
@@ -118,9 +128,21 @@ class FakeElement {
   }
 
   dispatch(type: string, event: FakeEvent): void {
+    event.target ??= this;
+
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event);
     }
+
+    this.parentElement?.dispatch(type, event);
+  }
+
+  closest(selector: string): FakeElement | undefined {
+    if (selector === "button[data-room-id]" && this.tagName === "button" && this.dataset.roomId) {
+      return this;
+    }
+
+    return this.parentElement?.closest(selector);
   }
 }
 

@@ -1,6 +1,7 @@
 export class ChatPanel {
   readonly element = document.createElement("section");
 
+  private readonly maxMessages = 100;
   private readonly list = document.createElement("div");
   private readonly input = document.createElement("input");
   private sendHandler?: (text: string) => void;
@@ -70,6 +71,9 @@ export class ChatPanel {
   }
 
   addMessage(username: string, text: string): void {
+    const shouldStickToBottom =
+      this.list.children.length === 0 ||
+      this.list.scrollTop + this.list.clientHeight >= this.list.scrollHeight - 8;
     const message = document.createElement("div");
     const author = document.createElement("strong");
     const body = document.createElement("span");
@@ -79,7 +83,14 @@ export class ChatPanel {
     body.textContent = `: ${text}`;
     message.append(author, body);
     this.list.append(message);
-    this.list.scrollTop = this.list.scrollHeight;
+
+    while (this.list.childElementCount > this.maxMessages) {
+      this.list.firstElementChild?.remove();
+    }
+
+    if (shouldStickToBottom) {
+      this.list.scrollTop = this.list.scrollHeight;
+    }
   }
 
   private handleInputChanged(): void {

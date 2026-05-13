@@ -1,6 +1,6 @@
-import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { authenticate, updateAppearance } from "../auth/AuthClient";
-import { Game } from "../game/Game";
+import type { Game } from "../game/Game";
 import { CharacterEditor } from "../ui/CharacterEditor";
 import { ChatPanel } from "../ui/ChatPanel";
 import { LoginForm } from "../ui/LoginForm";
@@ -27,6 +27,7 @@ export function createApp(root: HTMLElement): void {
         };
       }
     | undefined;
+  let game: Game | undefined;
   let gameStarted = false;
   let joinedRoom = false;
 
@@ -53,37 +54,45 @@ export function createApp(root: HTMLElement): void {
   topActions.append(browseRooms, editCharacter, logOut);
   topBar.append(brand, topActions, status);
 
-  const game = new Game({
-    stage,
-    chat,
-    setStatus(value) {
-      status.textContent = value;
-    },
-    setRooms(rooms) {
-      roomBrowser.setRooms(rooms);
-    },
-    onRoomJoined(snapshot) {
-      joinedRoom = true;
-      chat.clear();
-      chat.show();
-      browseRooms.classList.remove("hidden");
-      editCharacter.classList.remove("hidden");
-      roomBrowser.setCurrentRoom(snapshot.roomId);
-      roomBrowser.hide();
-    },
-  });
-
   const roomBrowser = new RoomBrowser({
     onJoin(roomId) {
       status.textContent = "joining room";
-      game.joinRoom(roomId);
+      game?.joinRoom(roomId);
     },
     onRefresh() {
       if (gameStarted) {
-        game.refreshRooms();
+        game?.refreshRooms();
       }
     },
   });
+
+  async function ensureGame(): Promise<Game> {
+    if (game) {
+      return game;
+    }
+
+    const { Game } = await import("../game/Game");
+    game = new Game({
+      stage,
+      chat,
+      setStatus(value) {
+        status.textContent = value;
+      },
+      setRooms(rooms) {
+        roomBrowser.setRooms(rooms);
+      },
+      onRoomJoined(snapshot) {
+        joinedRoom = true;
+        chat.clear();
+        chat.show();
+        browseRooms.classList.remove("hidden");
+        editCharacter.classList.remove("hidden");
+        roomBrowser.setCurrentRoom(snapshot.roomId);
+        roomBrowser.hide();
+      },
+    });
+    return game;
+  }
 
   const characterEditor = new CharacterEditor({
     initialAppearance: DEFAULT_AVATAR_APPEARANCE,
@@ -101,13 +110,13 @@ export function createApp(root: HTMLElement): void {
 
         if (joinedRoom) {
           editCharacter.classList.remove("hidden");
-          game.updateAppearance(savedAppearance);
+          game?.updateAppearance(savedAppearance);
           status.textContent = "character updated";
           return;
         }
 
         status.textContent = "connecting";
-        await game.start(session.token);
+        await (await ensureGame()).start(session.token);
         gameStarted = true;
         browseRooms.classList.remove("hidden");
         roomBrowser.show();
@@ -162,7 +171,7 @@ export function createApp(root: HTMLElement): void {
 
   logOut.addEventListener("click", () => {
     if (gameStarted) {
-      game.stop();
+      game?.stop();
     }
 
     createApp(root);

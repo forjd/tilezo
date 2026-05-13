@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { ClientMessage } from "@tilezo/protocol";
+import type { ClientMessage } from "@tilezo/protocol/messages";
 import { NetClient } from "./NetClient";
 
 const originalWebSocket = globalThis.WebSocket;
@@ -69,6 +69,19 @@ describe("NetClient", () => {
     expect(socket.url).toBe("ws://localhost:4567/ws?token=session-token");
   });
 
+  test("does not use the client dev server origin as the websocket fallback", async () => {
+    installBrowserFakes("http:", "0.0.0.0:3001");
+    Reflect.deleteProperty(globalThis, "process");
+    const client = new NetClient();
+
+    const connected = client.connect("session-token");
+    const socket = currentSocket();
+    socket.open();
+    await connected;
+
+    expect(socket.url).toBe("ws://localhost:3000/ws?token=session-token");
+  });
+
   test("falls back to the default websocket URL when process is unavailable", async () => {
     installBrowserFakes("http:");
     Reflect.deleteProperty(globalThis, "process");
@@ -127,11 +140,11 @@ describe("NetClient", () => {
   });
 });
 
-function installBrowserFakes(protocol: "http:" | "https:") {
+function installBrowserFakes(protocol: "http:" | "https:", host?: string) {
   delete Bun.env.PUBLIC_WS_URL;
   Object.defineProperty(globalThis, "location", {
     configurable: true,
-    value: { protocol },
+    value: { host, protocol },
   });
   globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
 }

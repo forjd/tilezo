@@ -1,31 +1,34 @@
-import { type RoomTile, type TilePosition, tileToScreen } from "@tilezo/engine";
+import { tileToScreen } from "@tilezo/engine/iso";
+import type { RoomTile, TilePosition } from "@tilezo/engine/types";
 import { Container, Graphics } from "pixi.js";
 
 export class TileMap {
   readonly view = new Container();
+  private readonly floor = new Graphics();
   private readonly highlight = new Graphics();
   private tiles = new Map<string, RoomTile>();
+  private hoverKey?: string;
 
   constructor() {
-    this.view.addChild(this.highlight);
+    this.view.addChild(this.floor, this.highlight);
   }
 
   load(tiles: RoomTile[]): void {
-    this.view.removeChildren();
+    this.floor.clear();
+    this.highlight.clear();
+    this.hoverKey = undefined;
     this.tiles = new Map(tiles.map((tile) => [key(tile), tile]));
 
     for (const tile of tiles) {
       const screen = tileToScreen(tile.x, tile.y);
-      const graphic = drawDiamond(
+      drawDiamond(
+        this.floor,
+        screen.x,
+        screen.y,
         tile.walkable ? 0xc68a55 : 0x6f7560,
         tile.walkable ? 0x8b5d35 : 0x4f5747,
       );
-      graphic.x = screen.x;
-      graphic.y = screen.y;
-      this.view.addChild(graphic);
     }
-
-    this.view.addChild(this.highlight);
   }
 
   has(position: TilePosition): boolean {
@@ -37,9 +40,16 @@ export class TileMap {
   }
 
   setHover(position?: TilePosition): void {
+    const nextHoverKey = position && this.has(position) ? key(position) : undefined;
+
+    if (nextHoverKey === this.hoverKey) {
+      return;
+    }
+
+    this.hoverKey = nextHoverKey;
     this.highlight.clear();
 
-    if (!position || !this.has(position)) {
+    if (!position || !nextHoverKey) {
       return;
     }
 
@@ -52,11 +62,15 @@ export class TileMap {
     this.highlight.x = screen.x;
     this.highlight.y = screen.y;
   }
+
+  destroy(): void {
+    this.view.destroy({ children: true });
+  }
 }
 
-function drawDiamond(fill: number, stroke: number): Graphics {
-  return new Graphics()
-    .poly([0, -16, 32, 0, 0, 16, -32, 0])
+function drawDiamond(graphic: Graphics, x: number, y: number, fill: number, stroke: number): void {
+  graphic
+    .poly([x, y - 16, x + 32, y, x, y + 16, x - 32, y])
     .fill(fill)
     .stroke({ color: stroke, width: 1 });
 }

@@ -1,4 +1,4 @@
-import type { PublicRoomSummary } from "@tilezo/protocol";
+import type { PublicRoomSummary } from "@tilezo/protocol/messages";
 
 type RoomBrowserOptions = {
   onJoin: (roomId: string) => void;
@@ -36,6 +36,17 @@ export class RoomBrowser {
     this.closeButton.addEventListener("click", () => this.hide());
 
     this.list.className = "room-list";
+    this.list.addEventListener("click", (event) => {
+      const button = (event.target as Element | null)?.closest<HTMLButtonElement>(
+        "button[data-room-id]",
+      );
+
+      if (!button || button.disabled) {
+        return;
+      }
+
+      this.options.onJoin(button.dataset.roomId ?? "");
+    });
 
     actions.append(this.refreshButton, this.closeButton);
     header.append(title, actions);
@@ -93,12 +104,12 @@ export class RoomBrowser {
     button.className = "primary-button room-join-button";
     button.type = "button";
     button.disabled = joined;
+    button.dataset.roomId = room.id;
 
     name.textContent = room.name;
     meta.textContent = room.id;
     count.textContent = `${room.userCount} inside`;
     button.textContent = joined ? "Current" : "Join";
-    button.addEventListener("click", () => this.options.onJoin(room.id));
 
     details.append(name, meta);
     item.append(details, count, button);

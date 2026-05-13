@@ -1,1 +1,1 @@
-export { screenToTile, tileToScreen } from "@tilezo/engine";
+export { screenToTile, tileToScreen } from "@tilezo/engine/iso";

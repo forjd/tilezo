@@ -28,6 +28,8 @@ export type PersistenceStore = {
     options?: { ownerUserId?: string; visibility?: RoomVisibility },
   ): Promise<void>;
   listRooms?(): Promise<PersistedRoomLayout[]>;
+  listPublicRooms?(): Promise<RoomLayout[]>;
+  listOwnedRooms?(ownerUserId: string): Promise<OwnedRoomLayout[]>;
 };
 
 export async function loadOrSeedDefaultRoom(
@@ -70,18 +72,10 @@ export async function loadOrSeedPublicRooms(
       }
     }
 
-    const storedRooms = store.listRooms ? await store.listRooms() : [];
+    const storedPublicLayouts = store.listPublicRooms ? await store.listPublicRooms() : [];
     return {
-      publicLayouts: mergeRoomLayouts(
-        fallbackLayouts,
-        storedRooms.filter((room) => room.visibility === "public").map((room) => room.layout),
-      ),
-      privateLayouts: storedRooms
-        .filter(
-          (room): room is PersistedRoomLayout & { ownerUserId: string } =>
-            room.visibility === "private" && typeof room.ownerUserId === "string",
-        )
-        .map((room) => ({ layout: room.layout, ownerUserId: room.ownerUserId })),
+      publicLayouts: mergeRoomLayouts(fallbackLayouts, storedPublicLayouts),
+      privateLayouts: [],
     };
   } catch (error) {
     console.warn("Room persistence unavailable; using bundled public rooms", error);
@@ -143,6 +137,28 @@ export class DrizzlePersistenceStore implements PersistenceStore {
       ownerUserId: room.ownerUserId ?? undefined,
       visibility: room.visibility === "private" ? "private" : "public",
     }));
+  }
+
+  async listPublicRooms(): Promise<RoomLayout[]> {
+    const storedRooms = await this.db
+      .select({
+        layout: rooms.layout,
+      })
+      .from(rooms)
+      .where(eq(rooms.visibility, "public"))
+      .orderBy(asc(rooms.name), asc(rooms.id));
+    return storedRooms.map((room) => room.layout);
+  }
+
+  async listOwnedRooms(ownerUserId: string): Promise<OwnedRoomLayout[]> {
+    const storedRooms = await this.db
+      .select({
+        layout: rooms.layout,
+      })
+      .from(rooms)
+      .where(eq(rooms.ownerUserId, ownerUserId))
+      .orderBy(asc(rooms.name), asc(rooms.id));
+    return storedRooms.map((room) => ({ layout: room.layout, ownerUserId }));
   }
 }
 

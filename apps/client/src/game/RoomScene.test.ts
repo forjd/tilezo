@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AVATAR_APPEARANCE, type RoomSnapshotMessage } from "@tilezo/protocol";
+import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
+import type { RoomSnapshotMessage } from "@tilezo/protocol/messages";
 import { type Application, Container } from "pixi.js";
 import { RoomScene } from "./RoomScene";
 

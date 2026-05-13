@@ -1,4 +1,5 @@
-import type { AvatarAppearance, PublicRoomSummary, RoomSnapshotMessage } from "@tilezo/protocol";
+import type { AvatarAppearance } from "@tilezo/protocol/appearance";
+import type { PublicRoomSummary, RoomSnapshotMessage } from "@tilezo/protocol/messages";
 import { Application } from "pixi.js";
 import type { ChatPanel } from "../ui/ChatPanel";
 import { NetClient } from "./NetClient";
@@ -15,6 +16,7 @@ type GameOptions = {
 export class Game {
   private readonly app = new Application();
   private readonly net = new NetClient();
+  private readonly cleanup: (() => void)[] = [];
   private scene?: RoomScene;
 
   constructor(private readonly options: GameOptions) {}
@@ -36,32 +38,34 @@ export class Game {
       () => this.options.chat.focusInput(),
     );
 
-    this.net.onStatus(this.options.setStatus);
-    this.net.onMessage((message) => {
-      if (message.type === "connected") {
-        this.options.setStatus(`connected as ${message.userId}`);
-      }
+    this.cleanup.push(this.net.onStatus(this.options.setStatus));
+    this.cleanup.push(
+      this.net.onMessage((message) => {
+        if (message.type === "connected") {
+          this.options.setStatus(`connected as ${message.userId}`);
+        }
 
-      if (message.type === "room.snapshot") {
-        this.options.setStatus(`joined ${message.roomId}`);
-        this.options.onRoomJoined(message);
-        this.refreshRooms();
-      }
+        if (message.type === "room.snapshot") {
+          this.options.setStatus(`joined ${message.roomId}`);
+          this.options.onRoomJoined(message);
+          this.refreshRooms();
+        }
 
-      if (message.type === "room.list") {
-        this.options.setRooms(message.rooms);
-      }
+        if (message.type === "room.list") {
+          this.options.setRooms(message.rooms);
+        }
 
-      if (message.type === "chat.message") {
-        this.options.chat.addMessage(message.username, message.text);
-      }
+        if (message.type === "chat.message") {
+          this.options.chat.addMessage(message.username, message.text);
+        }
 
-      if (message.type === "error") {
-        this.options.setStatus(`${message.code}: ${message.message}`);
-      }
+        if (message.type === "error") {
+          this.options.setStatus(`${message.code}: ${message.message}`);
+        }
 
-      this.scene?.handleServerMessage(message);
-    });
+        this.scene?.handleServerMessage(message);
+      }),
+    );
 
     await this.net.connect(token);
     this.refreshRooms();
@@ -73,11 +77,15 @@ export class Game {
       this.net.send({ type: "chat.typing", isTyping });
     });
 
-    this.app.ticker.add((ticker) => {
+    const updateScene = (ticker: { deltaMS: number }) => {
       this.scene?.update(ticker.deltaMS / 1000);
-    });
+    };
+    this.app.ticker.add(updateScene);
+    this.cleanup.push(() => this.app.ticker.remove(updateScene));
 
-    globalThis.addEventListener("resize", () => this.scene?.resize());
+    const resizeScene = () => this.scene?.resize();
+    globalThis.addEventListener("resize", resizeScene);
+    this.cleanup.push(() => globalThis.removeEventListener("resize", resizeScene));
   }
 
   joinRoom(roomId: string): void {
@@ -96,6 +104,11 @@ export class Game {
   }
 
   stop(): void {
+    for (const cleanup of this.cleanup.splice(0)) {
+      cleanup();
+    }
+    this.scene?.destroy();
+    this.scene = undefined;
     this.net.disconnect();
     this.app.destroy(true);
   }

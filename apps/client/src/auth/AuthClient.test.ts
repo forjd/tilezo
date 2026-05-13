@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { DEFAULT_API_URL } from "../assets";
 import { authenticate, updateAppearance } from "./AuthClient";
 
@@ -99,6 +99,43 @@ describe("authenticate", () => {
     await authenticate({ mode: "login", username: "dan", password: "secret" });
 
     expect(requests).toEqual([`${DEFAULT_API_URL}/auth/login`]);
+  });
+
+  test("does not use the client page origin as the API fallback", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    Reflect.deleteProperty(globalThis, "process");
+    const originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: { origin: "http://localhost:3001" },
+    });
+    const requests: string[] = [];
+    globalThis.fetch = (async (url: FetchArgs[0]) => {
+      requests.push(String(url));
+      return Response.json({
+        user: { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE },
+        token: "session-token",
+      });
+    }) as unknown as typeof fetch;
+
+    await authenticate({ mode: "register", username: "dan", password: "secret" });
+
+    expect(requests).toEqual([`${DEFAULT_API_URL}/auth/register`]);
+
+    if (originalLocation) {
+      Object.defineProperty(globalThis, "location", originalLocation);
+    } else {
+      Reflect.deleteProperty(globalThis, "location");
+    }
+  });
+
+  test("throws a friendly auth error for empty error responses", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    globalThis.fetch = (async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
+
+    await expect(
+      authenticate({ mode: "register", username: "dan", password: "secret" }),
+    ).rejects.toThrow("Login failed");
   });
 });
 

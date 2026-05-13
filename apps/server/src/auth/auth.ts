@@ -59,10 +59,6 @@ export class AuthService {
       throw new AuthError("INVALID_AUTH_INPUT", "Username and password are required");
     }
 
-    if (await this.store.findUserByUsernameKey(usernameKey)) {
-      throw new AuthError("USERNAME_TAKEN", "Username is already taken");
-    }
-
     try {
       const user = await this.store.createUser({
         username,

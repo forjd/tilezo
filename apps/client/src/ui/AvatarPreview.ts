@@ -1,4 +1,4 @@
-import type { AvatarAppearance } from "@tilezo/protocol";
+import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 
 const AVATAR_PARTS = [
   "shadow",

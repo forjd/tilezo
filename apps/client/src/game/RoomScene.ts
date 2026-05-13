@@ -1,5 +1,7 @@
-import { type RoomTile, screenToTile, type TilePosition, tileToScreen } from "@tilezo/engine";
-import type { AvatarAppearance, RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol";
+import { screenToTile, tileToScreen } from "@tilezo/engine/iso";
+import type { RoomTile, TilePosition } from "@tilezo/engine/types";
+import type { AvatarAppearance } from "@tilezo/protocol/appearance";
+import type { RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { type Application, Container } from "pixi.js";
 import { Avatar } from "./Avatar";
 import { TileMap } from "./TileMap";
@@ -27,6 +29,8 @@ export class RoomScene {
   private dragWorldStart?: Point;
   private isPanning = false;
   private suppressNextClick = false;
+  private canvasRect?: Pick<DOMRect, "left" | "top">;
+  private readonly removePointerListeners: (() => void)[] = [];
 
   constructor(
     private readonly app: Application,
@@ -43,6 +47,9 @@ export class RoomScene {
     this.tiles.load(snapshot.tiles);
     this.roomBounds = calculateRoomBounds(snapshot.tiles);
     this.resetCamera();
+    for (const avatar of this.avatars.values()) {
+      avatar.destroy();
+    }
     this.avatarLayer.removeChildren();
     this.avatars.clear();
 
@@ -113,6 +120,7 @@ export class RoomScene {
     }
 
     avatar.view.removeFromParent();
+    avatar.destroy();
     this.avatars.delete(userId);
   }
 
@@ -140,19 +148,19 @@ export class RoomScene {
   private bindPointer(): void {
     const canvas = this.app.canvas;
 
-    canvas.addEventListener("mousemove", (event) => {
+    this.listen(canvas, "mousemove", (event) => {
       this.updatePan(event);
       this.hover = this.eventToTile(event);
       this.tiles.setHover(this.hover);
     });
 
-    canvas.addEventListener("mouseleave", () => {
+    this.listen(canvas, "mouseleave", () => {
       this.endPan();
       this.hover = undefined;
       this.tiles.setHover(undefined);
     });
 
-    canvas.addEventListener("mousedown", (event) => {
+    this.listen(canvas, "mousedown", (event) => {
       event.preventDefault();
       this.dragStart = this.eventToCanvasPoint(event);
       this.dragWorldStart = { x: this.world.x, y: this.world.y };
@@ -160,11 +168,11 @@ export class RoomScene {
       this.onCanvasInteraction?.();
     });
 
-    canvas.addEventListener("mouseup", () => {
+    this.listen(canvas, "mouseup", () => {
       this.endPan();
     });
 
-    canvas.addEventListener("click", (event) => {
+    this.listen(canvas, "click", (event) => {
       if (this.suppressNextClick) {
         event.preventDefault();
         this.suppressNextClick = false;
@@ -180,10 +188,19 @@ export class RoomScene {
       this.onCanvasInteraction?.();
     });
 
-    canvas.addEventListener("wheel", (event) => {
+    this.listen(canvas, "wheel", (event) => {
       event.preventDefault();
       this.zoomAt(event);
     });
+  }
+
+  private listen<K extends keyof HTMLElementEventMap>(
+    canvas: HTMLElement,
+    type: K,
+    listener: (event: HTMLElementEventMap[K]) => void,
+  ): void {
+    canvas.addEventListener(type, listener);
+    this.removePointerListeners.push(() => canvas.removeEventListener(type, listener));
   }
 
   private eventToTile(event: MouseEvent): TilePosition {
@@ -192,7 +209,8 @@ export class RoomScene {
   }
 
   private eventToCanvasPoint(event: MouseEvent): Point {
-    const rect = this.app.canvas.getBoundingClientRect();
+    const rect = this.canvasRect ?? this.app.canvas.getBoundingClientRect();
+    this.canvasRect = rect;
     return {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
@@ -248,6 +266,19 @@ export class RoomScene {
     this.world.scale.set(nextScale);
     this.world.x = point.x - worldPoint.x * nextScale;
     this.world.y = point.y - worldPoint.y * nextScale;
+  }
+
+  destroy(): void {
+    for (const remove of this.removePointerListeners.splice(0)) {
+      remove();
+    }
+
+    for (const avatar of this.avatars.values()) {
+      avatar.destroy();
+    }
+    this.avatars.clear();
+    this.tiles.destroy();
+    this.world.destroy({ children: true });
   }
 }
 

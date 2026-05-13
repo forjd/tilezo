@@ -1,5 +1,5 @@
 import type { ServerMessage } from "@tilezo/protocol";
-import { avatarAppearanceSchema } from "@tilezo/protocol";
+import { avatarAppearanceSchema, MAX_RAW_MESSAGE_BYTES } from "@tilezo/protocol";
 import { AuthError, AuthService, DrizzleAuthStore } from "./auth/auth";
 import { getConfig } from "./config";
 import { createDatabase } from "./db/db";
@@ -75,6 +75,9 @@ const server = Bun.serve<SocketData>({
     });
   },
   websocket: {
+    maxPayloadLength: MAX_RAW_MESSAGE_BYTES,
+    backpressureLimit: MAX_RAW_MESSAGE_BYTES * 4,
+    closeOnBackpressureLimit: true,
     open(ws) {
       ws.send(
         encodeServerMessage({
@@ -108,7 +111,11 @@ const server = Bun.serve<SocketData>({
 });
 
 function publish(topic: string, message: ServerMessage): void {
-  server.publish(topic, encodeServerMessage(message));
+  const result = server.publish(topic, encodeServerMessage(message));
+
+  if (result === -1) {
+    console.warn(`Dropped message for topic ${topic} due to WebSocket backpressure`);
+  }
 }
 
 console.log(`Server listening on http://${config.host}:${server.port}`);

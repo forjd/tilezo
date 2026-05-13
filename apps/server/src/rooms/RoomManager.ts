@@ -62,7 +62,7 @@ export class RoomManager {
     return this.listAccessibleLayouts(userId).map((layout) => ({
       id: layout.id,
       name: layout.name,
-      userCount: this.rooms.get(layout.id)?.getUsers().length ?? 0,
+      userCount: this.rooms.get(layout.id)?.userCount ?? 0,
       joined: layout.id === currentRoomId,
     }));
   }
@@ -119,10 +119,25 @@ function normalizeRoomDirectory(
 }
 
 async function loadPublicRoomLayouts(): Promise<RoomLayout[]> {
-  const path = new URL("../../../../assets/rooms/public-rooms.json", import.meta.url);
-  const rawLayouts = (await Bun.file(path).json()) as RawRoomLayout[];
+  const rawLayouts = (await Bun.file(await resolvePublicRoomsPath()).json()) as RawRoomLayout[];
 
   return rawLayouts.map((raw) =>
     createRectRoomLayout(raw.id, raw.name, raw.width, raw.height, raw.spawn, raw.blocked ?? []),
   );
+}
+
+async function resolvePublicRoomsPath(): Promise<string> {
+  const candidates = [
+    Bun.env.TILEZO_PUBLIC_ROOMS_PATH,
+    `${process.cwd()}/assets/rooms/public-rooms.json`,
+    `${process.cwd()}/../../assets/rooms/public-rooms.json`,
+  ].filter((path): path is string => typeof path === "string");
+
+  for (const path of candidates) {
+    if (await Bun.file(path).exists()) {
+      return path;
+    }
+  }
+
+  return candidates[0] ?? "assets/rooms/public-rooms.json";
 }

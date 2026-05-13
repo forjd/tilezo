@@ -45,6 +45,7 @@ export class Room {
   }
 
   moveUser(userId: string, target: TilePosition): TilePosition[] | null {
+    this.sweepCompletedMovements();
     const user = this.users.get(userId);
 
     if (!user) {
@@ -58,7 +59,7 @@ export class Room {
       return activeMovement.path.map((position) => ({ ...position }));
     }
 
-    const path = findPath(this.layout, currentPosition, target);
+    const path = findPath(this.grid, currentPosition, target);
 
     if (!path) {
       return null;
@@ -88,6 +89,7 @@ export class Room {
   }
 
   getSnapshot(): RoomSnapshot {
+    this.sweepCompletedMovements();
     return {
       roomId: this.id,
       users: this.getUsers(),
@@ -96,6 +98,7 @@ export class Room {
   }
 
   getUsers() {
+    this.sweepCompletedMovements();
     return [...this.users.values()].map((user) => ({
       id: user.id,
       username: user.username,
@@ -110,6 +113,11 @@ export class Room {
 
   get isEmpty(): boolean {
     return this.users.size === 0;
+  }
+
+  get userCount(): number {
+    this.sweepCompletedMovements();
+    return this.users.size;
   }
 
   private getSpawnPosition(): TilePosition {
@@ -142,6 +150,35 @@ export class Room {
     }
 
     return { ...user.position };
+  }
+
+  private sweepCompletedMovements(): void {
+    for (const [userId, movement] of this.movements) {
+      const user = this.users.get(userId);
+
+      if (!user) {
+        this.movements.delete(userId);
+        continue;
+      }
+
+      const elapsed = Math.max(0, this.clock() - movement.startedAt);
+      const reachedIndex = Math.min(
+        movement.path.length - 1,
+        Math.floor(elapsed / MOVEMENT_MILLISECONDS_PER_TILE),
+      );
+
+      if (reachedIndex < movement.path.length - 1) {
+        continue;
+      }
+
+      const finalPosition = movement.path.at(-1);
+
+      if (finalPosition) {
+        user.position = { ...finalPosition };
+      }
+
+      this.movements.delete(userId);
+    }
   }
 }
 

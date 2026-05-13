@@ -9,7 +9,7 @@
     "pixi.js": "^8.9.2"
   },
   "scripts": {
-    "build": "bun build index.html --outdir dist",
+    "build": "rm -rf dist && bun build index.html --outdir dist --splitting",
     "dev": "bun --hot index.html --host=${CLIENT_HOST:-0.0.0.0} --port=${CLIENT_PORT:-3001}",
     "format": "biome format --write .",
     "lint": "biome check .",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { Avatar } from "./Avatar";
 
 describe("Avatar", () => {

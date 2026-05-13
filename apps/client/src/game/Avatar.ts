@@ -1,5 +1,6 @@
-import { type TilePosition, tileToScreen } from "@tilezo/engine";
-import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import { tileToScreen } from "@tilezo/engine/iso";
+import type { TilePosition } from "@tilezo/engine/types";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { Container, Graphics, Text } from "pixi.js";
 
 type ScreenPosition = {
@@ -178,7 +179,6 @@ export class Avatar {
 
       if (!next) {
         this.setAnimationState("idle");
-        this.rebuildBody();
         return;
       }
 
@@ -293,12 +293,20 @@ export class Avatar {
   private rebuildBody(): void {
     const stepFrame =
       this.animationState === "walk" ? Math.floor(this.animationSeconds / 0.12) % 2 : 0;
-    const bodyKey = JSON.stringify({
-      appearance: this.appearance,
-      direction: this.direction,
-      state: this.animationState,
+    const bodyKey = [
+      this.appearance.hair,
+      this.appearance.hairColor,
+      this.appearance.skinTone,
+      this.appearance.shirt,
+      this.appearance.shirtColor,
+      this.appearance.pants,
+      this.appearance.pantsColor,
+      this.appearance.shoes,
+      this.appearance.shoesColor,
+      this.direction,
+      this.animationState,
       stepFrame,
-    });
+    ].join("|");
 
     if (bodyKey === this.renderedBodyKey) {
       return;
@@ -396,6 +404,10 @@ export class Avatar {
     this.animationState = state;
     this.animationSeconds = 0;
     this.renderedBodyKey = "";
+  }
+
+  destroy(): void {
+    this.view.destroy({ children: true });
   }
 }
 

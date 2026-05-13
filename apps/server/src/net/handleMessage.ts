@@ -100,6 +100,11 @@ export function handleMessage(
     }
 
     case "avatar.move.request": {
+      if (!consumeRateLimit(ws, "movement")) {
+        sendError(ws, "RATE_LIMITED", "Slow down before moving again");
+        return;
+      }
+
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room) {
@@ -123,6 +128,11 @@ export function handleMessage(
     }
 
     case "avatar.appearance.update": {
+      if (!consumeRateLimit(ws, "default")) {
+        sendError(ws, "RATE_LIMITED", "Slow down before updating your character again");
+        return;
+      }
+
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room) {
@@ -146,6 +156,11 @@ export function handleMessage(
     }
 
     case "chat.say": {
+      if (!consumeRateLimit(ws, "chat")) {
+        sendError(ws, "RATE_LIMITED", "Slow down before chatting again");
+        return;
+      }
+
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room || !ws.data.username) {
@@ -164,12 +179,22 @@ export function handleMessage(
     }
 
     case "chat.typing": {
+      if (!consumeRateLimit(ws, "typing")) {
+        return;
+      }
+
       const room = getJoinedRoom(ws, context.rooms);
 
       if (!room || !ws.data.username) {
         sendError(ws, "NOT_IN_ROOM", "Join a room before typing");
         return;
       }
+
+      if (ws.data.lastTypingState === parsed.value.isTyping) {
+        return;
+      }
+
+      ws.data.lastTypingState = parsed.value.isTyping;
 
       context.publish(roomTopic(room.id), {
         type: "chat.typing",
@@ -181,6 +206,11 @@ export function handleMessage(
     }
 
     case "ping":
+      if (!consumeRateLimit(ws, "default")) {
+        sendError(ws, "RATE_LIMITED", "Slow down before pinging again");
+        return;
+      }
+
       send(ws, {
         type: "pong",
         sentAt: parsed.value.sentAt,
@@ -219,7 +249,11 @@ function roomTopic(roomId: string): string {
 }
 
 function send(ws: ServerWebSocket<SocketData>, message: ServerMessage): void {
-  ws.send(encodeServerMessage(message));
+  const result = ws.send(encodeServerMessage(message));
+
+  if (result === -1) {
+    ws.close();
+  }
 }
 
 function sendError(ws: ServerWebSocket<SocketData>, code: string, message: string): void {
@@ -228,4 +262,31 @@ function sendError(ws: ServerWebSocket<SocketData>, code: string, message: strin
     code,
     message,
   });
+}
+
+const RATE_LIMITS = {
+  movement: { burst: 12, refillPerSecond: 8 },
+  chat: { burst: 5, refillPerSecond: 2 },
+  typing: { burst: 8, refillPerSecond: 4 },
+  default: { burst: 20, refillPerSecond: 10 },
+} satisfies Record<string, { burst: number; refillPerSecond: number }>;
+
+function consumeRateLimit(
+  ws: ServerWebSocket<SocketData>,
+  kind: keyof typeof RATE_LIMITS,
+  now = Date.now(),
+): boolean {
+  ws.data.rateLimits ??= {};
+  const limit = RATE_LIMITS[kind];
+  const current = ws.data.rateLimits[kind] ?? { tokens: limit.burst, updatedAt: now };
+  const elapsedSeconds = Math.max(0, (now - current.updatedAt) / 1000);
+  const tokens = Math.min(limit.burst, current.tokens + elapsedSeconds * limit.refillPerSecond);
+
+  if (tokens < 1) {
+    ws.data.rateLimits[kind] = { tokens, updatedAt: now };
+    return false;
+  }
+
+  ws.data.rateLimits[kind] = { tokens: tokens - 1, updatedAt: now };
+  return true;
 }

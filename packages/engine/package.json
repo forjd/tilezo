@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./iso": "./src/iso.ts",
+    "./types": "./src/types.ts"
   },
   "scripts": {
     "format": "biome format --write .",

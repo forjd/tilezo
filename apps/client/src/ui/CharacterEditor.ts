@@ -9,7 +9,7 @@ import {
   AVATAR_SHOE_STYLES,
   AVATAR_SKIN_TONES,
   type AvatarAppearance,
-} from "@tilezo/protocol";
+} from "@tilezo/protocol/appearance";
 import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
 
 type CharacterEditorOptions = {
