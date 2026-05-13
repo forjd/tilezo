@@ -11,7 +11,8 @@ describe("LoginForm", () => {
   test("renders default fields and hides on request", () => {
     installDocument();
     const form = new LoginForm(() => {});
-    const { username, password, loginModeButton, registerModeButton, button } = getFields(form);
+    const { username, password, confirmPassword, loginModeButton, registerModeButton, button } =
+      getFields(form);
 
     expect(form.element.className).toBe("login-panel");
     expect(username.maxLength).toBe(24);
@@ -19,6 +20,9 @@ describe("LoginForm", () => {
     expect(username.placeholder).toBe("");
     expect(password.required).toBe(true);
     expect(password.type).toBe("password");
+    expect(confirmPassword.required).toBe(false);
+    expect(confirmPassword.type).toBe("password");
+    expect(confirmPassword.parentElement?.classList.contains("hidden")).toBe(true);
     expect(loginModeButton.classList.contains("active")).toBe(true);
     expect(registerModeButton.classList.contains("active")).toBe(false);
     expect(button.textContent).toBe("Continue");
@@ -32,17 +36,39 @@ describe("LoginForm", () => {
     installDocument();
     const submissions: unknown[] = [];
     const form = new LoginForm((values) => submissions.push(values));
-    const { element, username, password, registerModeButton, button } = getFields(form);
+    const { element, username, password, confirmPassword, registerModeButton, button } =
+      getFields(form);
     const event = new FakeSubmitEvent();
 
     username.value = "  Dan  ";
     password.value = "  secret phrase  ";
     registerModeButton.dispatch("click", {});
+    confirmPassword.value = "  secret phrase  ";
     element.dispatch("submit", event);
 
     expect(event.defaultPrevented).toBe(true);
     expect(button.textContent).toBe("Create account");
     expect(submissions).toEqual([{ mode: "register", username: "Dan", password: "secret phrase" }]);
+  });
+
+  test("requires matching password confirmation when creating accounts", () => {
+    installDocument();
+    const submissions: unknown[] = [];
+    const form = new LoginForm((values) => submissions.push(values));
+    const { element, username, password, confirmPassword, registerModeButton, message } =
+      getFields(form);
+
+    registerModeButton.dispatch("click", {});
+    username.value = "Dan";
+    password.value = "secret phrase";
+    confirmPassword.value = "different phrase";
+    element.dispatch("submit", new FakeSubmitEvent());
+
+    expect(confirmPassword.required).toBe(true);
+    expect(confirmPassword.parentElement?.classList.contains("hidden")).toBe(false);
+    expect(message.textContent).toBe("Passwords do not match");
+    expect(message.classList.contains("visible")).toBe(true);
+    expect(submissions).toEqual([]);
   });
 
   test("shows and clears inline errors", () => {
@@ -82,6 +108,7 @@ function getFields(form: LoginForm): {
   element: FakeElement;
   username: FakeElement;
   password: FakeElement;
+  confirmPassword: FakeElement;
   loginModeButton: FakeElement;
   registerModeButton: FakeElement;
   button: FakeElement;
@@ -91,14 +118,16 @@ function getFields(form: LoginForm): {
   const modeGroup = element.children[0];
   const usernameLabel = element.children[1];
   const passwordLabel = element.children[2];
+  const confirmPasswordLabel = element.children[3];
 
   return {
     element,
     username: usernameLabel?.children[1] as FakeElement,
     password: passwordLabel?.children[1] as FakeElement,
+    confirmPassword: confirmPasswordLabel?.children[1] as FakeElement,
     loginModeButton: modeGroup?.children[0] as FakeElement,
     registerModeButton: modeGroup?.children[1] as FakeElement,
-    button: element.children[3] as FakeElement,
+    button: element.children[4] as FakeElement,
     message: form.element.children[1] as unknown as FakeElement,
   };
 }
@@ -147,10 +176,14 @@ class FakeElement {
   type = "";
   value = "";
   ariaPressed = "";
+  parentElement?: FakeElement;
 
   constructor(readonly tagName: string) {}
 
   append(...children: FakeElement[]): void {
+    for (const child of children) {
+      child.parentElement = this;
+    }
     this.children.push(...children);
   }
 

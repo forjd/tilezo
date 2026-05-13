@@ -9,6 +9,11 @@ export class LoginForm {
 
   private readonly username = document.createElement("input");
   private readonly password = document.createElement("input");
+  private readonly confirmPassword = document.createElement("input");
+  private readonly confirmPasswordField = this.createField(
+    "Confirm password",
+    this.confirmPassword,
+  );
   private readonly message = document.createElement("p");
   private readonly loginModeButton = document.createElement("button");
   private readonly registerModeButton = document.createElement("button");
@@ -43,6 +48,7 @@ export class LoginForm {
       modeGroup,
       this.createField("Username", this.username),
       this.createField("Password", this.password),
+      this.confirmPasswordField,
     );
 
     this.submitButton.className = "primary-button";
@@ -59,6 +65,10 @@ export class LoginForm {
     this.password.type = "password";
     this.password.autocomplete = "current-password";
 
+    this.confirmPassword.name = "tilezo-confirm-password";
+    this.confirmPassword.type = "password";
+    this.confirmPassword.autocomplete = "new-password";
+
     this.loginModeButton.addEventListener("click", () => this.setMode("login"));
     this.registerModeButton.addEventListener("click", () => this.setMode("register"));
     this.setMode("login");
@@ -68,8 +78,14 @@ export class LoginForm {
       this.clearError();
       const username = this.username.value.trim();
       const password = this.password.value.trim();
+      const confirmPassword = this.confirmPassword.value.trim();
 
       if (!username || !password) {
+        return;
+      }
+
+      if (this.mode === "register" && password !== confirmPassword) {
+        this.showError("Passwords do not match");
         return;
       }
 
@@ -98,6 +114,9 @@ export class LoginForm {
     this.mode = mode;
     this.submitButton.textContent = mode === "register" ? "Create account" : "Continue";
     this.password.autocomplete = mode === "register" ? "new-password" : "current-password";
+    this.confirmPassword.required = mode === "register";
+    this.confirmPassword.value = "";
+    this.confirmPasswordField.classList[mode === "register" ? "remove" : "add"]("hidden");
     this.loginModeButton.classList[mode === "login" ? "add" : "remove"]("active");
     this.registerModeButton.classList[mode === "register" ? "add" : "remove"]("active");
     this.loginModeButton.setAttribute("aria-pressed", String(mode === "login"));
