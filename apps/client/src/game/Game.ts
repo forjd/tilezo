@@ -1,5 +1,9 @@
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
-import type { PublicRoomSummary, RoomSnapshotMessage } from "@tilezo/protocol/messages";
+import type {
+  ClientMessage,
+  PublicRoomSummary,
+  RoomSnapshotMessage,
+} from "@tilezo/protocol/messages";
 import { Application } from "pixi.js";
 import type { ChatPanel } from "../ui/ChatPanel";
 import { NetClient } from "./NetClient";
@@ -11,6 +15,7 @@ type GameOptions = {
   setStatus: (status: string) => void;
   setRooms: (rooms: PublicRoomSummary[]) => void;
   onRoomJoined: (snapshot: RoomSnapshotMessage) => void;
+  onDisconnected: () => void;
 };
 
 export class Game {
@@ -18,6 +23,7 @@ export class Game {
   private readonly net = new NetClient();
   private readonly cleanup: (() => void)[] = [];
   private scene?: RoomScene;
+  private connected = false;
 
   constructor(private readonly options: GameOptions) {}
 
@@ -33,12 +39,19 @@ export class Game {
     this.scene = new RoomScene(
       this.app,
       (target) => {
-        this.net.send({ type: "avatar.move.request", target });
+        this.sendIfConnected({ type: "avatar.move.request", target });
       },
       () => this.options.chat.focusInput(),
     );
 
     this.cleanup.push(this.net.onStatus(this.options.setStatus));
+    this.cleanup.push(
+      this.net.onDisconnect(() => {
+        this.connected = false;
+        this.app.ticker.stop();
+        this.options.onDisconnected();
+      }),
+    );
     this.cleanup.push(
       this.net.onMessage((message) => {
         if (message.type === "connected") {
@@ -68,13 +81,14 @@ export class Game {
     );
 
     await this.net.connect(token);
+    this.connected = true;
     this.refreshRooms();
 
     this.options.chat.onSend((text) => {
-      this.net.send({ type: "chat.say", text });
+      this.sendIfConnected({ type: "chat.say", text });
     });
     this.options.chat.onTypingChange((isTyping) => {
-      this.net.send({ type: "chat.typing", isTyping });
+      this.sendIfConnected({ type: "chat.typing", isTyping });
     });
 
     const updateScene = (ticker: { deltaMS: number }) => {
@@ -89,18 +103,25 @@ export class Game {
   }
 
   joinRoom(roomId: string): void {
-    this.net.send({
+    this.sendIfConnected({
       type: "room.join",
       roomId,
     });
   }
 
   refreshRooms(): void {
-    this.net.send({ type: "room.list.request" });
+    this.sendIfConnected({ type: "room.list.request" });
   }
 
   updateAppearance(appearance: AvatarAppearance): void {
-    this.net.send({ type: "avatar.appearance.update", appearance });
+    this.sendIfConnected({ type: "avatar.appearance.update", appearance });
+  }
+
+  async reconnect(token: string): Promise<void> {
+    await this.net.connect(token);
+    this.connected = true;
+    this.app.ticker.start();
+    this.refreshRooms();
   }
 
   stop(): void {
@@ -109,7 +130,24 @@ export class Game {
     }
     this.scene?.destroy();
     this.scene = undefined;
+    this.connected = false;
     this.net.disconnect();
     this.app.destroy(true);
+  }
+
+  private sendIfConnected(message: ClientMessage): boolean {
+    if (!this.connected) {
+      this.options.setStatus("disconnected");
+      return false;
+    }
+
+    try {
+      this.net.send(message);
+      return true;
+    } catch {
+      this.connected = false;
+      this.options.setStatus("disconnected");
+      return false;
+    }
   }
 }

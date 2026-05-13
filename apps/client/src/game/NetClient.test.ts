@@ -114,7 +114,11 @@ describe("NetClient", () => {
     installBrowserFakes("http:");
     const client = new NetClient();
     const statuses: string[] = [];
+    let disconnects = 0;
     client.onStatus((status) => statuses.push(status));
+    client.onDisconnect(() => {
+      disconnects += 1;
+    });
 
     const connected = client.connect("session-token");
     const socket = currentSocket();
@@ -130,6 +134,7 @@ describe("NetClient", () => {
       "connection error",
       "disconnected",
     ]);
+    expect(disconnects).toBe(0);
   });
 
   test("rejects sends when the socket is not open", () => {
@@ -137,6 +142,23 @@ describe("NetClient", () => {
     const client = new NetClient();
 
     expect(() => client.send({ type: "ping", sentAt: "now" })).toThrow("WebSocket is not open");
+  });
+
+  test("reports unexpected disconnects after a socket was open", async () => {
+    installBrowserFakes("http:");
+    const client = new NetClient();
+    let disconnects = 0;
+    client.onDisconnect(() => {
+      disconnects += 1;
+    });
+
+    const connected = client.connect("session-token");
+    const socket = currentSocket();
+    socket.open();
+    await connected;
+    socket.close();
+
+    expect(disconnects).toBe(1);
   });
 });
 

@@ -1,8 +1,10 @@
 import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
+import { DEFAULT_ROOM_ID } from "../assets";
 import { type AuthSession, authenticate, updateAppearance } from "../auth/AuthClient";
 import type { Game } from "../game/Game";
 import { CharacterEditor } from "../ui/CharacterEditor";
 import { ChatPanel } from "../ui/ChatPanel";
+import { DisconnectedDialog } from "../ui/DisconnectedDialog";
 import { LoginForm } from "../ui/LoginForm";
 import { RoomBrowser } from "../ui/RoomBrowser";
 
@@ -23,6 +25,9 @@ export function createApp(root: HTMLElement): void {
   let game: Game | undefined;
   let gameStarted = false;
   let joinedRoom = false;
+  let reconnectTimeout: ReturnType<typeof setTimeout> | undefined;
+  let countdownInterval: ReturnType<typeof setInterval> | undefined;
+  let reconnecting = false;
 
   shell.className = "app-shell";
   stage.className = "game-stage";
@@ -83,9 +88,26 @@ export function createApp(root: HTMLElement): void {
         roomBrowser.setCurrentRoom(snapshot.roomId);
         roomBrowser.hide();
       },
+      onDisconnected() {
+        if (!session || !gameStarted) {
+          return;
+        }
+
+        shell.classList.add("connection-paused");
+        scheduleReconnect("The room connection dropped. The scene is paused while Tilezo retries.");
+      },
     });
     return game;
   }
+
+  const disconnectedDialog = new DisconnectedDialog({
+    onRetry() {
+      void reconnectAfterDisconnect("resume");
+    },
+    onReturnToLobby() {
+      void reconnectAfterDisconnect("lobby");
+    },
+  });
 
   const characterEditor = new CharacterEditor({
     initialAppearance: DEFAULT_AVATAR_APPEARANCE,
@@ -165,6 +187,7 @@ export function createApp(root: HTMLElement): void {
   });
 
   logOut.addEventListener("click", () => {
+    clearReconnectSchedule();
     clearStoredSession();
 
     if (gameStarted) {
@@ -181,6 +204,7 @@ export function createApp(root: HTMLElement): void {
     characterEditor.element,
     roomBrowser.element,
     chat.element,
+    disconnectedDialog.element,
   );
   root.replaceChildren(shell);
 
@@ -209,6 +233,68 @@ export function createApp(root: HTMLElement): void {
       logOut.classList.add("hidden");
       chat.hide();
       status.textContent = error instanceof Error ? error.message : "connection failed";
+    }
+  }
+
+  function scheduleReconnect(message: string, retryInSeconds = 5): void {
+    clearReconnectSchedule();
+    let remaining = retryInSeconds;
+
+    disconnectedDialog.showDisconnected(message, remaining);
+    countdownInterval = setInterval(() => {
+      remaining -= 1;
+      disconnectedDialog.setCountdown(Math.max(0, remaining));
+    }, 1000);
+    reconnectTimeout = setTimeout(() => {
+      void reconnectAfterDisconnect("resume");
+    }, retryInSeconds * 1000);
+  }
+
+  async function reconnectAfterDisconnect(mode: "resume" | "lobby"): Promise<void> {
+    if (!session || reconnecting) {
+      return;
+    }
+
+    reconnecting = true;
+    clearReconnectSchedule();
+    shell.classList.add("connection-paused");
+    disconnectedDialog.showRetrying(
+      mode === "lobby" ? "Reconnecting before returning to the lobby." : "Reconnecting to room.",
+    );
+    status.textContent = "reconnecting";
+
+    try {
+      const activeGame = await ensureGame();
+      await activeGame.reconnect(session.token);
+      gameStarted = true;
+      browseRooms.classList.remove("hidden");
+      editCharacter.classList.remove("hidden");
+
+      if (mode === "lobby") {
+        activeGame.joinRoom(DEFAULT_ROOM_ID);
+      }
+
+      disconnectedDialog.hide();
+      shell.classList.remove("connection-paused");
+      status.textContent = mode === "lobby" ? "returning to lobby" : "reconnected";
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Reconnect failed";
+      status.textContent = message;
+      scheduleReconnect(`Retry failed: ${message}`);
+    } finally {
+      reconnecting = false;
+    }
+  }
+
+  function clearReconnectSchedule(): void {
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = undefined;
+    }
+
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = undefined;
     }
   }
 }
