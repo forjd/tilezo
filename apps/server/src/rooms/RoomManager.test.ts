@@ -92,6 +92,27 @@ describe("RoomManager", () => {
     ]);
   });
 
+  test("requires approval for knock-only rooms unless the user owns the room", () => {
+    const manager = new RoomManager(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
+    const knockRoom = createRectRoomLayout("room_knock", "Knock Room", 4, 4, { x: 1, y: 1 });
+
+    manager.addRoom(knockRoom, {
+      access: "knock",
+      ownerUserId: "user_1",
+      visibility: "public",
+    });
+
+    expect(manager.listPublicRooms(undefined, "user_2").map((room) => room.id)).toContain(
+      "room_knock",
+    );
+    expect(manager.canJoinRoom("room_knock", "user_2")).toEqual({
+      ok: false,
+      code: "ROOM_ACCESS_REQUIRED",
+      message: "This room requires approval before joining",
+    });
+    expect(manager.canJoinRoom("room_knock", "user_1")).toEqual({ ok: true });
+  });
+
   test("reports room metrics for the debug endpoint", () => {
     const manager = new RoomManager([
       createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),

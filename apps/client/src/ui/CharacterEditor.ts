@@ -10,7 +10,7 @@ import {
   AVATAR_SKIN_TONES,
   type AvatarAppearance,
 } from "@tilezo/protocol/appearance";
-import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
+import { AvatarPreview } from "./AvatarPreview";
 
 type CharacterEditorOptions = {
   initialAppearance: AvatarAppearance;
@@ -30,7 +30,7 @@ export class CharacterEditor {
   private readonly pantsColor = this.createColorInput();
   private readonly shoes = this.createSelect(PRIMARY_SHOE_STYLES);
   private readonly shoesColor = this.createColorInput();
-  private readonly previewBody = createAvatarPreview(document);
+  private readonly preview = new AvatarPreview(document);
   private readonly submitButton = document.createElement("button");
   private readonly cancelButton = document.createElement("button");
 
@@ -53,8 +53,9 @@ export class CharacterEditor {
 
     const previewAvatar = document.createElement("div");
     previewAvatar.className = "character-preview-avatar";
-    previewAvatar.append(this.previewBody);
+    previewAvatar.append(this.preview.element);
     previewViews.append(previewAvatar);
+    void this.preview.mount();
 
     preview.append(previewViews);
 
@@ -144,7 +145,7 @@ export class CharacterEditor {
   }
 
   private updatePreview(): void {
-    updateAvatarPreview(this.previewBody, this.readAppearance());
+    this.preview.update(this.readAppearance());
     this.syncSwatches();
   }
 

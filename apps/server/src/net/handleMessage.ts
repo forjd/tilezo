@@ -7,6 +7,7 @@ import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
+import type { PresenceTracker } from "../presence/presence";
 import { ensurePersonalRoom, personalRoomId } from "../rooms/personalRoom";
 import type { RoomManager } from "../rooms/RoomManager";
 import { encodeServerMessage } from "../util/safeJson";
@@ -18,6 +19,7 @@ type Context = {
   persistence?: PersistenceStore;
   logger?: Logger;
   metrics?: Metrics;
+  presence?: PresenceTracker;
 };
 
 export function handleMessage(
@@ -230,6 +232,9 @@ export function handleMessage(
 }
 
 export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): void {
+  if (ws.data.connectionId) {
+    context.presence?.connect(ws.data.userId, ws.data.connectionId);
+  }
   context.metrics?.socketOpened();
   context.logger?.info("websocket.opened", socketFields(ws));
   send(ws, {
@@ -250,9 +255,13 @@ export function handleClose(
   publish: Context["publish"],
   logger?: Logger,
   metrics?: Metrics,
+  presence?: PresenceTracker,
 ) {
   metrics?.socketClosed();
   const { roomId, userId } = ws.data;
+  if (ws.data.connectionId) {
+    presence?.disconnect(userId, ws.data.connectionId);
+  }
 
   if (!roomId) {
     logger?.info("websocket.closed", socketFields(ws));
@@ -285,6 +294,28 @@ async function joinRoom(
   try {
     if (roomId === personalRoomId(ws.data.userId)) {
       await ensureOwnPersonalRoom(ws, context);
+    }
+
+    const access = context.rooms.canJoinRoom(roomId, ws.data.userId);
+
+    if (!access.ok) {
+      context.metrics?.increment(
+        access.code === "ROOM_ACCESS_REQUIRED"
+          ? "room.join.access_required"
+          : "room.join.unavailable",
+      );
+      context.logger?.warn("room.join.rejected", {
+        ...socketFields(ws),
+        requestedRoomId: roomId,
+        code: access.code,
+      });
+      if (options.sendUnavailableError) {
+        sendError(ws, access.code, access.message);
+      }
+      if (access.code === "ROOM_NOT_FOUND") {
+        await clearLastRoomId(context, ws.data.userId);
+      }
+      return;
     }
 
     const room = context.rooms.getOrCreate(roomId, ws.data.userId);
@@ -356,6 +387,9 @@ async function joinRoom(
     };
 
     ws.data.roomId = room.id;
+    if (ws.data.connectionId) {
+      context.presence?.joinRoom(ws.data.userId, ws.data.connectionId, room.id);
+    }
     ws.subscribe(roomTopic(room.id));
     send(ws, {
       type: "room.snapshot",

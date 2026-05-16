@@ -12,6 +12,9 @@ The logging pass should keep the current Bun/TypeScript stack in mind, preserve 
 ## AI-Backed NPCs and Bots
 
 Added: 2026-05-13 19:20 BST
+Implemented: 2026-05-14
+
+Follow-up: provider-backed AI chat and moderation boundaries are tracked in [FOLLOW_UPS.md](../FOLLOW_UPS.md).
 
 Add room NPCs or bots that can participate in the multiplayer room loop and optionally connect to AI providers for actual conversational chat.
 
@@ -29,6 +32,9 @@ The first version should focus on the core room loop: authenticate the reconnect
 ## Friends List and Presence
 
 Added: 2026-05-13 19:22 BST
+Implemented: 2026-05-14
+
+Follow-up: direct friend messaging is tracked in [FOLLOW_UPS.md](../FOLLOW_UPS.md).
 
 Add a friends list so players can manage social connections, see who is online or offline, and quickly act on a selected friend.
 
@@ -47,8 +53,6 @@ When the client loses the room connection, freeze or dim the current room view a
 
 Added: 2026-05-13 20:55 BST
 Implemented: 2026-05-13
-
-Follow-up: knock-only access enforcement is tracked in [FOLLOW_UPS.md](../FOLLOW_UPS.md).
 
 Add a create-room option that opens a dialog where players can make their own rooms instead of only joining existing ones.
 

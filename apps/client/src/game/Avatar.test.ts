@@ -45,7 +45,7 @@ describe("Avatar", () => {
     });
   });
 
-  test("renders overlay text with pixel-snapped nearest textures", () => {
+  test("renders username text cleanly while keeping bubble art pixel-snapped", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
       chatBubbleAvatar: { roundPixels: boolean };
@@ -70,8 +70,8 @@ describe("Avatar", () => {
     };
 
     expect(state.label.roundPixels).toBe(true);
-    expect(state.label.resolution).toBe(1);
-    expect(state.label.textureStyle.scaleMode).toBe("nearest");
+    expect(state.label.resolution).toBe(2);
+    expect(state.label.textureStyle.scaleMode).toBe("linear");
     expect(state.label.y).toBe(-60);
     expect(state.chatBubbleAvatar.roundPixels).toBe(true);
     expect(state.chatBubbleBackground.roundPixels).toBe(true);
@@ -152,10 +152,12 @@ describe("Avatar", () => {
 
     avatar.setAppearance({
       ...DEFAULT_AVATAR_APPEARANCE,
-      hair: "bob",
+      hair: "curls",
       hairColor: "#3b2418",
-      shirt: "hoodie",
+      shirt: "jacket",
       shirtColor: "#7f3b44",
+      pants: "skirt",
+      shoes: "high-tops",
     });
 
     const state = avatar as unknown as {
@@ -164,6 +166,8 @@ describe("Avatar", () => {
 
     expect(state.renderedBodyKey).toContain("#3b2418");
     expect(state.renderedBodyKey).toContain("#7f3b44");
+    expect(state.renderedBodyKey).toContain("skirt");
+    expect(state.renderedBodyKey).toContain("high-tops");
   });
 
   test("shows chat bubbles briefly above the avatar", () => {

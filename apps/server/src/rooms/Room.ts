@@ -95,6 +95,14 @@ export class Room {
     return true;
   }
 
+  hasUser(userId: string): boolean {
+    return this.users.has(userId);
+  }
+
+  hasOnlyUsers(userIds: ReadonlySet<string>): boolean {
+    return [...this.users.keys()].every((userId) => userIds.has(userId));
+  }
+
   getSnapshot(): RoomSnapshot {
     this.sweepCompletedMovements();
     return {
@@ -116,6 +124,12 @@ export class Room {
 
   isWalkable(position: TilePosition): boolean {
     return this.grid.isWalkable(position);
+  }
+
+  getWalkableTiles(): TilePosition[] {
+    return this.layout.tiles
+      .filter((tile) => tile.walkable)
+      .map((tile) => ({ x: tile.x, y: tile.y }));
   }
 
   get isEmpty(): boolean {

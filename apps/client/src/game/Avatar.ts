@@ -8,9 +8,9 @@ type ScreenPosition = {
   y: number;
 };
 
-type AvatarAnimationState = "idle" | "walk";
+export type AvatarAnimationState = "idle" | "walk";
 
-type AvatarRenderDirection =
+export type AvatarRenderDirection =
   | "south"
   | "south-east"
   | "east"
@@ -19,6 +19,24 @@ type AvatarRenderDirection =
   | "north-west"
   | "west"
   | "south-west";
+
+export type AvatarBodyDrawOptions = {
+  appearance: AvatarAppearance;
+  direction: AvatarRenderDirection;
+  animationState: AvatarAnimationState;
+  stepFrame: number;
+};
+
+const AVATAR_OUTLINE = 0x1d2324;
+const AVATAR_FACE_LINE = 0x6a3a26;
+const AVATAR_DETAIL_LIGHT = 0xf1e7d2;
+const AVATAR_EYE_WHITE = 0xfafaf5;
+const AVATAR_EYE_PUPIL = 0x1f1a16;
+const AVATAR_BLUSH = 0xe7867f;
+const AVATAR_SHADING_STRENGTH = 0.78;
+const AVATAR_SHADING_ALPHA = 0.32;
+const IDLE_BOB_AMPLITUDE_PX = 1;
+const IDLE_BOB_PERIOD_SECONDS = 2.4;
 
 export class Avatar {
   readonly view = new Container();
@@ -44,6 +62,7 @@ export class Avatar {
   private animationState: AvatarAnimationState = "idle";
   private direction: AvatarRenderDirection = "south";
   private animationSeconds = 0;
+  private idleSeconds = 0;
   private renderedBodyKey = "";
   private chatBubbleSecondsRemaining = 0;
   private isTyping = false;
@@ -64,17 +83,17 @@ export class Avatar {
 
     this.label = new Text({
       text: username,
-      resolution: 1,
+      resolution: 2,
       roundPixels: true,
       style: {
         align: "center",
         fill: 0xffffff,
         fontFamily: "Verdana, Arial, sans-serif",
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: "700",
-        stroke: { color: 0x1d2324, width: 4 },
+        stroke: { color: 0x1d2324, width: 3 },
       },
-      textureStyle: { scaleMode: "nearest" },
+      textureStyle: { scaleMode: "linear" },
     });
 
     this.label.anchor.set(0.5, 1);
@@ -187,6 +206,8 @@ export class Avatar {
   }
 
   update(deltaSeconds: number): void {
+    const safeDelta = Math.max(0, deltaSeconds);
+    this.idleSeconds += safeDelta;
     this.updateChatBubble(deltaSeconds);
 
     if (!this.to) {
@@ -194,6 +215,7 @@ export class Avatar {
 
       if (!next) {
         this.setAnimationState("idle");
+        this.applyIdleBob();
         return;
       }
 
@@ -207,7 +229,8 @@ export class Avatar {
     }
 
     this.setAnimationState("walk");
-    this.animationSeconds += Math.max(0, deltaSeconds);
+    this.animationSeconds += safeDelta;
+    this.body.y = 0;
     this.progress = Math.min(1, this.progress + deltaSeconds / this.secondsPerTile);
     const screenTo = tileToScreen(target.x, target.y);
 
@@ -225,6 +248,11 @@ export class Avatar {
         this.rebuildBody();
       }
     }
+  }
+
+  private applyIdleBob(): void {
+    const phase = (this.idleSeconds / IDLE_BOB_PERIOD_SECONDS) * Math.PI * 2;
+    this.body.y = Math.round(Math.sin(phase) * IDLE_BOB_AMPLITUDE_PX);
   }
 
   private syncViewToTile(position: TilePosition): void {
@@ -306,28 +334,106 @@ export class Avatar {
 
   private drawChatBubbleAvatar(centerX: number, centerY: number, size: number): void {
     const skinTone = toPixiColor(this.appearance.skinTone);
+    const skinShadow = darken(skinTone, AVATAR_SHADING_STRENGTH);
     const hairColor = toPixiColor(this.appearance.hairColor);
-    const radius = size / 2;
+    const hairHighlight = lighten(hairColor, 1.3);
+    const frameRadius = size / 2;
+    const headRadius = frameRadius - 2;
 
     this.chatBubbleAvatar.clear();
-    this.chatBubbleAvatar.circle(centerX, centerY, radius).fill(0xf1e7d2);
-    this.chatBubbleAvatar.circle(centerX, centerY, radius).stroke({ color: 0x442f24, width: 2 });
-    this.chatBubbleAvatar.circle(centerX, centerY + 1, radius - 4).fill(skinTone);
-    this.chatBubbleAvatar.circle(centerX, centerY - 4, radius - 4).fill(hairColor);
+    // Frame
+    this.chatBubbleAvatar.circle(centerX, centerY, frameRadius).fill(0xf1e7d2);
+    this.chatBubbleAvatar
+      .circle(centerX, centerY, frameRadius)
+      .stroke({ color: 0x442f24, width: 2 });
 
-    if (this.appearance.hair === "bob") {
-      this.chatBubbleAvatar.roundRect(centerX - 9, centerY - 3, 5, 10, 2).fill(hairColor);
-      this.chatBubbleAvatar.roundRect(centerX + 4, centerY - 3, 5, 10, 2).fill(hairColor);
+    // Head (skin)
+    this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(skinTone);
+
+    // Hair fills the head, face oval carves it out
+    if (this.appearance.hair === "buzz") {
+      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(darken(hairColor, 0.55));
+      this.chatBubbleAvatar
+        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
+        .fill(skinTone);
+    } else if (this.appearance.hair === "bob") {
+      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
+      this.chatBubbleAvatar
+        .ellipse(centerX, centerY + 3, headRadius - 2, 4)
+        .fill(skinTone);
+      // Side flaps along the jaw
+      this.chatBubbleAvatar
+        .ellipse(centerX - headRadius + 1, centerY + 1, 1.5, 4)
+        .fill(hairColor);
+      this.chatBubbleAvatar
+        .ellipse(centerX + headRadius - 1, centerY + 1, 1.5, 4)
+        .fill(hairColor);
+      // Centre fringe
+      this.chatBubbleAvatar.rect(centerX - 5, centerY - 3, 10, 3).fill(hairColor);
     } else if (this.appearance.hair === "side-part") {
-      this.chatBubbleAvatar.rect(centerX - 8, centerY - 5, 10, 4).fill(hairColor);
-      this.chatBubbleAvatar.rect(centerX + 1, centerY - 3, 7, 3).fill(hairColor);
+      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
+      this.chatBubbleAvatar
+        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
+        .fill(skinTone);
+      // Swept fringe with a part
+      this.chatBubbleAvatar.rect(centerX - 6, centerY - 3, 4, 2).fill(hairColor);
+      this.chatBubbleAvatar.rect(centerX - 2, centerY - 3, 9, 3).fill(hairColor);
+      this.chatBubbleAvatar.rect(centerX - 2, centerY - 3, 1, 2).fill(skinTone);
+    } else if (this.appearance.hair === "curls") {
+      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
+      this.chatBubbleAvatar
+        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
+        .fill(skinTone);
+      // Curl bumps along the top
+      for (const [dx, dy] of [
+        [-5, -4],
+        [-1, -6],
+        [3, -6],
+        [6, -4],
+      ] as const) {
+        this.chatBubbleAvatar.circle(centerX + dx, centerY + dy, 2).fill(hairColor);
+      }
     } else {
-      this.chatBubbleAvatar.rect(centerX - 8, centerY - 5, 16, 4).fill(hairColor);
+      // short (default)
+      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
+      this.chatBubbleAvatar
+        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
+        .fill(skinTone);
+      // Small centre fringe
+      this.chatBubbleAvatar.rect(centerX - 4, centerY - 3, 8, 2).fill(hairColor);
+      // Temple wisps
+      this.chatBubbleAvatar.rect(centerX - 8, centerY - 2, 1, 3).fill(hairColor);
+      this.chatBubbleAvatar.rect(centerX + 7, centerY - 2, 1, 3).fill(hairColor);
     }
 
-    this.chatBubbleAvatar.circle(centerX - 4, centerY + 1, 1.2).fill(0x1d2324);
-    this.chatBubbleAvatar.circle(centerX + 4, centerY + 1, 1.2).fill(0x1d2324);
-    this.chatBubbleAvatar.rect(centerX - 3, centerY + 6, 6, 1).fill(0x9d5f46);
+    // Skin shading on face
+    this.chatBubbleAvatar
+      .ellipse(centerX + 2, centerY + 3, 4, 3)
+      .fill({ color: skinShadow, alpha: AVATAR_SHADING_ALPHA });
+
+    // Hair highlight
+    this.chatBubbleAvatar
+      .rect(centerX - 3, centerY - 7, 5, 1)
+      .fill({ color: hairHighlight, alpha: 0.55 });
+
+    // Eyes (whites + pupils + catchlight)
+    this.chatBubbleAvatar.rect(centerX - 5, centerY + 1, 3, 3).fill(AVATAR_EYE_WHITE);
+    this.chatBubbleAvatar.rect(centerX + 2, centerY + 1, 3, 3).fill(AVATAR_EYE_WHITE);
+    this.chatBubbleAvatar.rect(centerX - 4, centerY + 2, 2, 2).fill(AVATAR_EYE_PUPIL);
+    this.chatBubbleAvatar.rect(centerX + 3, centerY + 2, 2, 2).fill(AVATAR_EYE_PUPIL);
+    this.chatBubbleAvatar.rect(centerX - 4, centerY + 2, 1, 1).fill(AVATAR_EYE_WHITE);
+    this.chatBubbleAvatar.rect(centerX + 3, centerY + 2, 1, 1).fill(AVATAR_EYE_WHITE);
+
+    // Cheek blush
+    this.chatBubbleAvatar
+      .ellipse(centerX - 6, centerY + 5, 1.4, 0.8)
+      .fill({ color: AVATAR_BLUSH, alpha: 0.4 });
+    this.chatBubbleAvatar
+      .ellipse(centerX + 6, centerY + 5, 1.4, 0.8)
+      .fill({ color: AVATAR_BLUSH, alpha: 0.4 });
+
+    // Mouth
+    this.chatBubbleAvatar.rect(centerX - 2, centerY + 6, 4, 1).fill(AVATAR_FACE_LINE);
   }
 
   private drawTypingIndicator(): void {
@@ -372,77 +478,12 @@ export class Avatar {
 
     this.renderedBodyKey = bodyKey;
     this.body.clear();
-    this.drawBody(stepFrame);
-  }
-
-  private drawBody(stepFrame: number): void {
-    const skinTone = toPixiColor(this.appearance.skinTone);
-    const hairColor = toPixiColor(this.appearance.hairColor);
-    const shirtColor = toPixiColor(this.appearance.shirtColor);
-    const pantsColor = toPixiColor(this.appearance.pantsColor);
-    const shoesColor = toPixiColor(this.appearance.shoesColor);
-    const stride = this.animationState === "walk" && stepFrame === 1 ? 2 : 0;
-    const bob = this.animationState === "walk" && stepFrame === 1 ? -1 : 0;
-    const facingScale = this.direction.includes("west") ? -1 : 1;
-
-    this.body.scale.x = facingScale;
-    this.body.ellipse(0, 3, 12, 4).fill({ color: 0x1d2324, alpha: 0.22 });
-    this.body.roundRect(-5, -11 + bob - stride, 5, 13, 2).fill(pantsColor);
-    this.body.roundRect(2, -11 + bob + stride, 5, 13, 2).fill(pantsColor);
-    this.body.roundRect(-9, -1 - stride, 9, 4, 2).fill(shoesColor);
-    this.body.roundRect(1, -1 + stride, 10, 4, 2).fill(shoesColor);
-    this.body.roundRect(-9, -29 + bob, 18, 21, 5).fill(shirtColor);
-    this.drawTopDetail(shirtColor, bob);
-    this.body.roundRect(-13, -26 + bob, 5, 15, 2).fill(skinTone);
-    this.body.roundRect(8, -26 + bob, 5, 15, 2).fill(skinTone);
-    this.body.circle(0, -38 + bob, 11).fill(skinTone);
-    this.drawHair(hairColor, bob);
-    this.drawFace(bob);
-  }
-
-  private drawTopDetail(color: number, bob: number): void {
-    if (this.appearance.shirt === "hoodie") {
-      this.body.roundRect(-6, -31 + bob, 12, 6, 3).fill(darken(color, 0.78));
-      this.body.rect(-1, -26 + bob, 2, 15).fill(darken(color, 0.72));
-      this.body.circle(-4, -23 + bob, 1).fill(0xf1e7d2);
-      this.body.circle(4, -23 + bob, 1).fill(0xf1e7d2);
-      return;
-    }
-
-    this.body.roundRect(-5, -29 + bob, 10, 4, 2).fill(darken(color, 0.78));
-  }
-
-  private drawFace(bob: number): void {
-    if (
-      this.direction === "north" ||
-      this.direction === "north-east" ||
-      this.direction === "north-west"
-    ) {
-      return;
-    }
-
-    this.body.circle(-4, -37 + bob, 1.5).fill(0x1d2324);
-    this.body.circle(4, -37 + bob, 1.5).fill(0x1d2324);
-    this.body.rect(-2, -32 + bob, 4, 1).fill(0x9d5f46);
-  }
-
-  private drawHair(color: number, bob: number): void {
-    if (this.appearance.hair === "side-part") {
-      this.body.circle(-2, -45 + bob, 9).fill(color);
-      this.body.rect(-11, -43 + bob, 8, 6).fill(color);
-      this.body.rect(5, -41 + bob, 7, 4).fill(color);
-      return;
-    }
-
-    if (this.appearance.hair === "bob") {
-      this.body.circle(0, -44 + bob, 10).fill(color);
-      this.body.roundRect(-12, -40 + bob, 5, 15, 2).fill(color);
-      this.body.roundRect(7, -40 + bob, 5, 15, 2).fill(color);
-      return;
-    }
-
-    this.body.circle(0, -45 + bob, 9).fill(color);
-    this.body.rect(-9, -43 + bob, 18, 5).fill(color);
+    drawAvatarBody(this.body, {
+      appearance: this.appearance,
+      direction: this.direction,
+      animationState: this.animationState,
+      stepFrame,
+    });
   }
 
   private beginSegment(next: TilePosition, fromScreen: ScreenPosition): void {
@@ -574,6 +615,428 @@ function chunkLongWord(word: string, maxLength: number): string[] {
   return chunks;
 }
 
+export function drawAvatarBody(graphics: Graphics, options: AvatarBodyDrawOptions): void {
+  const { appearance, direction, animationState, stepFrame } = options;
+  const skinTone = toPixiColor(appearance.skinTone);
+  const skinShadow = darken(skinTone, AVATAR_SHADING_STRENGTH);
+  const skinHighlight = lighten(skinTone, 1.08);
+  const hairColor = toPixiColor(appearance.hairColor);
+  const hairHighlight = lighten(hairColor, 1.35);
+  const shirtColor = toPixiColor(appearance.shirtColor);
+  const shirtShadow = darken(shirtColor, AVATAR_SHADING_STRENGTH);
+  const pantsColor = toPixiColor(appearance.pantsColor);
+  const pantsShadow = darken(pantsColor, AVATAR_SHADING_STRENGTH);
+  const shoesColor = toPixiColor(appearance.shoesColor);
+  const stride = animationState === "walk" && stepFrame === 1 ? 2 : 0;
+  const bob = animationState === "walk" && stepFrame === 1 ? -1 : 0;
+  const facingScale = direction.includes("west") ? -1 : 1;
+  const facingBack =
+    direction === "north" || direction === "north-east" || direction === "north-west";
+
+  graphics.scale.x = facingScale;
+  drawShadow(graphics);
+  drawBottoms(graphics, appearance, pantsColor, pantsShadow, shoesColor, bob, stride);
+  drawTorso(graphics, shirtColor, shirtShadow, bob);
+  drawArms(graphics, appearance, skinTone, skinShadow, shirtColor, shirtShadow, bob);
+  drawTopDetail(graphics, appearance, shirtColor, shirtShadow, bob, facingBack);
+  drawNeck(graphics, skinTone, skinShadow, bob);
+  drawHead(graphics, skinTone, skinShadow, skinHighlight, bob);
+  drawHair(graphics, appearance, hairColor, hairHighlight, skinTone, bob, facingBack);
+  drawFace(graphics, direction, bob, facingBack);
+}
+
+function drawShadow(graphics: Graphics): void {
+  graphics.ellipse(0, 5, 14, 4).fill({ color: AVATAR_OUTLINE, alpha: 0.12 });
+  graphics.ellipse(0, 4, 11, 3.2).fill({ color: AVATAR_OUTLINE, alpha: 0.18 });
+  graphics.ellipse(0, 3, 8, 2.4).fill({ color: AVATAR_OUTLINE, alpha: 0.24 });
+}
+
+function drawBottoms(
+  graphics: Graphics,
+  appearance: AvatarAppearance,
+  pantsColor: number,
+  pantsShadow: number,
+  shoesColor: number,
+  bob: number,
+  stride: number,
+): void {
+  if (appearance.pants === "skirt") {
+    graphics.roundRect(-9, -11 + bob, 18, 9, 3).fill(pantsColor);
+    graphics
+      .roundRect(-9, -11 + bob, 18, 9, 3)
+      .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+    graphics
+      .rect(5, -10 + bob, 3, 7)
+      .fill({ color: pantsShadow, alpha: AVATAR_SHADING_ALPHA });
+    graphics.roundRect(-5, -4 + bob - stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
+    graphics.roundRect(2, -4 + bob + stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
+    drawShoes(graphics, appearance, shoesColor, stride, 5);
+    return;
+  }
+
+  const legWidth = appearance.pants === "wide" ? 7 : appearance.pants === "tapered" ? 4 : 5;
+  const leftX = appearance.pants === "wide" ? -7 : -5;
+  const rightX = appearance.pants === "wide" ? 1 : 2;
+
+  graphics.roundRect(leftX, -11 + bob - stride, legWidth, 13, 2).fill(pantsColor);
+  graphics.roundRect(rightX, -11 + bob + stride, legWidth, 13, 2).fill(pantsColor);
+  graphics
+    .roundRect(leftX, -11 + bob - stride, legWidth, 13, 2)
+    .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+  graphics
+    .roundRect(rightX, -11 + bob + stride, legWidth, 13, 2)
+    .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+  graphics
+    .rect(leftX + legWidth - 2, -10 + bob - stride, 1, 11)
+    .fill({ color: pantsShadow, alpha: AVATAR_SHADING_ALPHA });
+  graphics
+    .rect(rightX + legWidth - 2, -10 + bob + stride, 1, 11)
+    .fill({ color: pantsShadow, alpha: AVATAR_SHADING_ALPHA });
+  drawShoes(graphics, appearance, shoesColor, stride, appearance.shoes === "high-tops" ? 5 : 4);
+}
+
+function drawArms(
+  graphics: Graphics,
+  appearance: AvatarAppearance,
+  skinTone: number,
+  skinShadow: number,
+  shirtColor: number,
+  shirtShadow: number,
+  bob: number,
+): void {
+  const isLongSleeve = appearance.shirt === "hoodie" || appearance.shirt === "jacket";
+  const armColor = isLongSleeve ? shirtColor : skinTone;
+  const armTop = -27 + bob;
+  const armHeight = 14;
+  const armBottom = armTop + armHeight;
+
+  // Arm fills (rounded for soft silhouette)
+  graphics.roundRect(-11, armTop, 4, armHeight, 1.5).fill(armColor);
+  graphics.roundRect(7, armTop, 4, armHeight, 1.5).fill(armColor);
+
+  // Short sleeve cap (only when shirt is short-sleeved)
+  if (!isLongSleeve) {
+    graphics.rect(-11, armTop, 4, 4).fill(shirtColor);
+    graphics.rect(7, armTop, 4, 4).fill(shirtColor);
+    graphics
+      .rect(-11, armTop + 3, 4, 1)
+      .fill({ color: shirtShadow, alpha: 0.6 });
+    graphics
+      .rect(7, armTop + 3, 4, 1)
+      .fill({ color: shirtShadow, alpha: 0.6 });
+  }
+
+  // Outer-edge shading
+  graphics
+    .rect(-10, armTop + 1, 1, armHeight - 2)
+    .fill({ color: isLongSleeve ? shirtShadow : skinShadow, alpha: 0.22 });
+  graphics
+    .rect(9, armTop + 1, 1, armHeight - 2)
+    .fill({ color: isLongSleeve ? shirtShadow : skinShadow, alpha: 0.22 });
+
+  // Outlines: outer edge + top + bottom only (no inner edge — torso outline is the divider)
+  graphics.rect(-11, armTop, 1, armHeight).fill(AVATAR_OUTLINE);
+  graphics.rect(-11, armTop, 4, 1).fill(AVATAR_OUTLINE);
+  graphics.rect(-11, armBottom - 1, 4, 1).fill(AVATAR_OUTLINE);
+  graphics.rect(10, armTop, 1, armHeight).fill(AVATAR_OUTLINE);
+  graphics.rect(7, armTop, 4, 1).fill(AVATAR_OUTLINE);
+  graphics.rect(7, armBottom - 1, 4, 1).fill(AVATAR_OUTLINE);
+}
+
+function drawShoes(
+  graphics: Graphics,
+  appearance: AvatarAppearance,
+  color: number,
+  stride: number,
+  height: number,
+): void {
+  const shoeWidth = appearance.shoes === "flats" ? 7 : 8;
+  const leftY = -1 - stride - (height - 4);
+  const rightY = -1 + stride - (height - 4);
+  const shoeShadow = darken(color, 0.7);
+
+  graphics.roundRect(-8, leftY, shoeWidth, height, 2).fill(color);
+  graphics.roundRect(1, rightY, shoeWidth, height, 2).fill(color);
+  graphics
+    .roundRect(-8, leftY, shoeWidth, height, 2)
+    .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+  graphics
+    .roundRect(1, rightY, shoeWidth, height, 2)
+    .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+  graphics.rect(-8, leftY + height - 1, shoeWidth, 1).fill(shoeShadow);
+  graphics.rect(1, rightY + height - 1, shoeWidth, 1).fill(shoeShadow);
+
+  if (appearance.shoes === "sneakers" || appearance.shoes === "high-tops") {
+    graphics.rect(-6, leftY + height - 2, 4, 1).fill(AVATAR_DETAIL_LIGHT);
+    graphics.rect(3, rightY + height - 2, 4, 1).fill(AVATAR_DETAIL_LIGHT);
+  }
+}
+
+function drawTorso(
+  graphics: Graphics,
+  shirtColor: number,
+  shirtShadow: number,
+  bob: number,
+): void {
+  graphics.roundRect(-9, -28 + bob, 18, 19, 4).fill(shirtColor);
+  graphics
+    .roundRect(-9, -28 + bob, 18, 19, 4)
+    .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+  graphics
+    .rect(5, -26 + bob, 3, 15)
+    .fill({ color: shirtShadow, alpha: AVATAR_SHADING_ALPHA });
+}
+
+function drawTopDetail(
+  graphics: Graphics,
+  appearance: AvatarAppearance,
+  color: number,
+  shadow: number,
+  bob: number,
+  facingBack: boolean,
+): void {
+  if (appearance.shirt === "hoodie") {
+    graphics
+      .roundRect(-8, -32 + bob, 16, 6, 3)
+      .fill(darken(color, 0.74))
+      .stroke({ color: AVATAR_OUTLINE, width: 1 });
+
+    if (!facingBack) {
+      graphics.rect(-2, -27 + bob, 1, 11).fill(AVATAR_DETAIL_LIGHT);
+      graphics.rect(1, -27 + bob, 1, 11).fill(AVATAR_DETAIL_LIGHT);
+      graphics
+        .roundRect(-5, -18 + bob, 10, 5, 2)
+        .fill({ color: shadow, alpha: 0.55 });
+    }
+    return;
+  }
+
+  if (appearance.shirt === "jacket") {
+    graphics.rect(-9, -29 + bob, 4, 20).fill(darken(color, 0.72));
+    graphics.rect(5, -29 + bob, 4, 20).fill(darken(color, 0.72));
+
+    if (!facingBack) {
+      graphics.rect(-2, -28 + bob, 4, 18).fill(AVATAR_DETAIL_LIGHT);
+      graphics.rect(-4, -29 + bob, 2, 2).fill(darken(color, 0.6));
+      graphics.rect(2, -29 + bob, 2, 2).fill(darken(color, 0.6));
+    }
+    return;
+  }
+
+  if (appearance.shirt === "striped") {
+    graphics.rect(-9, -24 + bob, 18, 3).fill(darken(color, 0.74));
+    graphics.rect(-9, -17 + bob, 18, 3).fill(darken(color, 0.74));
+    return;
+  }
+
+  graphics.roundRect(-5, -30 + bob, 10, 3, 2).fill(darken(color, 0.7));
+
+  if (!facingBack) {
+    graphics.rect(-3, -28 + bob, 6, 1).fill({ color: shadow, alpha: 0.6 });
+  }
+}
+
+function drawNeck(
+  graphics: Graphics,
+  skinTone: number,
+  skinShadow: number,
+  bob: number,
+): void {
+  graphics.rect(-3, -30 + bob, 6, 3).fill(skinTone);
+  graphics.rect(-3, -28 + bob, 6, 1).fill({ color: skinShadow, alpha: 0.55 });
+}
+
+function drawHead(
+  graphics: Graphics,
+  skinTone: number,
+  skinShadow: number,
+  skinHighlight: number,
+  bob: number,
+): void {
+  graphics.circle(0, -38 + bob, 11).fill(skinTone);
+  graphics
+    .circle(0, -38 + bob, 11)
+    .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+  graphics
+    .circle(3, -36 + bob, 7)
+    .fill({ color: skinShadow, alpha: AVATAR_SHADING_ALPHA });
+  graphics
+    .ellipse(-4, -42 + bob, 3, 2)
+    .fill({ color: skinHighlight, alpha: 0.35 });
+}
+
+function drawFace(
+  graphics: Graphics,
+  direction: AvatarRenderDirection,
+  bob: number,
+  facingBack: boolean,
+): void {
+  if (facingBack) {
+    return;
+  }
+
+  const facingSide = direction === "east" || direction === "west";
+  const leftEyeX = facingSide ? -3 : -4;
+  const rightEyeX = facingSide ? 5 : 4;
+  const eyeY = -36 + bob;
+
+  // Eye whites
+  graphics.rect(leftEyeX - 1, eyeY - 1, 3, 3).fill(AVATAR_EYE_WHITE);
+  graphics.rect(rightEyeX - 1, eyeY - 1, 3, 3).fill(AVATAR_EYE_WHITE);
+
+  // Pupils
+  graphics.rect(leftEyeX, eyeY, 2, 2).fill(AVATAR_EYE_PUPIL);
+  graphics.rect(rightEyeX, eyeY, 2, 2).fill(AVATAR_EYE_PUPIL);
+
+  // Catchlight
+  graphics.rect(leftEyeX, eyeY, 1, 1).fill(AVATAR_EYE_WHITE);
+  graphics.rect(rightEyeX, eyeY, 1, 1).fill(AVATAR_EYE_WHITE);
+
+  // Cheek blush (subtle)
+  graphics
+    .ellipse(leftEyeX - 2, eyeY + 4, 2, 1)
+    .fill({ color: AVATAR_BLUSH, alpha: 0.35 });
+  graphics
+    .ellipse(rightEyeX + 2, eyeY + 4, 2, 1)
+    .fill({ color: AVATAR_BLUSH, alpha: 0.35 });
+
+  // Mouth (small flat line, slight smile)
+  const mouthY = -31 + bob;
+  graphics.rect(-2, mouthY, 4, 1).fill(AVATAR_FACE_LINE);
+}
+
+function drawHair(
+  graphics: Graphics,
+  appearance: AvatarAppearance,
+  color: number,
+  highlight: number,
+  skinTone: number,
+  bob: number,
+  facingBack: boolean,
+): void {
+  const headCenterY = -38 + bob;
+  const headRadius = 11;
+
+  // Buzz: short stubble. Cover the top half of the head with a darker hair tone.
+  if (appearance.hair === "buzz") {
+    graphics.circle(0, headCenterY, headRadius).fill(darken(color, 0.55));
+    // Carve out the face area (lower 2/3 of head) by redrawing as skin
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    // Skin shadow on right side of face — preserve drawHead's shading
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    // Tiny highlight on the buzz crown
+    graphics
+      .rect(-3, headCenterY - 9, 5, 1)
+      .fill({ color: highlight, alpha: 0.5 });
+    return;
+  }
+
+  // For other styles: fill the entire head circle with hair colour,
+  // then carve out the face with a skin-coloured oval (and style-specific bangs).
+  graphics.circle(0, headCenterY, headRadius).fill(color);
+
+  if (appearance.hair === "short") {
+    // Face oval shows below the hair line
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+
+    if (!facingBack) {
+      // Small fringe over the forehead
+      graphics.rect(-5, headCenterY - 4, 10, 2).fill(color);
+      // Subtle side hair just below the temples
+      graphics.rect(-10, headCenterY - 3, 1, 4).fill(color);
+      graphics.rect(9, headCenterY - 3, 1, 4).fill(color);
+    }
+
+    graphics
+      .rect(-3, headCenterY - 9, 6, 1)
+      .fill({ color: highlight, alpha: 0.55 });
+    return;
+  }
+
+  if (appearance.hair === "side-part") {
+    // Face oval — slightly higher so the side-part shape sits over the forehead
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+
+    if (!facingBack) {
+      // Sweep across the forehead, longer on the right
+      graphics.rect(-9, headCenterY - 4, 5, 2).fill(color);
+      graphics.rect(-4, headCenterY - 4, 12, 3).fill(color);
+      // The part — a single skin-coloured pixel column
+      graphics.rect(-4, headCenterY - 4, 1, 2).fill(skinTone);
+      // Temple wisps
+      graphics.rect(-10, headCenterY - 3, 1, 5).fill(color);
+      graphics.rect(9, headCenterY - 3, 1, 4).fill(color);
+    }
+
+    graphics
+      .rect(0, headCenterY - 9, 6, 1)
+      .fill({ color: highlight, alpha: 0.55 });
+    return;
+  }
+
+  if (appearance.hair === "bob") {
+    // Smaller face oval — bob hair extends further down on the sides
+    graphics.ellipse(0, headCenterY + 5, headRadius - 2, 5).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 3, 6)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+
+    // Side flaps that hug the jawline (curved, not boxy)
+    graphics.ellipse(-9, headCenterY + 2, 2, 5).fill(color);
+    graphics.ellipse(9, headCenterY + 2, 2, 5).fill(color);
+
+    if (!facingBack) {
+      // Centre fringe across the forehead
+      graphics.rect(-7, headCenterY - 4, 14, 3).fill(color);
+    }
+
+    graphics
+      .rect(-3, headCenterY - 9, 6, 1)
+      .fill({ color: highlight, alpha: 0.5 });
+    return;
+  }
+
+  if (appearance.hair === "curls") {
+    // Face oval first to constrain the hair
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+
+    // Curly clumps along the top — small overlapping circles
+    const curls: ReadonlyArray<readonly [number, number, number]> = [
+      [-7, headCenterY - 5, 3],
+      [-3, headCenterY - 7, 3],
+      [2, headCenterY - 7, 3],
+      [7, headCenterY - 5, 3],
+      [0, headCenterY - 4, 3],
+    ];
+    for (const [x, y, r] of curls) {
+      graphics.circle(x, y, r).fill(color);
+    }
+    if (!facingBack) {
+      // Small curl tendril on the forehead
+      graphics.circle(-2, headCenterY - 3, 2).fill(color);
+    }
+    graphics
+      .circle(-3, headCenterY - 8, 1)
+      .fill({ color: highlight, alpha: 0.7 });
+    graphics
+      .circle(3, headCenterY - 8, 1)
+      .fill({ color: highlight, alpha: 0.7 });
+    return;
+  }
+}
+
+
 function toPixiColor(value: string): number {
   if (!/^#[\da-fA-F]{6}$/.test(value)) {
     return 0xffffff;
@@ -586,6 +1049,14 @@ function darken(color: number, amount: number): number {
   const red = Math.round(((color >> 16) & 0xff) * amount);
   const green = Math.round(((color >> 8) & 0xff) * amount);
   const blue = Math.round((color & 0xff) * amount);
+
+  return (red << 16) + (green << 8) + blue;
+}
+
+function lighten(color: number, amount: number): number {
+  const red = Math.min(255, Math.round(((color >> 16) & 0xff) * amount));
+  const green = Math.min(255, Math.round(((color >> 8) & 0xff) * amount));
+  const blue = Math.min(255, Math.round((color & 0xff) * amount));
 
   return (red << 16) + (green << 8) + blue;
 }

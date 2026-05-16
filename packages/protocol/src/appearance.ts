@@ -1,7 +1,7 @@
-export const AVATAR_HAIR_STYLES = ["short", "side-part", "bob"] as const;
-export const AVATAR_SHIRT_STYLES = ["crew", "hoodie"] as const;
-export const AVATAR_PANTS_STYLES = ["straight", "wide"] as const;
-export const AVATAR_SHOE_STYLES = ["boots", "sneakers"] as const;
+export const AVATAR_HAIR_STYLES = ["short", "side-part", "bob", "curls", "buzz"] as const;
+export const AVATAR_SHIRT_STYLES = ["crew", "hoodie", "jacket", "striped"] as const;
+export const AVATAR_PANTS_STYLES = ["straight", "wide", "tapered", "skirt"] as const;
+export const AVATAR_SHOE_STYLES = ["boots", "sneakers", "high-tops", "flats"] as const;
 export const AVATAR_HAIR_COLORS = [
   "#3b2418",
   "#6f3f22",

@@ -120,6 +120,7 @@ select {
 .edit-character-button,
 .create-room-button,
 .room-browser-button,
+.friends-button,
 .log-out-button {
   height: 34px;
   padding: 0 12px;
@@ -264,7 +265,7 @@ select {
 .character-preview-avatar {
   position: relative;
   display: grid;
-  min-height: 252px;
+  min-height: 260px;
   place-items: center;
   padding: 18px;
   overflow: hidden;
@@ -279,161 +280,18 @@ select {
   box-shadow: inset 0 0 0 2px #f7f4e8;
 }
 
-.avatar-preview-drawn {
-  position: relative;
-  width: 56px;
-  height: 88px;
-  margin: 0;
-  transform: translateY(8px) scale(2);
-  transform-origin: bottom center;
-  filter: drop-shadow(0 3px 0 rgba(31, 45, 47, 0.2));
+.avatar-preview {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 180px;
+  height: 220px;
+  filter: drop-shadow(0 3px 0 rgba(31, 45, 47, 0.18));
 }
 
-.avatar-preview-part {
-  position: absolute;
+.avatar-preview canvas {
   display: block;
-  background: var(--avatar-part-color);
-}
-
-.avatar-preview-shadow {
-  left: 12px;
-  bottom: 2px;
-  width: 32px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.avatar-preview-left-leg,
-.avatar-preview-right-leg {
-  bottom: 8px;
-  width: 10px;
-  height: 26px;
-  border-radius: 4px;
-}
-
-.avatar-preview-left-leg {
-  left: 18px;
-}
-
-.avatar-preview-right-leg {
-  right: 16px;
-}
-
-.avatar-preview-left-shoe,
-.avatar-preview-right-shoe {
-  bottom: 5px;
-  width: 17px;
-  height: 8px;
-  border-radius: 6px;
-}
-
-.avatar-preview-left-shoe {
-  left: 12px;
-}
-
-.avatar-preview-right-shoe {
-  right: 10px;
-}
-
-.avatar-preview-torso {
-  left: 13px;
-  bottom: 30px;
-  width: 30px;
-  height: 33px;
-  border-radius: 9px 9px 6px 6px;
-}
-
-.avatar-preview-drawn[data-shirt="hoodie"] .avatar-preview-torso::before {
-  position: absolute;
-  top: 0;
-  left: 6px;
-  width: 18px;
-  height: 8px;
-  border-radius: 0 0 8px 8px;
-  background: color-mix(in srgb, var(--avatar-shirt), #1d2324 24%);
-  content: "";
-}
-
-.avatar-preview-left-arm,
-.avatar-preview-right-arm {
-  bottom: 34px;
-  width: 8px;
-  height: 26px;
-  border-radius: 5px;
-}
-
-.avatar-preview-left-arm {
-  left: 6px;
-}
-
-.avatar-preview-right-arm {
-  right: 5px;
-}
-
-.avatar-preview-head {
-  left: 17px;
-  top: 9px;
-  width: 24px;
-  height: 25px;
-  border-radius: 50%;
-}
-
-.avatar-preview-hair {
-  left: 15px;
-  top: 5px;
-  width: 28px;
-  height: 16px;
-  border-radius: 15px 15px 8px 8px;
-}
-
-.avatar-preview-drawn[data-hair="side-part"] .avatar-preview-hair {
-  left: 12px;
-  width: 31px;
-  border-radius: 18px 13px 7px 8px;
-}
-
-.avatar-preview-drawn[data-hair="bob"] .avatar-preview-hair {
-  left: 13px;
-  top: 5px;
-  width: 32px;
-  height: 33px;
-  border-radius: 16px 16px 9px 9px;
-  clip-path: polygon(
-    8% 0,
-    92% 0,
-    100% 38%,
-    100% 100%,
-    82% 100%,
-    82% 54%,
-    18% 54%,
-    18% 100%,
-    0 100%,
-    0 38%
-  );
-}
-
-.avatar-preview-left-eye,
-.avatar-preview-right-eye {
-  top: 22px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-}
-
-.avatar-preview-left-eye {
-  left: 22px;
-}
-
-.avatar-preview-right-eye {
-  right: 20px;
-}
-
-.avatar-preview-mouth {
-  left: 26px;
-  top: 29px;
-  width: 7px;
-  height: 2px;
-  border-radius: 2px;
+  image-rendering: pixelated;
 }
 
 .character-preview p {
@@ -600,7 +458,8 @@ select {
   gap: 8px;
 }
 
-.room-browser {
+.room-browser,
+.friends-panel {
   position: absolute;
   top: 86px;
   left: 20px;
@@ -617,6 +476,11 @@ select {
     inset 0 0 0 2px #ffffff,
     7px 7px 0 rgba(31, 45, 47, 0.32);
   pointer-events: auto;
+}
+
+.friends-panel {
+  left: auto;
+  right: 20px;
 }
 
 .room-browser-header {
@@ -655,6 +519,117 @@ select {
   gap: 8px;
   overflow: auto;
   padding: 12px;
+}
+
+.friends-add-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 2px solid #c9c1b2;
+}
+
+.friends-add-form input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 2px solid #6f6a60;
+  border-radius: 4px;
+  background: #fbfaf0;
+  color: #24211d;
+  outline: none;
+  box-shadow: inset 1px 1px 0 #c5c0b5;
+}
+
+.friends-add-button {
+  width: 64px;
+  height: 36px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.friends-message {
+  display: none;
+  margin: 10px 12px 0;
+  padding: 8px 9px;
+  border: 2px solid #7c342e;
+  border-radius: 5px;
+  background: #fff2ee;
+  color: #7c342e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.friends-message.visible {
+  display: block;
+}
+
+.friends-list {
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.friend-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 2px solid #716d64;
+  border-radius: 7px;
+  background: #fbfaf0;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    2px 2px 0 rgba(31, 45, 47, 0.18);
+}
+
+.friend-item.online {
+  background: #e7f2ef;
+  border-color: #2f7f9d;
+}
+
+.friend-avatar {
+  transform: translateY(3px) scale(0.54);
+  transform-origin: center;
+}
+
+.friend-details {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.friend-details strong {
+  overflow: hidden;
+  color: #302c27;
+  font-size: 14px;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-details span {
+  overflow: hidden;
+  color: #5f5a51;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.friend-join-button,
+.friend-remove-button {
+  width: 74px;
+  height: 30px;
+  margin: 0;
+  font-size: 11px;
 }
 
 .room-list-empty {
@@ -762,6 +737,7 @@ select {
   .edit-character-button,
   .create-room-button,
   .room-browser-button,
+  .friends-button,
   .log-out-button {
     height: 32px;
     padding: 0 10px;
@@ -772,11 +748,27 @@ select {
     top: 52%;
   }
 
-  .room-browser {
+  .room-browser,
+  .friends-panel {
     top: 118px;
     left: 12px;
+    right: auto;
     width: calc(100vw - 24px);
     max-height: calc(100vh - 136px);
+  }
+
+  .friend-item {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .friend-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .friend-join-button,
+  .friend-remove-button {
+    width: 100%;
   }
 
   .room-item {
@@ -808,10 +800,6 @@ select {
   .character-preview-avatar {
     min-height: 208px;
     padding: 12px;
-  }
-
-  .avatar-preview-drawn {
-    transform: translateY(8px) scale(2);
   }
 
   .character-preview p {

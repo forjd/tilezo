@@ -236,6 +236,57 @@ describe("handleMessage", () => {
     ]);
   });
 
+  test("rejects knock-only public rooms without leaving the current room", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("room_knock", "Knock Room"), {
+      access: "knock",
+      ownerUserId: "user_db_2",
+      visibility: "public",
+    });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "room_knock" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.data.roomId).toBe("lobby");
+    expect(ws.unsubscribed).toEqual([]);
+    expect(ws.sent).toEqual([
+      {
+        type: "error",
+        code: "ROOM_ACCESS_REQUIRED",
+        message: "This room requires approval before joining",
+      },
+    ]);
+  });
+
+  test("allows owners to join their knock-only public rooms", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("room_knock", "Knock Room"), {
+      access: "knock",
+      ownerUserId: "user_db_1",
+      visibility: "public",
+    });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "room_knock" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.sent[0]).toMatchObject({
+      type: "room.snapshot",
+      roomId: "room_knock",
+    });
+  });
+
   test("publishes valid movement and rejects blocked targets", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket({ userId: "user_db_1", username: "Dan" });

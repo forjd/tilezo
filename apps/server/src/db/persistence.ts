@@ -9,6 +9,13 @@ export type RoomAccess = "open" | "knock";
 export type OwnedRoomLayout = {
   layout: RoomLayout;
   ownerUserId: string;
+  access?: RoomAccess;
+};
+
+export type RoomAccessRule = {
+  roomId: string;
+  ownerUserId?: string;
+  access: RoomAccess;
 };
 
 export type PersistedRoomLayout = {
@@ -23,6 +30,7 @@ export type PersistedRoomLayout = {
 export type RoomDirectory = {
   publicLayouts: RoomLayout[];
   privateLayouts: OwnedRoomLayout[];
+  roomRules?: RoomAccessRule[];
 };
 
 export type PersistenceStore = {
@@ -97,11 +105,17 @@ export async function loadOrSeedPublicRooms(
       .map((room) => ({
         layout: room.layout,
         ownerUserId: room.ownerUserId as string,
+        access: room.access,
       }));
 
     return {
       publicLayouts: mergeRoomLayouts(fallbackLayouts, storedPublicLayouts),
       privateLayouts: storedPrivateLayouts,
+      roomRules: storedRooms.map((room) => ({
+        roomId: room.layout.id,
+        ownerUserId: room.ownerUserId,
+        access: room.access,
+      })),
     };
   } catch (error) {
     console.warn("Room persistence unavailable; using bundled public rooms", error);

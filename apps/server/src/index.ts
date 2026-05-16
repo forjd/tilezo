@@ -5,10 +5,13 @@ import { FixedWindowRateLimiter } from "./auth/rateLimit";
 import { getConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
+import { DrizzleFriendStore, FriendError, FriendService } from "./friends/friends";
 import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { createLogger, type Logger, type LogLevel, parseLogLevel } from "./observability/logger";
 import { Metrics } from "./observability/metrics";
+import { PresenceTracker } from "./presence/presence";
+import { DEFAULT_ROOM_BOTS, RoomBotController } from "./rooms/bots";
 import { RoomManager } from "./rooms/RoomManager";
 import {
   createRoomLayoutFromTemplate,
@@ -36,6 +39,10 @@ const registerRateLimiterPruneTimer = setInterval(
 registerRateLimiterPruneTimer.unref?.();
 const database = createDatabase(config.databaseUrl);
 const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
+const presence = new PresenceTracker();
+const friends = database
+  ? new FriendService(new DrizzleFriendStore(database), (userId) => presence.get(userId))
+  : undefined;
 const auth = database
   ? new AuthService(new DrizzleAuthStore(database), {
       secret: config.authSecret,
@@ -47,7 +54,7 @@ const auth = database
       }),
     })
   : undefined;
-const rooms = await RoomManager.create({ persistence });
+const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
 
 const server = Bun.serve<SocketData>({
   hostname: config.host,
@@ -98,6 +105,10 @@ const server = Bun.serve<SocketData>({
 
     if (url.pathname === "/client-events" && request.method === "POST") {
       return handleClientEventRequest(request, auth, requestLogger);
+    }
+
+    if (url.pathname === "/friends" || url.pathname.startsWith("/friends/")) {
+      return handleFriendsRequest(request, url, auth, friends, requestLogger);
     }
 
     if (url.pathname === "/room-templates" && request.method === "GET") {
@@ -175,6 +186,7 @@ const server = Bun.serve<SocketData>({
         persistence,
         logger,
         metrics,
+        presence,
       });
     },
     message(ws, message) {
@@ -185,6 +197,7 @@ const server = Bun.serve<SocketData>({
           persistence,
           logger,
           metrics,
+          presence,
         });
         return;
       }
@@ -204,10 +217,17 @@ const server = Bun.serve<SocketData>({
       );
     },
     close(ws) {
-      handleClose(ws, rooms, publish, logger, metrics);
+      handleClose(ws, rooms, publish, logger, metrics, presence);
     },
   },
 });
+
+const botController = new RoomBotController({
+  rooms,
+  publish,
+});
+const botTimer = setInterval(() => botController.tick(), 5_000);
+botTimer.unref?.();
 
 function publish(topic: string, message: ServerMessage): void {
   const result = server.publish(topic, encodeServerMessage(message));
@@ -388,6 +408,77 @@ async function handleClientEventRequest(
   }
 }
 
+async function handleFriendsRequest(
+  request: Request,
+  url: URL,
+  authService: AuthService | undefined,
+  friendService: FriendService | undefined,
+  requestLogger: Logger,
+): Promise<Response> {
+  if (!authService || !friendService) {
+    requestLogger.warn("friends.database_required");
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for friends" } },
+      503,
+    );
+  }
+
+  const user = await authService.verifyToken(readBearerToken(request) ?? "");
+
+  if (!user) {
+    requestLogger.warn("friends.unauthenticated");
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before managing friends" } },
+      401,
+    );
+  }
+
+  try {
+    if (url.pathname === "/friends" && request.method === "GET") {
+      return authJson({ friends: await friendService.list(user.id) }, 200);
+    }
+
+    if (url.pathname === "/friends" && request.method === "POST") {
+      const body = (await request.json()) as { username?: unknown };
+
+      if (typeof body.username !== "string" || !body.username.trim()) {
+        return authJson(
+          { error: { code: "INVALID_FRIEND", message: "Friend username is required" } },
+          400,
+        );
+      }
+
+      const friend = await friendService.add(user.id, body.username);
+      requestLogger.info("friends.added", { userId: user.id, friendUserId: friend.id });
+      return authJson({ friend }, 201);
+    }
+
+    if (url.pathname.startsWith("/friends/") && request.method === "DELETE") {
+      const friendUserId = decodeURIComponent(url.pathname.slice("/friends/".length));
+
+      if (!friendUserId) {
+        return authJson(
+          { error: { code: "INVALID_FRIEND", message: "Friend id is required" } },
+          400,
+        );
+      }
+
+      await friendService.remove(user.id, friendUserId);
+      requestLogger.info("friends.removed", { userId: user.id, friendUserId });
+      return authJson({ ok: true }, 200);
+    }
+
+    return authJson({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } }, 405);
+  } catch (error) {
+    if (error instanceof FriendError) {
+      return authJson({ error: { code: error.code, message: error.message } }, 400);
+    }
+
+    requestLogger.warn("friends.failed", { userId: user.id, error });
+    return authJson({ error: { code: "FRIENDS_FAILED", message: "Friends request failed" } }, 400);
+  }
+}
+
 async function handleCreateRoomRequest(
   request: Request,
   authService: AuthService | undefined,
@@ -432,6 +523,7 @@ async function handleCreateRoomRequest(
       access: parsed.value.access,
     });
     roomManager.addRoom(layout, {
+      access: parsed.value.access,
       ownerUserId: user.id,
       visibility: parsed.value.visibility,
     });

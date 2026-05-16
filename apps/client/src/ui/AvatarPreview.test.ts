@@ -1,35 +1,57 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
-import { createAvatarPreview, updateAvatarPreview } from "./AvatarPreview";
+import { AvatarPreview } from "./AvatarPreview";
 
 describe("AvatarPreview", () => {
-  test("renders a simple drawn preview for a selected appearance", () => {
+  test("creates a wrapper element marked for the avatar preview", () => {
     const documentRef = new FakeDocument();
-    const preview = createAvatarPreview(
-      documentRef as unknown as Document,
-    ) as unknown as FakeElement;
+    const preview = new AvatarPreview(documentRef as unknown as Document);
+    const element = preview.element as unknown as FakeElement;
 
-    updateAvatarPreview(preview as unknown as HTMLElement, {
+    expect(element.className).toBe("avatar-preview");
+    expect(element.dataset.ariaHidden ?? element.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("captures the latest appearance applied via update", () => {
+    const documentRef = new FakeDocument();
+    const preview = new AvatarPreview(documentRef as unknown as Document);
+
+    expect(preview.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
+
+    preview.update({
       ...DEFAULT_AVATAR_APPEARANCE,
-      hair: "bob",
+      hair: "curls",
       hairColor: "#3b2418",
-      shirt: "hoodie",
+      shirt: "striped",
       shirtColor: "#7f3b44",
+      pants: "skirt",
+      shoes: "flats",
     });
 
-    expect(preview.className).toBe("avatar-preview-drawn");
-    expect(preview.children.map((part) => part.getAttribute("data-part"))).toContain("hair");
-    expect(preview.dataset.hair).toBe("bob");
-    expect(preview.dataset.shirt).toBe("hoodie");
-    expect(preview.style.getPropertyValue("--avatar-hair")).toBe("#3b2418");
-    expect(preview.style.getPropertyValue("--avatar-shirt")).toBe("#7f3b44");
-    expect(
-      preview.children.some(
-        (part) =>
-          part.getAttribute("data-part") === "hair" &&
-          part.style.getPropertyValue("--avatar-part-color") === "#3b2418",
-      ),
-    ).toBe(true);
+    expect(preview.appearance).toEqual({
+      ...DEFAULT_AVATAR_APPEARANCE,
+      hair: "curls",
+      hairColor: "#3b2418",
+      shirt: "striped",
+      shirtColor: "#7f3b44",
+      pants: "skirt",
+      shoes: "flats",
+    });
+  });
+
+  test("skips redrawing when the appearance has not changed", () => {
+    const documentRef = new FakeDocument();
+    const preview = new AvatarPreview(documentRef as unknown as Document);
+    const state = preview as unknown as { renderedKey: string };
+    const initialKey = state.renderedKey;
+
+    preview.update({ ...DEFAULT_AVATAR_APPEARANCE });
+
+    expect(state.renderedKey).toBe(initialKey);
+
+    preview.update({ ...DEFAULT_AVATAR_APPEARANCE, hair: "bob" });
+
+    expect(state.renderedKey).not.toBe(initialKey);
   });
 });
 
@@ -42,7 +64,6 @@ class FakeDocument {
 class FakeElement {
   readonly children: FakeElement[] = [];
   readonly dataset: Record<string, string> = {};
-  readonly style = new FakeStyle();
   className = "";
 
   constructor(
@@ -55,29 +76,26 @@ class FakeElement {
   }
 
   setAttribute(name: string, value: string): void {
+    if (name === "aria-hidden") {
+      this.dataset.ariaHidden = value;
+      return;
+    }
+
     if (name.startsWith("data-")) {
       this.dataset[dataName(name)] = value;
     }
   }
 
   getAttribute(name: string): string | undefined {
+    if (name === "aria-hidden") {
+      return this.dataset.ariaHidden;
+    }
+
     if (name.startsWith("data-")) {
       return this.dataset[dataName(name)];
     }
 
     return undefined;
-  }
-}
-
-class FakeStyle {
-  private readonly values = new Map<string, string>();
-
-  setProperty(name: string, value: string): void {
-    this.values.set(name, value);
-  }
-
-  getPropertyValue(name: string): string {
-    return this.values.get(name) ?? "";
   }
 }
 

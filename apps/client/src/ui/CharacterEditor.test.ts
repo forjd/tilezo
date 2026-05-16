@@ -55,7 +55,7 @@ describe("CharacterEditor", () => {
     expect(pantsColor.value).toBe("#77684b");
   });
 
-  test("renders a drawn preview and updates it when controls change", () => {
+  test("mounts an avatar preview that updates when controls change", () => {
     installDocument();
     const editor = new CharacterEditor({
       initialAppearance: DEFAULT_AVATAR_APPEARANCE,
@@ -63,29 +63,28 @@ describe("CharacterEditor", () => {
     });
     const preview = editor.element.children[1] as unknown as FakeElement;
     const form = editor.element.children[2] as unknown as FakeElement;
+    const hair = form.children[0]?.children[1] as FakeElement;
     const hairColor = form.children[1]?.children[1] as FakeElement;
+    const editorState = editor as unknown as { preview: { appearance: AvatarAppearance } };
+
+    expect(preview.className).toBe("character-preview");
+    expect(preview.children[0]?.className).toBe("character-preview-views");
+
+    const previewAvatar = preview.children[0]?.children[0] as FakeElement;
+    expect(previewAvatar.className).toBe("character-preview-avatar");
+    expect(previewAvatar.children).toHaveLength(1);
+    expect(previewAvatar.children[0]?.className).toBe("avatar-preview");
 
     hairColor.value = "#8b4a24";
     form.dispatch("input", {});
 
-    expect(preview.className).toBe("character-preview");
-    const previewAvatar = preview.children[0]?.children[0] as FakeElement;
-    const previewBody = previewAvatar.children[0] as FakeElement;
-    const hair = form.children[0]?.children[1] as FakeElement;
-
-    expect(preview.children[0]?.className).toBe("character-preview-views");
-    expect(previewAvatar.className).toBe("character-preview-avatar");
-    expect(previewAvatar.children).toHaveLength(1);
-    expect(previewBody.className).toBe("avatar-preview-drawn");
-    expect(previewBody.children.map((child) => child.getAttribute("data-part"))).toContain("hair");
-    expect(previewBody.style.getPropertyValue("--avatar-hair")).toBe("#8b4a24");
+    expect(editorState.preview.appearance.hairColor).toBe("#8b4a24");
 
     hair.value = "bob";
     form.dispatch("change", {});
 
-    expect(hairColor.value).toBe("#8b4a24");
-    expect(hair.value).toBe("bob");
-    expect(previewBody.getAttribute("data-hair")).toBe("bob");
+    expect(editorState.preview.appearance.hair).toBe("bob");
+    expect(editorState.preview.appearance.hairColor).toBe("#8b4a24");
   });
 });
 

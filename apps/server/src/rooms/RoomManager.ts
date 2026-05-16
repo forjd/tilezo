@@ -4,9 +4,12 @@ import {
   loadOrSeedPublicRooms,
   type OwnedRoomLayout,
   type PersistenceStore,
+  type RoomAccess,
+  type RoomAccessRule,
   type RoomDirectory,
 } from "../db/persistence";
 import type { RoomMetrics } from "../observability/metrics";
+import { type RoomBotDefinition, seedRoomBots } from "./bots";
 import { Room } from "./Room";
 
 type RawRoomLayout = {
@@ -18,23 +21,50 @@ type RawRoomLayout = {
   blocked?: { x: number; y: number }[];
 };
 
+type RoomJoinAccess =
+  | { ok: true }
+  | { ok: false; code: "ROOM_NOT_FOUND" | "ROOM_ACCESS_REQUIRED"; message: string };
+
 export class RoomManager {
   private readonly rooms = new Map<string, Room>();
   private readonly publicLayouts: Map<string, RoomLayout>;
   private readonly privateLayouts = new Map<string, OwnedRoomLayout>();
+  private readonly roomRules = new Map<string, RoomAccessRule>();
+  private readonly bots: readonly RoomBotDefinition[];
 
-  constructor(directory: RoomLayout | RoomLayout[] | RoomDirectory) {
+  constructor(
+    directory: RoomLayout | RoomLayout[] | RoomDirectory,
+    options: { bots?: readonly RoomBotDefinition[] } = {},
+  ) {
     const roomDirectory = normalizeRoomDirectory(directory);
     this.publicLayouts = new Map(roomDirectory.publicLayouts.map((layout) => [layout.id, layout]));
+    this.bots = options.bots ?? [];
+
+    for (const layout of roomDirectory.publicLayouts) {
+      this.roomRules.set(layout.id, { roomId: layout.id, access: "open" });
+    }
 
     for (const room of roomDirectory.privateLayouts) {
       this.privateLayouts.set(room.layout.id, room);
+      this.roomRules.set(room.layout.id, {
+        roomId: room.layout.id,
+        ownerUserId: room.ownerUserId,
+        access: room.access ?? "open",
+      });
+    }
+
+    for (const rule of roomDirectory.roomRules ?? []) {
+      this.roomRules.set(rule.roomId, rule);
     }
   }
 
-  static async create(options: { persistence?: PersistenceStore } = {}) {
+  static async create(
+    options: { persistence?: PersistenceStore; bots?: readonly RoomBotDefinition[] } = {},
+  ) {
     const fallbackLayouts = await loadPublicRoomLayouts();
-    return new RoomManager(await loadOrSeedPublicRooms(options.persistence, fallbackLayouts));
+    return new RoomManager(await loadOrSeedPublicRooms(options.persistence, fallbackLayouts), {
+      bots: options.bots,
+    });
   }
 
   get(roomId: string): Room | undefined {
@@ -55,12 +85,31 @@ export class RoomManager {
     }
 
     const room = new Room(layout);
+    seedRoomBots(room, roomId, this.bots);
     this.rooms.set(roomId, room);
     return room;
   }
 
   hasAccessibleLayout(roomId: string, userId?: string): boolean {
     return Boolean(this.getAccessibleLayout(roomId, userId));
+  }
+
+  canJoinRoom(roomId: string, userId?: string): RoomJoinAccess {
+    if (!this.hasAccessibleLayout(roomId, userId)) {
+      return { ok: false, code: "ROOM_NOT_FOUND", message: "Room is not available" };
+    }
+
+    const rule = this.roomRules.get(roomId);
+
+    if (rule?.access === "knock" && rule.ownerUserId !== userId) {
+      return {
+        ok: false,
+        code: "ROOM_ACCESS_REQUIRED",
+        message: "This room requires approval before joining",
+      };
+    }
+
+    return { ok: true };
   }
 
   listPublicRooms(currentRoomId?: string, userId?: string): PublicRoomSummary[] {
@@ -74,14 +123,30 @@ export class RoomManager {
 
   addPrivateRoom(layout: RoomLayout, ownerUserId: string): void {
     this.privateLayouts.set(layout.id, { layout, ownerUserId });
+    this.roomRules.set(layout.id, { roomId: layout.id, ownerUserId, access: "open" });
   }
 
   addRoom(
     layout: RoomLayout,
-    options: { ownerUserId?: string; visibility?: "public" | "private" } = {},
+    options: {
+      access?: RoomAccess;
+      ownerUserId?: string;
+      visibility?: "public" | "private";
+    } = {},
   ): void {
+    const access = options.access ?? "open";
+    this.roomRules.set(layout.id, {
+      roomId: layout.id,
+      ownerUserId: options.ownerUserId,
+      access,
+    });
+
     if (options.visibility === "private" && options.ownerUserId) {
-      this.privateLayouts.set(layout.id, { layout, ownerUserId: options.ownerUserId });
+      this.privateLayouts.set(layout.id, {
+        layout,
+        ownerUserId: options.ownerUserId,
+        access,
+      });
       return;
     }
 
@@ -91,9 +156,13 @@ export class RoomManager {
   removeIfEmpty(roomId: string): void {
     const room = this.rooms.get(roomId);
 
-    if (room?.isEmpty) {
+    if (room && (room.isEmpty || room.hasOnlyUsers(this.botIds()))) {
       this.rooms.delete(roomId);
     }
+  }
+
+  listActiveRooms(): Room[] {
+    return [...this.rooms.values()];
   }
 
   getMetrics(): RoomMetrics {
@@ -134,6 +203,10 @@ export class RoomManager {
         .filter((room) => room.ownerUserId === userId)
         .map((room) => room.layout),
     ];
+  }
+
+  private botIds(): ReadonlySet<string> {
+    return new Set(this.bots.map((bot) => bot.id));
   }
 }
 

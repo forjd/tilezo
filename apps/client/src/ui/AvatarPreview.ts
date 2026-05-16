@@ -1,86 +1,104 @@
-import type { AvatarAppearance } from "@tilezo/protocol/appearance";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
+import { Application, Container, Graphics } from "pixi.js";
+import { drawAvatarBody } from "../game/Avatar";
 
-const AVATAR_PARTS = [
-  "shadow",
-  "left-leg",
-  "right-leg",
-  "left-shoe",
-  "right-shoe",
-  "torso",
-  "left-arm",
-  "right-arm",
-  "head",
-  "hair",
-  "left-eye",
-  "right-eye",
-  "mouth",
-] as const;
+const PREVIEW_WIDTH = 180;
+const PREVIEW_HEIGHT = 220;
+const PREVIEW_SCALE = 3;
+const PREVIEW_BASELINE_FROM_BOTTOM = 28;
 
-type AvatarPreviewPart = (typeof AVATAR_PARTS)[number];
+export class AvatarPreview {
+  readonly element: HTMLDivElement;
+  private readonly app = new Application();
+  private readonly stageContainer = new Container();
+  private readonly body = new Graphics();
+  private currentAppearance: AvatarAppearance = DEFAULT_AVATAR_APPEARANCE;
+  private renderedKey = "";
+  private mounted = false;
 
-export function createAvatarPreview(documentRef: Document): HTMLDivElement {
-  const preview = documentRef.createElement("div");
-  preview.className = "avatar-preview-drawn";
-  preview.setAttribute("aria-hidden", "true");
-
-  for (const part of AVATAR_PARTS) {
-    const partElement = documentRef.createElement("div");
-    partElement.className = `avatar-preview-part avatar-preview-${part}`;
-    partElement.setAttribute("data-part", part);
-    preview.append(partElement);
+  constructor(documentRef: Document = document) {
+    this.element = documentRef.createElement("div") as HTMLDivElement;
+    this.element.className = "avatar-preview";
+    this.element.setAttribute("aria-hidden", "true");
+    this.stageContainer.addChild(this.body);
+    this.stageContainer.scale.set(PREVIEW_SCALE);
+    this.stageContainer.x = PREVIEW_WIDTH / 2;
+    this.stageContainer.y = PREVIEW_HEIGHT - PREVIEW_BASELINE_FROM_BOTTOM;
+    this.renderBody();
   }
 
-  return preview;
-}
+  update(appearance: AvatarAppearance): void {
+    this.currentAppearance = { ...appearance };
+    this.renderBody();
+  }
 
-export function updateAvatarPreview(preview: HTMLElement, appearance: AvatarAppearance): void {
-  preview.dataset.hair = appearance.hair;
-  preview.dataset.shirt = appearance.shirt;
-  preview.dataset.pants = appearance.pants;
-  preview.dataset.shoes = appearance.shoes;
-  preview.style.setProperty("--avatar-skin", appearance.skinTone);
-  preview.style.setProperty("--avatar-hair", appearance.hairColor);
-  preview.style.setProperty("--avatar-shirt", appearance.shirtColor);
-  preview.style.setProperty("--avatar-pants", appearance.pantsColor);
-  preview.style.setProperty("--avatar-shoes", appearance.shoesColor);
-
-  for (const child of Array.from(preview.children)) {
-    const part = child.getAttribute("data-part") as AvatarPreviewPart | undefined;
-
-    if (!part || !hasStyle(child)) {
-      continue;
+  async mount(): Promise<void> {
+    if (this.mounted) {
+      return;
     }
 
-    child.style.setProperty("--avatar-part-color", colorForPart(part, appearance));
+    if (typeof HTMLCanvasElement === "undefined") {
+      return;
+    }
+
+    this.mounted = true;
+    await this.app.init({
+      antialias: false,
+      autoDensity: true,
+      backgroundAlpha: 0,
+      width: PREVIEW_WIDTH,
+      height: PREVIEW_HEIGHT,
+      roundPixels: true,
+    });
+    this.app.canvas.style.imageRendering = "pixelated";
+    this.app.canvas.style.width = `${PREVIEW_WIDTH}px`;
+    this.app.canvas.style.height = `${PREVIEW_HEIGHT}px`;
+    this.app.canvas.style.display = "block";
+    this.app.stage.addChild(this.stageContainer);
+    this.element.append(this.app.canvas);
+  }
+
+  destroy(): void {
+    if (!this.mounted) {
+      return;
+    }
+
+    this.mounted = false;
+    this.app.destroy(true);
+  }
+
+  get appearance(): AvatarAppearance {
+    return { ...this.currentAppearance };
+  }
+
+  private renderBody(): void {
+    const key = appearanceKey(this.currentAppearance);
+
+    if (key === this.renderedKey) {
+      return;
+    }
+
+    this.renderedKey = key;
+    this.body.clear();
+    drawAvatarBody(this.body, {
+      appearance: this.currentAppearance,
+      direction: "south",
+      animationState: "idle",
+      stepFrame: 0,
+    });
   }
 }
 
-function hasStyle(element: Element): element is HTMLElement {
-  return "style" in element;
-}
-
-function colorForPart(part: AvatarPreviewPart, appearance: AvatarAppearance): string {
-  switch (part) {
-    case "left-leg":
-    case "right-leg":
-      return appearance.pantsColor;
-    case "left-shoe":
-    case "right-shoe":
-      return appearance.shoesColor;
-    case "torso":
-      return appearance.shirtColor;
-    case "left-arm":
-    case "right-arm":
-    case "head":
-      return appearance.skinTone;
-    case "hair":
-      return appearance.hairColor;
-    case "left-eye":
-    case "right-eye":
-      return "#1d2324";
-    case "mouth":
-      return "#9d5f46";
-    case "shadow":
-      return "rgba(31, 45, 47, 0.22)";
-  }
+function appearanceKey(appearance: AvatarAppearance): string {
+  return [
+    appearance.hair,
+    appearance.hairColor,
+    appearance.skinTone,
+    appearance.shirt,
+    appearance.shirtColor,
+    appearance.pants,
+    appearance.pantsColor,
+    appearance.shoes,
+    appearance.shoesColor,
+  ].join("|");
 }

@@ -55,9 +55,12 @@ describe("protocol parser", () => {
       type: "avatar.appearance.update",
       appearance: {
         ...DEFAULT_AVATAR_APPEARANCE,
-        hair: "side-part",
+        hair: "curls",
         hairColor: "#8b4a24",
+        shirt: "jacket",
         shirtColor: "#2f5f7f",
+        pants: "skirt",
+        shoes: "high-tops",
       },
     });
 
@@ -67,9 +70,12 @@ describe("protocol parser", () => {
         type: "avatar.appearance.update",
         appearance: {
           ...DEFAULT_AVATAR_APPEARANCE,
-          hair: "side-part",
+          hair: "curls",
           hairColor: "#8b4a24",
+          shirt: "jacket",
           shirtColor: "#2f5f7f",
+          pants: "skirt",
+          shoes: "high-tops",
         },
       },
     });
@@ -99,14 +105,14 @@ describe("protocol parser", () => {
     );
 
     expect(appearance).toEqual({
-      hair: "bob",
+      hair: "buzz",
       hairColor: "#3b2418",
       skinTone: "#b77a58",
-      shirt: "hoodie",
+      shirt: "striped",
       shirtColor: "#7f3b44",
-      pants: "wide",
+      pants: "skirt",
       pantsColor: "#3f4d5c",
-      shoes: "sneakers",
+      shoes: "flats",
       shoesColor: "#e5ded1",
     });
     expect(parseClientMessage({ type: "avatar.appearance.update", appearance }).ok).toBe(true);

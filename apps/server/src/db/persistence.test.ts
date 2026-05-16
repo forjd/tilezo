@@ -82,6 +82,10 @@ describe("persistence", () => {
     await expect(loadOrSeedPublicRooms(store, [lobby, studio])).resolves.toEqual({
       publicLayouts: [storedLobby, studio],
       privateLayouts: [],
+      roomRules: [
+        { roomId: "lobby", ownerUserId: undefined, access: "open" },
+        { roomId: "studio", ownerUserId: undefined, access: "open" },
+      ],
     });
     expect(store.seededRooms).toEqual([studio]);
   });

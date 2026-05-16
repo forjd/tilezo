@@ -1,6 +1,7 @@
 import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { DEFAULT_ROOM_ID } from "../assets";
 import { type AuthSession, authenticate, updateAppearance } from "../auth/AuthClient";
+import { addFriend, listFriends, removeFriend } from "../friends/FriendClient";
 import type { Game } from "../game/Game";
 import { createRoom, listRoomTemplates } from "../rooms/RoomClient";
 import { ClientLogger } from "../telemetry/ClientLogger";
@@ -8,6 +9,7 @@ import { CharacterEditor } from "../ui/CharacterEditor";
 import { ChatPanel } from "../ui/ChatPanel";
 import { CreateRoomDialog } from "../ui/CreateRoomDialog";
 import { DisconnectedDialog } from "../ui/DisconnectedDialog";
+import { FriendsPanel } from "../ui/FriendsPanel";
 import { LoginForm } from "../ui/LoginForm";
 import { RoomBrowser } from "../ui/RoomBrowser";
 
@@ -21,6 +23,7 @@ export function createApp(root: HTMLElement): void {
   const topActions = document.createElement("div");
   const status = document.createElement("div");
   const browseRooms = document.createElement("button");
+  const friendsButton = document.createElement("button");
   const createRoomButton = document.createElement("button");
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
@@ -43,6 +46,9 @@ export function createApp(root: HTMLElement): void {
   browseRooms.className = "room-browser-button hidden";
   browseRooms.type = "button";
   browseRooms.textContent = "Rooms";
+  friendsButton.className = "friends-button hidden";
+  friendsButton.type = "button";
+  friendsButton.textContent = "Friends";
   createRoomButton.className = "create-room-button hidden";
   createRoomButton.type = "button";
   createRoomButton.textContent = "Create room";
@@ -57,7 +63,7 @@ export function createApp(root: HTMLElement): void {
   status.textContent = "idle";
 
   brand.append(brandTitle, brandSubtitle);
-  topActions.append(browseRooms, createRoomButton, editCharacter, logOut);
+  topActions.append(browseRooms, friendsButton, createRoomButton, editCharacter, logOut);
   topBar.append(brand, topActions, status);
 
   const roomBrowser = new RoomBrowser({
@@ -68,6 +74,50 @@ export function createApp(root: HTMLElement): void {
     onRefresh() {
       if (gameStarted) {
         game?.refreshRooms();
+      }
+    },
+  });
+
+  const friendsPanel = new FriendsPanel({
+    async onAdd(username) {
+      if (!session) {
+        return;
+      }
+
+      try {
+        await addFriend(session.token, username);
+        await refreshFriends();
+        status.textContent = "friend added";
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Friend add failed";
+        status.textContent = message;
+        friendsPanel.showError(message);
+      }
+    },
+    onJoinRoom(roomId) {
+      if (!roomId) {
+        return;
+      }
+
+      status.textContent = "joining friend";
+      game?.joinRoom(roomId);
+    },
+    onRefresh() {
+      void refreshFriends();
+    },
+    async onRemove(friendId) {
+      if (!session) {
+        return;
+      }
+
+      try {
+        await removeFriend(session.token, friendId);
+        await refreshFriends();
+        status.textContent = "friend removed";
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Friend remove failed";
+        status.textContent = message;
+        friendsPanel.showError(message);
       }
     },
   });
@@ -92,6 +142,7 @@ export function createApp(root: HTMLElement): void {
         chat.clear();
         chat.show();
         browseRooms.classList.remove("hidden");
+        friendsButton.classList.remove("hidden");
         createRoomButton.classList.remove("hidden");
         editCharacter.classList.remove("hidden");
         roomBrowser.setCurrentRoom(snapshot.roomId);
@@ -145,6 +196,7 @@ export function createApp(root: HTMLElement): void {
         await (await ensureGame()).start(session.token);
         gameStarted = true;
         browseRooms.classList.remove("hidden");
+        friendsButton.classList.remove("hidden");
         createRoomButton.classList.remove("hidden");
         roomBrowser.show();
         status.textContent = "choose room";
@@ -172,6 +224,7 @@ export function createApp(root: HTMLElement): void {
       void clientLogger.event(`auth.${mode}.succeeded`, { userId: session.user.id });
       writeStoredSession(session);
       logOut.classList.remove("hidden");
+      friendsButton.classList.remove("hidden");
       characterEditor.setSubmitLabel("Enter room");
       characterEditor.show(session.user.appearance);
       status.textContent = "choose character";
@@ -204,6 +257,7 @@ export function createApp(root: HTMLElement): void {
         }
 
         browseRooms.classList.remove("hidden");
+        friendsButton.classList.remove("hidden");
         createRoomButton.classList.remove("hidden");
         editCharacter.classList.remove("hidden");
         game?.joinRoom(created.roomId);
@@ -239,6 +293,10 @@ export function createApp(root: HTMLElement): void {
     roomBrowser.show();
   });
 
+  friendsButton.addEventListener("click", () => {
+    friendsPanel.show();
+  });
+
   createRoomButton.addEventListener("click", () => {
     if (!session) {
       return;
@@ -265,6 +323,7 @@ export function createApp(root: HTMLElement): void {
     characterEditor.element,
     createRoomDialog.element,
     roomBrowser.element,
+    friendsPanel.element,
     chat.element,
     disconnectedDialog.element,
   );
@@ -280,12 +339,14 @@ export function createApp(root: HTMLElement): void {
     session = stored;
     login.hide();
     logOut.classList.remove("hidden");
+    friendsButton.classList.remove("hidden");
     status.textContent = "connecting";
 
     try {
       await (await ensureGame()).start(stored.token);
       gameStarted = true;
       browseRooms.classList.remove("hidden");
+      friendsButton.classList.remove("hidden");
       createRoomButton.classList.remove("hidden");
       roomBrowser.show();
       status.textContent = "choose room";
@@ -332,6 +393,7 @@ export function createApp(root: HTMLElement): void {
       await activeGame.reconnect(session.token);
       gameStarted = true;
       browseRooms.classList.remove("hidden");
+      friendsButton.classList.remove("hidden");
       createRoomButton.classList.remove("hidden");
       editCharacter.classList.remove("hidden");
 
@@ -361,6 +423,20 @@ export function createApp(root: HTMLElement): void {
       status.textContent = "create room";
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "Room templates failed";
+    }
+  }
+
+  async function refreshFriends(): Promise<void> {
+    if (!session) {
+      return;
+    }
+
+    try {
+      friendsPanel.setFriends(await listFriends(session.token));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Friends failed";
+      status.textContent = message;
+      friendsPanel.showError(message);
     }
   }
 

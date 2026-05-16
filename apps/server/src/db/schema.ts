@@ -1,6 +1,6 @@
 import type { RoomLayout } from "@tilezo/engine";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -70,4 +70,21 @@ export const userRoomSessions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index("user_room_sessions_room_id_idx").on(table.roomId)],
+);
+
+export const friendships = pgTable(
+  "friendships",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    friendUserId: text("friend_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.friendUserId] }),
+    index("friendships_friend_user_id_idx").on(table.friendUserId),
+  ],
 );

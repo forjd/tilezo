@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Avatar Preview</title>
+    <style>
+      body {
+        margin: 0;
+        background: #6b7855;
+        font-family: Verdana, sans-serif;
+        color: #fafaf5;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        padding: 16px;
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        background: rgba(0, 0, 0, 0.18);
+        padding: 8px;
+        border-radius: 8px;
+      }
+      .cell canvas { image-rendering: pixelated; }
+      .cell .label { font-size: 11px; }
+      .at1 canvas { width: 60px !important; height: 80px !important; }
+    </style>
+  </head>
+  <body>
+    <div id="grid" class="grid"></div>
+    <script type="module" src="./src/preview-entry.ts"></script>
+  </body>
+</html>
