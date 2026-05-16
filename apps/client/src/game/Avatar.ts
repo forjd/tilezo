@@ -31,6 +31,7 @@ export class Avatar {
   private readonly body = new Graphics();
   private readonly chatBubble = new Container();
   private readonly chatBubbleBackground = new Graphics();
+  private readonly chatBubbleAvatar = new Graphics();
   private readonly chatBubbleText: Text;
   private readonly typingIndicator = new Container();
   private readonly typingIndicatorBackground = new Graphics();
@@ -80,6 +81,7 @@ export class Avatar {
     this.label.y = -60;
 
     this.chatBubbleBackground.roundPixels = true;
+    this.chatBubbleAvatar.roundPixels = true;
     this.chatBubbleText = new Text({
       text: "",
       resolution: 1,
@@ -100,7 +102,7 @@ export class Avatar {
     this.chatBubbleText.anchor.set(0.5, 1);
     this.chatBubbleText.y = -102;
     this.chatBubble.visible = false;
-    this.chatBubble.addChild(this.chatBubbleBackground, this.chatBubbleText);
+    this.chatBubble.addChild(this.chatBubbleBackground, this.chatBubbleAvatar, this.chatBubbleText);
 
     this.typingIndicatorBackground.roundPixels = true;
     this.typingIndicatorText = new Text({
@@ -274,15 +276,24 @@ export class Avatar {
   }
 
   private drawChatBubble(lines: string[]): void {
-    const horizontalPadding = 14;
+    const leftPadding = 10;
+    const rightPadding = 14;
     const verticalPadding = 7;
+    const faceSize = 22;
+    const faceGap = 8;
     const longestLineLength = Math.max(...lines.map((line) => line.length));
     const textWidth = longestLineLength * 9;
     const textHeight = lines.length * 15;
-    const width = evenPixel(Math.min(178, Math.max(48, textWidth + horizontalPadding * 2)));
+    const width = evenPixel(
+      Math.min(212, Math.max(78, leftPadding + faceSize + faceGap + textWidth + rightPadding)),
+    );
     const height = Math.max(28, textHeight + verticalPadding * 2);
     const x = -width / 2;
     const y = this.chatBubbleText.y - textHeight - verticalPadding;
+    const faceCenterX = x + leftPadding + faceSize / 2;
+    const faceCenterY = y + height / 2;
+
+    this.chatBubbleText.x = Math.round(faceCenterX + faceSize / 2 + faceGap + textWidth / 2);
 
     this.chatBubbleBackground.clear();
     this.chatBubbleBackground.roundRect(x, y, width, height, 12).fill(0xffffff);
@@ -290,6 +301,33 @@ export class Avatar {
       color: 0x442f24,
       width: 2,
     });
+    this.drawChatBubbleAvatar(faceCenterX, faceCenterY, faceSize);
+  }
+
+  private drawChatBubbleAvatar(centerX: number, centerY: number, size: number): void {
+    const skinTone = toPixiColor(this.appearance.skinTone);
+    const hairColor = toPixiColor(this.appearance.hairColor);
+    const radius = size / 2;
+
+    this.chatBubbleAvatar.clear();
+    this.chatBubbleAvatar.circle(centerX, centerY, radius).fill(0xf1e7d2);
+    this.chatBubbleAvatar.circle(centerX, centerY, radius).stroke({ color: 0x442f24, width: 2 });
+    this.chatBubbleAvatar.circle(centerX, centerY + 1, radius - 4).fill(skinTone);
+    this.chatBubbleAvatar.circle(centerX, centerY - 4, radius - 4).fill(hairColor);
+
+    if (this.appearance.hair === "bob") {
+      this.chatBubbleAvatar.roundRect(centerX - 9, centerY - 3, 5, 10, 2).fill(hairColor);
+      this.chatBubbleAvatar.roundRect(centerX + 4, centerY - 3, 5, 10, 2).fill(hairColor);
+    } else if (this.appearance.hair === "side-part") {
+      this.chatBubbleAvatar.rect(centerX - 8, centerY - 5, 10, 4).fill(hairColor);
+      this.chatBubbleAvatar.rect(centerX + 1, centerY - 3, 7, 3).fill(hairColor);
+    } else {
+      this.chatBubbleAvatar.rect(centerX - 8, centerY - 5, 16, 4).fill(hairColor);
+    }
+
+    this.chatBubbleAvatar.circle(centerX - 4, centerY + 1, 1.2).fill(0x1d2324);
+    this.chatBubbleAvatar.circle(centerX + 4, centerY + 1, 1.2).fill(0x1d2324);
+    this.chatBubbleAvatar.rect(centerX - 3, centerY + 6, 6, 1).fill(0x9d5f46);
   }
 
   private drawTypingIndicator(): void {

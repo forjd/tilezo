@@ -48,6 +48,7 @@ describe("Avatar", () => {
   test("renders overlay text with pixel-snapped nearest textures", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
+      chatBubbleAvatar: { roundPixels: boolean };
       chatBubbleBackground: { roundPixels: boolean };
       chatBubbleText: {
         resolution: number;
@@ -72,6 +73,7 @@ describe("Avatar", () => {
     expect(state.label.resolution).toBe(1);
     expect(state.label.textureStyle.scaleMode).toBe("nearest");
     expect(state.label.y).toBe(-60);
+    expect(state.chatBubbleAvatar.roundPixels).toBe(true);
     expect(state.chatBubbleBackground.roundPixels).toBe(true);
     expect(state.chatBubbleText.roundPixels).toBe(true);
     expect(state.chatBubbleText.resolution).toBe(1);
@@ -168,7 +170,7 @@ describe("Avatar", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
       chatBubble: { visible: boolean };
-      chatBubbleText: { text: string };
+      chatBubbleText: { text: string; x: number };
       label: { visible: boolean };
     };
 
@@ -176,6 +178,7 @@ describe("Avatar", () => {
 
     expect(state.chatBubble.visible).toBe(true);
     expect(state.chatBubbleText.text).toBe("hello room");
+    expect(state.chatBubbleText.x).toBeGreaterThan(0);
     expect(state.label.visible).toBe(true);
 
     avatar.update(5);
