@@ -50,6 +50,13 @@
       "when": 1778691000000,
       "tag": "0006_created_room_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778790960000,
+      "tag": "0007_friendships",
+      "breakpoints": true
     }
   ]
 }
