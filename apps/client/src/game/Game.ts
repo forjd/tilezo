@@ -33,8 +33,10 @@ export class Game {
       autoDensity: true,
       backgroundAlpha: 0,
       resizeTo: this.options.stage,
+      roundPixels: true,
     });
 
+    this.app.canvas.style.imageRendering = "pixelated";
     this.options.stage.appendChild(this.app.canvas);
     this.scene = new RoomScene(
       this.app,

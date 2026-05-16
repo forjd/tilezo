@@ -63,6 +63,8 @@ export class Avatar {
 
     this.label = new Text({
       text: username,
+      resolution: 1,
+      roundPixels: true,
       style: {
         align: "center",
         fill: 0xffffff,
@@ -71,13 +73,17 @@ export class Avatar {
         fontWeight: "700",
         stroke: { color: 0x1d2324, width: 4 },
       },
+      textureStyle: { scaleMode: "nearest" },
     });
 
     this.label.anchor.set(0.5, 1);
-    this.label.y = -70;
+    this.label.y = -60;
 
+    this.chatBubbleBackground.roundPixels = true;
     this.chatBubbleText = new Text({
       text: "",
+      resolution: 1,
+      roundPixels: true,
       style: {
         align: "center",
         breakWords: true,
@@ -89,14 +95,18 @@ export class Avatar {
         padding: 2,
         wordWrap: false,
       },
+      textureStyle: { scaleMode: "nearest" },
     });
     this.chatBubbleText.anchor.set(0.5, 1);
     this.chatBubbleText.y = -102;
     this.chatBubble.visible = false;
     this.chatBubble.addChild(this.chatBubbleBackground, this.chatBubbleText);
 
+    this.typingIndicatorBackground.roundPixels = true;
     this.typingIndicatorText = new Text({
       text: "...",
+      resolution: 1,
+      roundPixels: true,
       style: {
         align: "center",
         fill: 0x1d2324,
@@ -106,6 +116,7 @@ export class Avatar {
         letterSpacing: 1,
         padding: 2,
       },
+      textureStyle: { scaleMode: "nearest" },
     });
     this.typingIndicatorText.anchor.set(0.5, 1);
     this.typingIndicatorText.y = -102;
@@ -268,7 +279,7 @@ export class Avatar {
     const longestLineLength = Math.max(...lines.map((line) => line.length));
     const textWidth = longestLineLength * 9;
     const textHeight = lines.length * 15;
-    const width = Math.min(178, Math.max(48, textWidth + horizontalPadding * 2));
+    const width = evenPixel(Math.min(178, Math.max(48, textWidth + horizontalPadding * 2)));
     const height = Math.max(28, textHeight + verticalPadding * 2);
     const x = -width / 2;
     const y = this.chatBubbleText.y - textHeight - verticalPadding;
@@ -423,6 +434,10 @@ export class Avatar {
 
 function lerp(start: number, end: number, progress: number): number {
   return start + (end - start) * progress;
+}
+
+function evenPixel(value: number): number {
+  return Math.ceil(value / 2) * 2;
 }
 
 function sameTile(a: TilePosition, b: TilePosition): boolean {

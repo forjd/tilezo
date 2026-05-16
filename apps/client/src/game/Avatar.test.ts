@@ -45,6 +45,43 @@ describe("Avatar", () => {
     });
   });
 
+  test("renders overlay text with pixel-snapped nearest textures", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubbleBackground: { roundPixels: boolean };
+      chatBubbleText: {
+        resolution: number;
+        roundPixels: boolean;
+        textureStyle: { scaleMode: string };
+      };
+      label: {
+        resolution: number;
+        roundPixels: boolean;
+        textureStyle: { scaleMode: string };
+        y: number;
+      };
+      typingIndicatorBackground: { roundPixels: boolean };
+      typingIndicatorText: {
+        resolution: number;
+        roundPixels: boolean;
+        textureStyle: { scaleMode: string };
+      };
+    };
+
+    expect(state.label.roundPixels).toBe(true);
+    expect(state.label.resolution).toBe(1);
+    expect(state.label.textureStyle.scaleMode).toBe("nearest");
+    expect(state.label.y).toBe(-60);
+    expect(state.chatBubbleBackground.roundPixels).toBe(true);
+    expect(state.chatBubbleText.roundPixels).toBe(true);
+    expect(state.chatBubbleText.resolution).toBe(1);
+    expect(state.chatBubbleText.textureStyle.scaleMode).toBe("nearest");
+    expect(state.typingIndicatorBackground.roundPixels).toBe(true);
+    expect(state.typingIndicatorText.roundPixels).toBe(true);
+    expect(state.typingIndicatorText.resolution).toBe(1);
+    expect(state.typingIndicatorText.textureStyle.scaleMode).toBe("nearest");
+  });
+
   test("rerouting away from the active segment starts from the current rendered position", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
 
