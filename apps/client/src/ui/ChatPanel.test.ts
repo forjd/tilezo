@@ -80,12 +80,14 @@ describe("ChatPanel", () => {
     const list = getList(panel);
     list.scrollHeight = 120;
 
-    panel.addMessage("Dan", "hello");
+    panel.addMessage("Dan", "hello", new Date("2026-05-19T08:07:00.000Z"));
 
     const message = list.children[0];
     expect(message?.className).toBe("message");
-    expect(message?.children[0]?.textContent).toBe("Dan");
-    expect(message?.children[1]?.textContent).toBe(": hello");
+    expect(message?.children[0]?.className).toBe("message-time");
+    expect(message?.children[0]?.textContent).toMatch(/\d{2}:\d{2}/);
+    expect(message?.children[1]?.textContent).toBe("Dan");
+    expect(message?.children[2]?.textContent).toBe(": hello");
     expect(list.scrollTop).toBe(120);
 
     panel.clear();

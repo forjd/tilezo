@@ -115,7 +115,38 @@ describe("RoomScene", () => {
     const avatars = sceneState(scene).avatars;
     expect(avatarState(avatars.get("user_1")).chatBubble.visible).toBe(false);
     expect(avatarState(avatars.get("user_2")).chatBubble.visible).toBe(true);
-    expect(avatarState(avatars.get("user_2")).chatBubbleText.text).toBe("hi there");
+    expect(avatarState(avatars.get("user_2")).chatBubbleText.text).toBe("Ada: hi there");
+  });
+
+  test("pushes nearby chat bubbles upward so they do not overlap", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.handleServerMessage(
+      snapshot([user("user_1", "Dan", { x: 0, y: 0 }), user("user_2", "Ada", { x: 1, y: 0 })]),
+    );
+    scene.handleServerMessage({
+      type: "chat.message",
+      userId: "user_1",
+      username: "Dan",
+      text: "hello room",
+      sentAt: "2026-05-11T12:00:00.000Z",
+    });
+    scene.handleServerMessage({
+      type: "chat.message",
+      userId: "user_2",
+      username: "Ada",
+      text: "hello room",
+      sentAt: "2026-05-11T12:00:00.000Z",
+    });
+    scene.update(0);
+
+    const layouts = [...sceneState(scene).avatars.values()].flatMap((avatar) =>
+      avatar.getChatBubbleLayouts(),
+    );
+
+    expect(layouts).toHaveLength(2);
+    expect(rectsOverlap(layouts[0], layouts[1])).toBe(false);
   });
 
   test("shows and clears typing indicators above the matching avatar", () => {
@@ -272,7 +303,10 @@ function createApp(): FakeApp {
 }
 
 function sceneState(scene: RoomScene): {
-  avatars: Map<string, { overlayView: Container; view: Container }>;
+  avatars: Map<
+    string,
+    { getChatBubbleLayouts: () => BubbleRect[]; overlayView: Container; view: Container }
+  >;
   avatarLayer: Container;
   doorAvatarLayer: Container;
   avatarOverlayLayer: Container;
@@ -280,13 +314,31 @@ function sceneState(scene: RoomScene): {
   tiles: { view: Container; wallView: Container };
 } {
   return scene as unknown as {
-    avatars: Map<string, { overlayView: Container; view: Container }>;
+    avatars: Map<
+      string,
+      { getChatBubbleLayouts: () => BubbleRect[]; overlayView: Container; view: Container }
+    >;
     avatarLayer: Container;
     doorAvatarLayer: Container;
     avatarOverlayLayer: Container;
     hover?: unknown;
     tiles: { view: Container; wallView: Container };
   };
+}
+
+type BubbleRect = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
+function rectsOverlap(a: BubbleRect | undefined, b: BubbleRect | undefined): boolean {
+  if (!a || !b) {
+    return false;
+  }
+
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
 function avatarState(avatar?: { view: Container }): {

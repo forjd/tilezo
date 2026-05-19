@@ -3,7 +3,7 @@ import type { RoomTile, TilePosition } from "@tilezo/engine/types";
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 import type { RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { type Application, Container } from "pixi.js";
-import { Avatar } from "./Avatar";
+import { Avatar, type ChatBubbleLayout } from "./Avatar";
 import { ROOM_WALL_HEIGHT, TileMap } from "./TileMap";
 
 type MoveRequestHandler = (target: TilePosition) => void;
@@ -19,6 +19,7 @@ const ZOOM_STEP = 0.0015;
 const PAN_THRESHOLD_PIXELS = 4;
 const DOOR_LAYER_SWITCH_PROGRESS = 0.55;
 const DOOR_LAYER_DISTANCE_TOLERANCE = 18;
+const CHAT_BUBBLE_COLLISION_GAP = 6;
 
 export class RoomScene {
   private readonly world = new Container();
@@ -109,6 +110,8 @@ export class RoomScene {
       avatar.update(deltaSeconds);
       this.placeAvatarBody(avatar);
     }
+
+    this.layoutChatBubbles();
   }
 
   resize(): void {
@@ -148,6 +151,33 @@ export class RoomScene {
 
     if (avatar.view.parent !== targetLayer) {
       targetLayer.addChild(avatar.view);
+    }
+  }
+
+  private layoutChatBubbles(): void {
+    const placed: ChatBubbleLayout[] = [];
+    const layouts = [...this.avatars.values()]
+      .flatMap((avatar) => avatar.getChatBubbleLayouts())
+      .sort((a, b) => b.bottom - a.bottom);
+
+    for (const layout of layouts) {
+      let offset = 0;
+      let top = layout.top;
+      let bottom = layout.bottom;
+
+      for (const other of placed) {
+        if (!rectsOverlap({ ...layout, top, bottom }, other)) {
+          continue;
+        }
+
+        const nextOffset = bottom - other.top + CHAT_BUBBLE_COLLISION_GAP;
+        offset += nextOffset;
+        top -= nextOffset;
+        bottom -= nextOffset;
+      }
+
+      layout.setCollisionOffset(offset);
+      placed.push({ ...layout, top, bottom });
     }
   }
 
@@ -378,4 +408,16 @@ function calculateRoomBounds(tiles: RoomTile[]): RoomBounds | undefined {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function rectsOverlap(
+  a: Pick<ChatBubbleLayout, "left" | "right" | "top" | "bottom">,
+  b: Pick<ChatBubbleLayout, "left" | "right" | "top" | "bottom">,
+): boolean {
+  return (
+    a.left < b.right + CHAT_BUBBLE_COLLISION_GAP &&
+    a.right > b.left - CHAT_BUBBLE_COLLISION_GAP &&
+    a.top < b.bottom + CHAT_BUBBLE_COLLISION_GAP &&
+    a.bottom > b.top - CHAT_BUBBLE_COLLISION_GAP
+  );
 }

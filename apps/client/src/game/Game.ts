@@ -71,7 +71,7 @@ export class Game {
         }
 
         if (message.type === "chat.message") {
-          this.options.chat.addMessage(message.username, message.text);
+          this.options.chat.addMessage(message.username, message.text, message.sentAt);
         }
 
         if (message.type === "error") {

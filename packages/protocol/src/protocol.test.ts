@@ -37,6 +37,14 @@ describe("protocol parser", () => {
     expect(parseClientMessage({ type: "chat.typing", isTyping: "yes" }).ok).toBe(false);
   });
 
+  test("filters room chat to printable ASCII text", () => {
+    expect(parseClientMessage({ type: "chat.say", text: " hi 👋 café 世界\tok\n " })).toEqual({
+      ok: true,
+      value: { type: "chat.say", text: "hi caf ok" },
+    });
+    expect(parseClientMessage({ type: "chat.say", text: "😀✨" }).ok).toBe(false);
+  });
+
   test("rejects malformed raw messages", () => {
     expect(parseRawClientMessage("{bad json").ok).toBe(false);
   });

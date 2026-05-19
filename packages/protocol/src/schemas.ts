@@ -24,6 +24,11 @@ const trimmedString = (maxLength: number) =>
     .max(maxLength)
     .transform((value) => value.trim());
 
+const chatText = z
+  .string()
+  .transform((value) => sanitizeChatText(value).trim())
+  .pipe(z.string().min(1).max(CHAT_MAX_LENGTH));
+
 export const tilePositionSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
@@ -45,7 +50,7 @@ export const avatarMoveRequestMessageSchema = z.object({
 
 export const chatSayMessageSchema = z.object({
   type: z.literal("chat.say"),
-  text: trimmedString(CHAT_MAX_LENGTH),
+  text: chatText,
 });
 
 export const chatTypingMessageSchema = z.object({
@@ -84,3 +89,17 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   avatarAppearanceUpdateMessageSchema,
   pingMessageSchema,
 ]);
+
+function sanitizeChatText(value: string): string {
+  let sanitized = "";
+
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+
+    if (codePoint && codePoint >= 0x20 && codePoint <= 0x7e) {
+      sanitized += character;
+    }
+  }
+
+  return sanitized.replace(/ +/g, " ");
+}

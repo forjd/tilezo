@@ -70,18 +70,21 @@ export class ChatPanel {
     this.input.focus({ preventScroll: true });
   }
 
-  addMessage(username: string, text: string): void {
+  addMessage(username: string, text: string, sentAt: string | Date = new Date()): void {
     const shouldStickToBottom =
       this.list.children.length === 0 ||
       this.list.scrollTop + this.list.clientHeight >= this.list.scrollHeight - 8;
     const message = document.createElement("div");
+    const timestamp = document.createElement("time");
     const author = document.createElement("strong");
     const body = document.createElement("span");
 
     message.className = "message";
+    timestamp.className = "message-time";
+    timestamp.textContent = formatChatTimestamp(sentAt);
     author.textContent = username;
     body.textContent = `: ${text}`;
-    message.append(author, body);
+    message.append(timestamp, author, body);
     this.list.append(message);
 
     while (this.list.childElementCount > this.maxMessages) {
@@ -120,4 +123,17 @@ export class ChatPanel {
     this.isTyping = isTyping;
     this.typingHandler?.(isTyping);
   }
+}
+
+function formatChatTimestamp(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--:--";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }

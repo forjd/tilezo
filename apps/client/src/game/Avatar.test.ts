@@ -76,8 +76,8 @@ describe("Avatar", () => {
     expect(state.chatBubbleAvatar.roundPixels).toBe(true);
     expect(state.chatBubbleBackground.roundPixels).toBe(true);
     expect(state.chatBubbleText.roundPixels).toBe(true);
-    expect(state.chatBubbleText.resolution).toBe(1);
-    expect(state.chatBubbleText.textureStyle.scaleMode).toBe("nearest");
+    expect(state.chatBubbleText.resolution).toBe(3);
+    expect(state.chatBubbleText.textureStyle.scaleMode).toBe("linear");
     expect(state.typingIndicatorBackground.roundPixels).toBe(true);
     expect(state.typingIndicatorText.roundPixels).toBe(true);
     expect(state.typingIndicatorText.resolution).toBe(1);
@@ -181,14 +181,32 @@ describe("Avatar", () => {
     avatar.say("hello room");
 
     expect(state.chatBubble.visible).toBe(true);
-    expect(state.chatBubbleText.text).toBe("hello room");
-    expect(state.chatBubbleText.x).toBeGreaterThan(0);
+    expect(state.chatBubbleText.text).toBe("Dan: hello room");
+    expect(state.chatBubbleText.x).toBe(-42);
     expect(state.label.visible).toBe(true);
 
     avatar.update(5);
 
     expect(state.chatBubble.visible).toBe(false);
     expect(state.label.visible).toBe(true);
+  });
+
+  test("stacks recent chat bubbles upward instead of replacing them", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubbles: { view: { y: number; visible: boolean }; text: { text: string } }[];
+    };
+
+    avatar.say("first");
+    avatar.say("second");
+    avatar.update(0.16);
+
+    expect(state.chatBubbles.map((bubble) => bubble.text.text)).toEqual([
+      "Dan: first",
+      "Dan: second",
+    ]);
+    expect(state.chatBubbles.every((bubble) => bubble.view.visible)).toBe(true);
+    expect(state.chatBubbles[0]?.view.y).toBeLessThan(state.chatBubbles[1]?.view.y ?? 0);
   });
 
   test("shows typing indicators when no chat bubble is visible", () => {
@@ -217,6 +235,19 @@ describe("Avatar", () => {
     expect(state.typingIndicator.visible).toBe(false);
   });
 
+  test("allows wider chat bubble lines before wrapping", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubbleText: { text: string };
+      chatBubbles: { width: number }[];
+    };
+
+    avatar.say("this message can stay on a wider single line");
+
+    expect(state.chatBubbleText.text).toBe("Dan: this message can stay on a\nwider single line");
+    expect(state.chatBubbles.at(-1)?.width).toBeGreaterThan(212);
+  });
+
   test("keeps long unbroken chat messages inside the bubble line budget", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
@@ -227,7 +258,7 @@ describe("Avatar", () => {
 
     const lines = state.chatBubbleText.text.split("\n");
     expect(lines).toHaveLength(4);
-    expect(lines.every((line) => line.length <= 16)).toBe(true);
-    expect(lines.at(-1)?.endsWith("...")).toBe(true);
+    expect(lines.every((line) => line.length <= 32)).toBe(true);
+    expect(lines.at(-1)?.endsWith("...")).toBe(false);
   });
 });

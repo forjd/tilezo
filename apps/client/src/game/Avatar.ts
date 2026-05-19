@@ -8,6 +8,27 @@ type ScreenPosition = {
   y: number;
 };
 
+export type ChatBubbleLayout = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  setCollisionOffset: (offset: number) => void;
+};
+
+type ChatBubbleView = {
+  view: Container;
+  background: Graphics;
+  avatar: Graphics;
+  text: Text;
+  width: number;
+  height: number;
+  secondsRemaining: number;
+  ageSeconds: number;
+  stackOffset: number;
+  baseY: number;
+};
+
 export type AvatarAnimationState = "idle" | "walk";
 
 export type AvatarRenderDirection =
@@ -37,6 +58,9 @@ const AVATAR_SHADING_STRENGTH = 0.78;
 const AVATAR_SHADING_ALPHA = 0.32;
 const IDLE_BOB_AMPLITUDE_PX = 1;
 const IDLE_BOB_PERIOD_SECONDS = 2.4;
+const CHAT_BUBBLE_MAX_WIDTH = 348;
+const CHAT_BUBBLE_MAX_LINE_LENGTH = 32;
+const CHAT_BUBBLE_APPROX_CHARACTER_WIDTH = 7;
 
 export class Avatar {
   readonly view = new Container();
@@ -47,14 +71,15 @@ export class Avatar {
   appearance: AvatarAppearance;
 
   private readonly body = new Graphics();
-  private readonly chatBubble = new Container();
-  private readonly chatBubbleBackground = new Graphics();
-  private readonly chatBubbleAvatar = new Graphics();
-  private readonly chatBubbleText: Text;
+  chatBubble: Container;
+  chatBubbleBackground: Graphics;
+  chatBubbleAvatar: Graphics;
+  chatBubbleText: Text;
   private readonly typingIndicator = new Container();
   private readonly typingIndicatorBackground = new Graphics();
   private readonly typingIndicatorText: Text;
   private readonly label: Text;
+  private readonly chatBubbles: ChatBubbleView[] = [];
   private path: TilePosition[] = [];
   private fromScreen: ScreenPosition;
   private to?: TilePosition;
@@ -64,10 +89,10 @@ export class Avatar {
   private animationSeconds = 0;
   private idleSeconds = 0;
   private renderedBodyKey = "";
-  private chatBubbleSecondsRemaining = 0;
   private isTyping = false;
   private readonly secondsPerTile = 0.36;
   private readonly chatBubbleDurationSeconds = 4.5;
+  private readonly maxChatBubbles = 4;
 
   constructor(
     userId: string,
@@ -86,7 +111,7 @@ export class Avatar {
       resolution: 2,
       roundPixels: true,
       style: {
-        align: "center",
+        align: "left",
         fill: 0xffffff,
         fontFamily: "Verdana, Arial, sans-serif",
         fontSize: 11,
@@ -99,29 +124,11 @@ export class Avatar {
     this.label.anchor.set(0.5, 1);
     this.label.y = -60;
 
-    this.chatBubbleBackground.roundPixels = true;
-    this.chatBubbleAvatar.roundPixels = true;
-    this.chatBubbleText = new Text({
-      text: "",
-      resolution: 1,
-      roundPixels: true,
-      style: {
-        align: "center",
-        breakWords: true,
-        fill: 0x1d2324,
-        fontFamily: "Verdana, Arial, sans-serif",
-        fontSize: 12,
-        fontWeight: "700",
-        lineHeight: 15,
-        padding: 2,
-        wordWrap: false,
-      },
-      textureStyle: { scaleMode: "nearest" },
-    });
-    this.chatBubbleText.anchor.set(0.5, 1);
-    this.chatBubbleText.y = -102;
-    this.chatBubble.visible = false;
-    this.chatBubble.addChild(this.chatBubbleBackground, this.chatBubbleAvatar, this.chatBubbleText);
+    const initialChatBubble = this.createChatBubbleView();
+    this.chatBubble = initialChatBubble.view;
+    this.chatBubbleBackground = initialChatBubble.background;
+    this.chatBubbleAvatar = initialChatBubble.avatar;
+    this.chatBubbleText = initialChatBubble.text;
 
     this.typingIndicatorBackground.roundPixels = true;
     this.typingIndicatorText = new Text({
@@ -146,7 +153,7 @@ export class Avatar {
     this.drawTypingIndicator();
 
     this.view.addChild(this.body);
-    this.overlayView.addChild(this.label, this.chatBubble, this.typingIndicator);
+    this.overlayView.addChild(this.label, this.typingIndicator);
     this.rebuildBody();
     this.syncViewToTile(position);
   }
@@ -164,12 +171,27 @@ export class Avatar {
       return;
     }
 
-    const lines = wrapChatBubbleMessage(message);
-    this.chatBubbleText.text = lines.join("\n");
-    this.chatBubbleSecondsRemaining = this.chatBubbleDurationSeconds;
-    this.chatBubble.visible = true;
+    const bubble = this.createChatBubbleView();
+    const lines = wrapChatBubbleMessage(`${this.username}: ${message}`);
+
+    bubble.text.text = lines.join("\n");
+    bubble.secondsRemaining = this.chatBubbleDurationSeconds;
+    bubble.view.visible = true;
+    this.drawChatBubble(bubble, lines);
+    this.chatBubbles.push(bubble);
+    this.overlayView.addChild(bubble.view);
+    this.chatBubble = bubble.view;
+    this.chatBubbleBackground = bubble.background;
+    this.chatBubbleAvatar = bubble.avatar;
+    this.chatBubbleText = bubble.text;
+
+    while (this.chatBubbles.length > this.maxChatBubbles) {
+      const removed = this.chatBubbles.shift();
+      removed?.view.destroy({ children: true });
+    }
+
+    this.positionChatBubbles(0);
     this.syncTypingIndicatorVisibility();
-    this.drawChatBubble(lines);
   }
 
   setTyping(isTyping: boolean): void {
@@ -208,7 +230,7 @@ export class Avatar {
   update(deltaSeconds: number): void {
     const safeDelta = Math.max(0, deltaSeconds);
     this.idleSeconds += safeDelta;
-    this.updateChatBubble(deltaSeconds);
+    this.updateChatBubbles(safeDelta);
 
     if (!this.to) {
       const next = this.path.shift();
@@ -267,6 +289,28 @@ export class Avatar {
     this.overlayView.y = this.view.y;
   }
 
+  getChatBubbleLayouts(): ChatBubbleLayout[] {
+    const layouts: ChatBubbleLayout[] = [];
+
+    for (const bubble of this.chatBubbles) {
+      if (!bubble.view.visible) {
+        continue;
+      }
+
+      layouts.push({
+        left: this.overlayView.x + bubble.view.x - bubble.width / 2,
+        right: this.overlayView.x + bubble.view.x + bubble.width / 2,
+        top: this.overlayView.y + bubble.view.y,
+        bottom: this.overlayView.y + bubble.view.y + bubble.height,
+        setCollisionOffset: (offset: number) => {
+          bubble.view.y = bubble.baseY - offset;
+        },
+      });
+    }
+
+    return layouts;
+  }
+
   private getUnreachedPath(path: TilePosition[]): TilePosition[] {
     const currentIndex = path.findIndex((position) => sameTile(position, this.position));
 
@@ -287,52 +331,117 @@ export class Avatar {
     return [...path];
   }
 
-  private updateChatBubble(deltaSeconds: number): void {
-    if (this.chatBubbleSecondsRemaining <= 0) {
-      return;
+  private updateChatBubbles(deltaSeconds: number): void {
+    let removedBubble = false;
+
+    for (let index = this.chatBubbles.length - 1; index >= 0; index -= 1) {
+      const bubble = this.chatBubbles[index];
+
+      if (!bubble) {
+        continue;
+      }
+
+      bubble.ageSeconds += deltaSeconds;
+      bubble.secondsRemaining = Math.max(0, bubble.secondsRemaining - deltaSeconds);
+
+      if (bubble.secondsRemaining === 0) {
+        bubble.view.destroy({ children: true });
+        this.chatBubbles.splice(index, 1);
+        removedBubble = true;
+      }
     }
 
-    this.chatBubbleSecondsRemaining = Math.max(
-      0,
-      this.chatBubbleSecondsRemaining - Math.max(0, deltaSeconds),
-    );
+    this.positionChatBubbles(deltaSeconds);
 
-    if (this.chatBubbleSecondsRemaining === 0) {
-      this.chatBubble.visible = false;
+    if (removedBubble) {
+      this.syncLatestChatBubbleReferences();
       this.syncTypingIndicatorVisibility();
     }
   }
 
-  private drawChatBubble(lines: string[]): void {
+  private createChatBubbleView(): ChatBubbleView {
+    const view = new Container();
+    const background = new Graphics();
+    const avatar = new Graphics();
+    const text = new Text({
+      text: "",
+      resolution: 3,
+      roundPixels: true,
+      style: {
+        align: "center",
+        breakWords: true,
+        fill: 0x1d2324,
+        fontFamily: "Verdana, Arial, sans-serif",
+        fontSize: 12,
+        fontWeight: "700",
+        lineHeight: 15,
+        padding: 2,
+        wordWrap: false,
+      },
+      textureStyle: { scaleMode: "linear" },
+    });
+
+    background.roundPixels = true;
+    avatar.roundPixels = true;
+    text.anchor.set(0, 1);
+    view.visible = false;
+    view.addChild(background, avatar, text);
+
+    return {
+      view,
+      background,
+      avatar,
+      text,
+      width: 0,
+      height: 0,
+      secondsRemaining: 0,
+      ageSeconds: 0,
+      stackOffset: 0,
+      baseY: -102,
+    };
+  }
+
+  private drawChatBubble(bubble: ChatBubbleView, lines: string[]): void {
     const leftPadding = 10;
     const rightPadding = 14;
     const verticalPadding = 7;
     const faceSize = 22;
-    const faceGap = 8;
+    const faceGap = 4;
     const longestLineLength = Math.max(...lines.map((line) => line.length));
-    const textWidth = longestLineLength * 9;
+    const textWidth = longestLineLength * CHAT_BUBBLE_APPROX_CHARACTER_WIDTH;
     const textHeight = lines.length * 15;
     const width = evenPixel(
-      Math.min(212, Math.max(78, leftPadding + faceSize + faceGap + textWidth + rightPadding)),
+      Math.min(
+        CHAT_BUBBLE_MAX_WIDTH,
+        Math.max(78, leftPadding + faceSize + faceGap + textWidth + rightPadding),
+      ),
     );
     const height = Math.max(28, textHeight + verticalPadding * 2);
     const x = -width / 2;
-    const y = this.chatBubbleText.y - textHeight - verticalPadding;
+    const y = 0;
     const faceCenterX = x + leftPadding + faceSize / 2;
     const faceCenterY = y + height / 2;
 
-    this.chatBubbleText.x = Math.round(faceCenterX + faceSize / 2 + faceGap + textWidth / 2);
+    bubble.width = width;
+    bubble.height = height;
+    bubble.text.x = Math.round(faceCenterX + faceSize / 2 + faceGap);
+    bubble.text.y = height - verticalPadding;
 
-    this.chatBubbleBackground.clear();
-    this.chatBubbleBackground.roundRect(x, y, width, height, 12).fill(0xffffff);
-    this.chatBubbleBackground.roundRect(x, y, width, height, 12).stroke({
+    bubble.background.clear();
+    bubble.background.roundRect(x, y, width, height, 12).fill(0xffffff);
+    bubble.background.roundRect(x, y, width, height, 12).stroke({
       color: 0x442f24,
       width: 2,
     });
-    this.drawChatBubbleAvatar(faceCenterX, faceCenterY, faceSize);
+    this.drawChatBubbleAvatar(bubble.avatar, faceCenterX, faceCenterY, faceSize);
   }
 
-  private drawChatBubbleAvatar(centerX: number, centerY: number, size: number): void {
+  private drawChatBubbleAvatar(
+    graphics: Graphics,
+    centerX: number,
+    centerY: number,
+    size: number,
+  ): void {
     const skinTone = toPixiColor(this.appearance.skinTone);
     const skinShadow = darken(skinTone, AVATAR_SHADING_STRENGTH);
     const hairColor = toPixiColor(this.appearance.hairColor);
@@ -340,50 +449,36 @@ export class Avatar {
     const frameRadius = size / 2;
     const headRadius = frameRadius - 2;
 
-    this.chatBubbleAvatar.clear();
+    graphics.clear();
     // Frame
-    this.chatBubbleAvatar.circle(centerX, centerY, frameRadius).fill(0xf1e7d2);
-    this.chatBubbleAvatar
-      .circle(centerX, centerY, frameRadius)
-      .stroke({ color: 0x442f24, width: 2 });
+    graphics.circle(centerX, centerY, frameRadius).fill(0xf1e7d2);
+    graphics.circle(centerX, centerY, frameRadius).stroke({ color: 0x442f24, width: 2 });
 
     // Head (skin)
-    this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(skinTone);
+    graphics.circle(centerX, centerY, headRadius).fill(skinTone);
 
     // Hair fills the head, face oval carves it out
     if (this.appearance.hair === "buzz") {
-      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(darken(hairColor, 0.55));
-      this.chatBubbleAvatar
-        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
-        .fill(skinTone);
+      graphics.circle(centerX, centerY, headRadius).fill(darken(hairColor, 0.55));
+      graphics.ellipse(centerX, centerY + 2, headRadius - 1, 5).fill(skinTone);
     } else if (this.appearance.hair === "bob") {
-      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
-      this.chatBubbleAvatar
-        .ellipse(centerX, centerY + 3, headRadius - 2, 4)
-        .fill(skinTone);
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 3, headRadius - 2, 4).fill(skinTone);
       // Side flaps along the jaw
-      this.chatBubbleAvatar
-        .ellipse(centerX - headRadius + 1, centerY + 1, 1.5, 4)
-        .fill(hairColor);
-      this.chatBubbleAvatar
-        .ellipse(centerX + headRadius - 1, centerY + 1, 1.5, 4)
-        .fill(hairColor);
+      graphics.ellipse(centerX - headRadius + 1, centerY + 1, 1.5, 4).fill(hairColor);
+      graphics.ellipse(centerX + headRadius - 1, centerY + 1, 1.5, 4).fill(hairColor);
       // Centre fringe
-      this.chatBubbleAvatar.rect(centerX - 5, centerY - 3, 10, 3).fill(hairColor);
+      graphics.rect(centerX - 5, centerY - 3, 10, 3).fill(hairColor);
     } else if (this.appearance.hair === "side-part") {
-      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
-      this.chatBubbleAvatar
-        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
-        .fill(skinTone);
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 2, headRadius - 1, 5).fill(skinTone);
       // Swept fringe with a part
-      this.chatBubbleAvatar.rect(centerX - 6, centerY - 3, 4, 2).fill(hairColor);
-      this.chatBubbleAvatar.rect(centerX - 2, centerY - 3, 9, 3).fill(hairColor);
-      this.chatBubbleAvatar.rect(centerX - 2, centerY - 3, 1, 2).fill(skinTone);
+      graphics.rect(centerX - 6, centerY - 3, 4, 2).fill(hairColor);
+      graphics.rect(centerX - 2, centerY - 3, 9, 3).fill(hairColor);
+      graphics.rect(centerX - 2, centerY - 3, 1, 2).fill(skinTone);
     } else if (this.appearance.hair === "curls") {
-      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
-      this.chatBubbleAvatar
-        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
-        .fill(skinTone);
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 2, headRadius - 1, 5).fill(skinTone);
       // Curl bumps along the top
       for (const [dx, dy] of [
         [-5, -4],
@@ -391,49 +486,41 @@ export class Avatar {
         [3, -6],
         [6, -4],
       ] as const) {
-        this.chatBubbleAvatar.circle(centerX + dx, centerY + dy, 2).fill(hairColor);
+        graphics.circle(centerX + dx, centerY + dy, 2).fill(hairColor);
       }
     } else {
       // short (default)
-      this.chatBubbleAvatar.circle(centerX, centerY, headRadius).fill(hairColor);
-      this.chatBubbleAvatar
-        .ellipse(centerX, centerY + 2, headRadius - 1, 5)
-        .fill(skinTone);
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 2, headRadius - 1, 5).fill(skinTone);
       // Small centre fringe
-      this.chatBubbleAvatar.rect(centerX - 4, centerY - 3, 8, 2).fill(hairColor);
+      graphics.rect(centerX - 4, centerY - 3, 8, 2).fill(hairColor);
       // Temple wisps
-      this.chatBubbleAvatar.rect(centerX - 8, centerY - 2, 1, 3).fill(hairColor);
-      this.chatBubbleAvatar.rect(centerX + 7, centerY - 2, 1, 3).fill(hairColor);
+      graphics.rect(centerX - 8, centerY - 2, 1, 3).fill(hairColor);
+      graphics.rect(centerX + 7, centerY - 2, 1, 3).fill(hairColor);
     }
 
     // Skin shading on face
-    this.chatBubbleAvatar
+    graphics
       .ellipse(centerX + 2, centerY + 3, 4, 3)
       .fill({ color: skinShadow, alpha: AVATAR_SHADING_ALPHA });
 
     // Hair highlight
-    this.chatBubbleAvatar
-      .rect(centerX - 3, centerY - 7, 5, 1)
-      .fill({ color: hairHighlight, alpha: 0.55 });
+    graphics.rect(centerX - 3, centerY - 7, 5, 1).fill({ color: hairHighlight, alpha: 0.55 });
 
     // Eyes (whites + pupils + catchlight)
-    this.chatBubbleAvatar.rect(centerX - 5, centerY + 1, 3, 3).fill(AVATAR_EYE_WHITE);
-    this.chatBubbleAvatar.rect(centerX + 2, centerY + 1, 3, 3).fill(AVATAR_EYE_WHITE);
-    this.chatBubbleAvatar.rect(centerX - 4, centerY + 2, 2, 2).fill(AVATAR_EYE_PUPIL);
-    this.chatBubbleAvatar.rect(centerX + 3, centerY + 2, 2, 2).fill(AVATAR_EYE_PUPIL);
-    this.chatBubbleAvatar.rect(centerX - 4, centerY + 2, 1, 1).fill(AVATAR_EYE_WHITE);
-    this.chatBubbleAvatar.rect(centerX + 3, centerY + 2, 1, 1).fill(AVATAR_EYE_WHITE);
+    graphics.rect(centerX - 5, centerY + 1, 3, 3).fill(AVATAR_EYE_WHITE);
+    graphics.rect(centerX + 2, centerY + 1, 3, 3).fill(AVATAR_EYE_WHITE);
+    graphics.rect(centerX - 4, centerY + 2, 2, 2).fill(AVATAR_EYE_PUPIL);
+    graphics.rect(centerX + 3, centerY + 2, 2, 2).fill(AVATAR_EYE_PUPIL);
+    graphics.rect(centerX - 4, centerY + 2, 1, 1).fill(AVATAR_EYE_WHITE);
+    graphics.rect(centerX + 3, centerY + 2, 1, 1).fill(AVATAR_EYE_WHITE);
 
     // Cheek blush
-    this.chatBubbleAvatar
-      .ellipse(centerX - 6, centerY + 5, 1.4, 0.8)
-      .fill({ color: AVATAR_BLUSH, alpha: 0.4 });
-    this.chatBubbleAvatar
-      .ellipse(centerX + 6, centerY + 5, 1.4, 0.8)
-      .fill({ color: AVATAR_BLUSH, alpha: 0.4 });
+    graphics.ellipse(centerX - 6, centerY + 5, 1.4, 0.8).fill({ color: AVATAR_BLUSH, alpha: 0.4 });
+    graphics.ellipse(centerX + 6, centerY + 5, 1.4, 0.8).fill({ color: AVATAR_BLUSH, alpha: 0.4 });
 
     // Mouth
-    this.chatBubbleAvatar.rect(centerX - 2, centerY + 6, 4, 1).fill(AVATAR_FACE_LINE);
+    graphics.rect(centerX - 2, centerY + 6, 4, 1).fill(AVATAR_FACE_LINE);
   }
 
   private drawTypingIndicator(): void {
@@ -451,7 +538,34 @@ export class Avatar {
   }
 
   private syncTypingIndicatorVisibility(): void {
-    this.typingIndicator.visible = this.isTyping && !this.chatBubble.visible;
+    this.typingIndicator.visible = this.isTyping && this.chatBubbles.length === 0;
+  }
+
+  private syncLatestChatBubbleReferences(): void {
+    const latest = this.chatBubbles.at(-1) ?? this.createChatBubbleView();
+    this.chatBubble = latest.view;
+    this.chatBubbleBackground = latest.background;
+    this.chatBubbleAvatar = latest.avatar;
+    this.chatBubbleText = latest.text;
+  }
+
+  private positionChatBubbles(deltaSeconds: number): void {
+    let targetStackOffset = 0;
+
+    for (let index = this.chatBubbles.length - 1; index >= 0; index -= 1) {
+      const bubble = this.chatBubbles[index];
+
+      if (!bubble) {
+        continue;
+      }
+
+      const lift = easeOutCubic(Math.min(1, bubble.ageSeconds / 0.32)) * 18;
+      bubble.stackOffset = approach(bubble.stackOffset, targetStackOffset, deltaSeconds * 14);
+      bubble.baseY = Math.round(-102 - bubble.stackOffset - lift);
+      bubble.view.x = 0;
+      bubble.view.y = bubble.baseY;
+      targetStackOffset += bubble.height + 6;
+    }
   }
 
   private rebuildBody(): void {
@@ -515,6 +629,18 @@ function lerp(start: number, end: number, progress: number): number {
   return start + (end - start) * progress;
 }
 
+function approach(current: number, target: number, factor: number): number {
+  if (factor <= 0) {
+    return target;
+  }
+
+  return lerp(current, target, Math.min(1, factor));
+}
+
+function easeOutCubic(progress: number): number {
+  return 1 - (1 - progress) ** 3;
+}
+
 function evenPixel(value: number): number {
   return Math.ceil(value / 2) * 2;
 }
@@ -563,13 +689,12 @@ function directionBetween(from: ScreenPosition, to: ScreenPosition): AvatarRende
 }
 
 function wrapChatBubbleMessage(message: string): string[] {
-  const maxLineLength = 16;
   const maxLines = 4;
   const words = message.replace(/\s+/g, " ").split(" ");
   const lines: string[] = [];
 
   for (const word of words) {
-    const chunks = chunkLongWord(word, maxLineLength);
+    const chunks = chunkLongWord(word, CHAT_BUBBLE_MAX_LINE_LENGTH);
 
     for (const chunk of chunks) {
       const current = lines.at(-1);
@@ -579,7 +704,7 @@ function wrapChatBubbleMessage(message: string): string[] {
         continue;
       }
 
-      if (`${current} ${chunk}`.length <= maxLineLength) {
+      if (`${current} ${chunk}`.length <= CHAT_BUBBLE_MAX_LINE_LENGTH) {
         lines[lines.length - 1] = `${current} ${chunk}`;
         continue;
       }
@@ -595,8 +720,8 @@ function wrapChatBubbleMessage(message: string): string[] {
   const visibleLines = lines.slice(0, maxLines);
   const lastLine = visibleLines[maxLines - 1] ?? "";
   visibleLines[maxLines - 1] =
-    lastLine.length >= maxLineLength
-      ? `${lastLine.slice(0, maxLineLength - 3)}...`
+    lastLine.length >= CHAT_BUBBLE_MAX_LINE_LENGTH
+      ? `${lastLine.slice(0, CHAT_BUBBLE_MAX_LINE_LENGTH - 3)}...`
       : `${lastLine}...`;
   return visibleLines;
 }
@@ -665,9 +790,7 @@ function drawBottoms(
     graphics
       .roundRect(-9, -11 + bob, 18, 9, 3)
       .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
-    graphics
-      .rect(5, -10 + bob, 3, 7)
-      .fill({ color: pantsShadow, alpha: AVATAR_SHADING_ALPHA });
+    graphics.rect(5, -10 + bob, 3, 7).fill({ color: pantsShadow, alpha: AVATAR_SHADING_ALPHA });
     graphics.roundRect(-5, -4 + bob - stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
     graphics.roundRect(2, -4 + bob + stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
     drawShoes(graphics, appearance, shoesColor, stride, 5);
@@ -718,12 +841,8 @@ function drawArms(
   if (!isLongSleeve) {
     graphics.rect(-11, armTop, 4, 4).fill(shirtColor);
     graphics.rect(7, armTop, 4, 4).fill(shirtColor);
-    graphics
-      .rect(-11, armTop + 3, 4, 1)
-      .fill({ color: shirtShadow, alpha: 0.6 });
-    graphics
-      .rect(7, armTop + 3, 4, 1)
-      .fill({ color: shirtShadow, alpha: 0.6 });
+    graphics.rect(-11, armTop + 3, 4, 1).fill({ color: shirtShadow, alpha: 0.6 });
+    graphics.rect(7, armTop + 3, 4, 1).fill({ color: shirtShadow, alpha: 0.6 });
   }
 
   // Outer-edge shading
@@ -772,19 +891,12 @@ function drawShoes(
   }
 }
 
-function drawTorso(
-  graphics: Graphics,
-  shirtColor: number,
-  shirtShadow: number,
-  bob: number,
-): void {
+function drawTorso(graphics: Graphics, shirtColor: number, shirtShadow: number, bob: number): void {
   graphics.roundRect(-9, -28 + bob, 18, 19, 4).fill(shirtColor);
   graphics
     .roundRect(-9, -28 + bob, 18, 19, 4)
     .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
-  graphics
-    .rect(5, -26 + bob, 3, 15)
-    .fill({ color: shirtShadow, alpha: AVATAR_SHADING_ALPHA });
+  graphics.rect(5, -26 + bob, 3, 15).fill({ color: shirtShadow, alpha: AVATAR_SHADING_ALPHA });
 }
 
 function drawTopDetail(
@@ -804,9 +916,7 @@ function drawTopDetail(
     if (!facingBack) {
       graphics.rect(-2, -27 + bob, 1, 11).fill(AVATAR_DETAIL_LIGHT);
       graphics.rect(1, -27 + bob, 1, 11).fill(AVATAR_DETAIL_LIGHT);
-      graphics
-        .roundRect(-5, -18 + bob, 10, 5, 2)
-        .fill({ color: shadow, alpha: 0.55 });
+      graphics.roundRect(-5, -18 + bob, 10, 5, 2).fill({ color: shadow, alpha: 0.55 });
     }
     return;
   }
@@ -836,12 +946,7 @@ function drawTopDetail(
   }
 }
 
-function drawNeck(
-  graphics: Graphics,
-  skinTone: number,
-  skinShadow: number,
-  bob: number,
-): void {
+function drawNeck(graphics: Graphics, skinTone: number, skinShadow: number, bob: number): void {
   graphics.rect(-3, -30 + bob, 6, 3).fill(skinTone);
   graphics.rect(-3, -28 + bob, 6, 1).fill({ color: skinShadow, alpha: 0.55 });
 }
@@ -854,15 +959,9 @@ function drawHead(
   bob: number,
 ): void {
   graphics.circle(0, -38 + bob, 11).fill(skinTone);
-  graphics
-    .circle(0, -38 + bob, 11)
-    .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
-  graphics
-    .circle(3, -36 + bob, 7)
-    .fill({ color: skinShadow, alpha: AVATAR_SHADING_ALPHA });
-  graphics
-    .ellipse(-4, -42 + bob, 3, 2)
-    .fill({ color: skinHighlight, alpha: 0.35 });
+  graphics.circle(0, -38 + bob, 11).stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+  graphics.circle(3, -36 + bob, 7).fill({ color: skinShadow, alpha: AVATAR_SHADING_ALPHA });
+  graphics.ellipse(-4, -42 + bob, 3, 2).fill({ color: skinHighlight, alpha: 0.35 });
 }
 
 function drawFace(
@@ -893,12 +992,8 @@ function drawFace(
   graphics.rect(rightEyeX, eyeY, 1, 1).fill(AVATAR_EYE_WHITE);
 
   // Cheek blush (subtle)
-  graphics
-    .ellipse(leftEyeX - 2, eyeY + 4, 2, 1)
-    .fill({ color: AVATAR_BLUSH, alpha: 0.35 });
-  graphics
-    .ellipse(rightEyeX + 2, eyeY + 4, 2, 1)
-    .fill({ color: AVATAR_BLUSH, alpha: 0.35 });
+  graphics.ellipse(leftEyeX - 2, eyeY + 4, 2, 1).fill({ color: AVATAR_BLUSH, alpha: 0.35 });
+  graphics.ellipse(rightEyeX + 2, eyeY + 4, 2, 1).fill({ color: AVATAR_BLUSH, alpha: 0.35 });
 
   // Mouth (small flat line, slight smile)
   const mouthY = -31 + bob;
@@ -927,9 +1022,7 @@ function drawHair(
       .circle(3, headCenterY + 2, 7)
       .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
     // Tiny highlight on the buzz crown
-    graphics
-      .rect(-3, headCenterY - 9, 5, 1)
-      .fill({ color: highlight, alpha: 0.5 });
+    graphics.rect(-3, headCenterY - 9, 5, 1).fill({ color: highlight, alpha: 0.5 });
     return;
   }
 
@@ -952,9 +1045,7 @@ function drawHair(
       graphics.rect(9, headCenterY - 3, 1, 4).fill(color);
     }
 
-    graphics
-      .rect(-3, headCenterY - 9, 6, 1)
-      .fill({ color: highlight, alpha: 0.55 });
+    graphics.rect(-3, headCenterY - 9, 6, 1).fill({ color: highlight, alpha: 0.55 });
     return;
   }
 
@@ -976,9 +1067,7 @@ function drawHair(
       graphics.rect(9, headCenterY - 3, 1, 4).fill(color);
     }
 
-    graphics
-      .rect(0, headCenterY - 9, 6, 1)
-      .fill({ color: highlight, alpha: 0.55 });
+    graphics.rect(0, headCenterY - 9, 6, 1).fill({ color: highlight, alpha: 0.55 });
     return;
   }
 
@@ -998,9 +1087,7 @@ function drawHair(
       graphics.rect(-7, headCenterY - 4, 14, 3).fill(color);
     }
 
-    graphics
-      .rect(-3, headCenterY - 9, 6, 1)
-      .fill({ color: highlight, alpha: 0.5 });
+    graphics.rect(-3, headCenterY - 9, 6, 1).fill({ color: highlight, alpha: 0.5 });
     return;
   }
 
@@ -1026,16 +1113,11 @@ function drawHair(
       // Small curl tendril on the forehead
       graphics.circle(-2, headCenterY - 3, 2).fill(color);
     }
-    graphics
-      .circle(-3, headCenterY - 8, 1)
-      .fill({ color: highlight, alpha: 0.7 });
-    graphics
-      .circle(3, headCenterY - 8, 1)
-      .fill({ color: highlight, alpha: 0.7 });
+    graphics.circle(-3, headCenterY - 8, 1).fill({ color: highlight, alpha: 0.7 });
+    graphics.circle(3, headCenterY - 8, 1).fill({ color: highlight, alpha: 0.7 });
     return;
   }
 }
-
 
 function toPixiColor(value: string): number {
   if (!/^#[\da-fA-F]{6}$/.test(value)) {
