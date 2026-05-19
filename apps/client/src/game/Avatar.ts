@@ -59,8 +59,16 @@ const AVATAR_SHADING_ALPHA = 0.32;
 const IDLE_BOB_AMPLITUDE_PX = 1;
 const IDLE_BOB_PERIOD_SECONDS = 2.4;
 const CHAT_BUBBLE_MAX_WIDTH = 348;
-const CHAT_BUBBLE_MAX_LINE_LENGTH = 32;
-const CHAT_BUBBLE_APPROX_CHARACTER_WIDTH = 7;
+const CHAT_BUBBLE_LEFT_PADDING = 10;
+const CHAT_BUBBLE_RIGHT_PADDING = 14;
+const CHAT_BUBBLE_FACE_SIZE = 22;
+const CHAT_BUBBLE_FACE_GAP = 4;
+const CHAT_BUBBLE_TEXT_MAX_WIDTH =
+  CHAT_BUBBLE_MAX_WIDTH -
+  CHAT_BUBBLE_LEFT_PADDING -
+  CHAT_BUBBLE_FACE_SIZE -
+  CHAT_BUBBLE_FACE_GAP -
+  CHAT_BUBBLE_RIGHT_PADDING;
 
 export class Avatar {
   readonly view = new Container();
@@ -402,29 +410,31 @@ export class Avatar {
   }
 
   private drawChatBubble(bubble: ChatBubbleView, lines: string[]): void {
-    const leftPadding = 10;
-    const rightPadding = 14;
     const verticalPadding = 7;
-    const faceSize = 22;
-    const faceGap = 4;
-    const longestLineLength = Math.max(...lines.map((line) => line.length));
-    const textWidth = longestLineLength * CHAT_BUBBLE_APPROX_CHARACTER_WIDTH;
+    const textWidth = Math.max(...lines.map(estimateChatTextWidth));
     const textHeight = lines.length * 15;
     const width = evenPixel(
       Math.min(
         CHAT_BUBBLE_MAX_WIDTH,
-        Math.max(78, leftPadding + faceSize + faceGap + textWidth + rightPadding),
+        Math.max(
+          78,
+          CHAT_BUBBLE_LEFT_PADDING +
+            CHAT_BUBBLE_FACE_SIZE +
+            CHAT_BUBBLE_FACE_GAP +
+            textWidth +
+            CHAT_BUBBLE_RIGHT_PADDING,
+        ),
       ),
     );
     const height = Math.max(28, textHeight + verticalPadding * 2);
     const x = -width / 2;
     const y = 0;
-    const faceCenterX = x + leftPadding + faceSize / 2;
+    const faceCenterX = x + CHAT_BUBBLE_LEFT_PADDING + CHAT_BUBBLE_FACE_SIZE / 2;
     const faceCenterY = y + height / 2;
 
     bubble.width = width;
     bubble.height = height;
-    bubble.text.x = Math.round(faceCenterX + faceSize / 2 + faceGap);
+    bubble.text.x = Math.round(faceCenterX + CHAT_BUBBLE_FACE_SIZE / 2 + CHAT_BUBBLE_FACE_GAP);
     bubble.text.y = height - verticalPadding;
 
     bubble.background.clear();
@@ -433,7 +443,7 @@ export class Avatar {
       color: 0x442f24,
       width: 2,
     });
-    this.drawChatBubbleAvatar(bubble.avatar, faceCenterX, faceCenterY, faceSize);
+    this.drawChatBubbleAvatar(bubble.avatar, faceCenterX, faceCenterY, CHAT_BUBBLE_FACE_SIZE);
   }
 
   private drawChatBubbleAvatar(
@@ -694,7 +704,7 @@ function wrapChatBubbleMessage(message: string): string[] {
   const lines: string[] = [];
 
   for (const word of words) {
-    const chunks = chunkLongWord(word, CHAT_BUBBLE_MAX_LINE_LENGTH);
+    const chunks = chunkLongWord(word);
 
     for (const chunk of chunks) {
       const current = lines.at(-1);
@@ -704,7 +714,7 @@ function wrapChatBubbleMessage(message: string): string[] {
         continue;
       }
 
-      if (`${current} ${chunk}`.length <= CHAT_BUBBLE_MAX_LINE_LENGTH) {
+      if (estimateChatTextWidth(`${current} ${chunk}`) <= CHAT_BUBBLE_TEXT_MAX_WIDTH) {
         lines[lines.length - 1] = `${current} ${chunk}`;
         continue;
       }
@@ -719,25 +729,68 @@ function wrapChatBubbleMessage(message: string): string[] {
 
   const visibleLines = lines.slice(0, maxLines);
   const lastLine = visibleLines[maxLines - 1] ?? "";
-  visibleLines[maxLines - 1] =
-    lastLine.length >= CHAT_BUBBLE_MAX_LINE_LENGTH
-      ? `${lastLine.slice(0, CHAT_BUBBLE_MAX_LINE_LENGTH - 3)}...`
-      : `${lastLine}...`;
+  visibleLines[maxLines - 1] = fitChatLineWithEllipsis(lastLine);
   return visibleLines;
 }
 
-function chunkLongWord(word: string, maxLength: number): string[] {
-  if (word.length <= maxLength) {
+function chunkLongWord(word: string): string[] {
+  if (estimateChatTextWidth(word) <= CHAT_BUBBLE_TEXT_MAX_WIDTH) {
     return [word];
   }
 
   const chunks: string[] = [];
+  let chunk = "";
 
-  for (let index = 0; index < word.length; index += maxLength) {
-    chunks.push(word.slice(index, index + maxLength));
+  for (const character of word) {
+    const nextChunk = `${chunk}${character}`;
+
+    if (chunk && estimateChatTextWidth(nextChunk) > CHAT_BUBBLE_TEXT_MAX_WIDTH) {
+      chunks.push(chunk);
+      chunk = character;
+      continue;
+    }
+
+    chunk = nextChunk;
+  }
+
+  if (chunk) {
+    chunks.push(chunk);
   }
 
   return chunks;
+}
+
+function fitChatLineWithEllipsis(line: string): string {
+  const ellipsis = "...";
+  let fitted = line;
+
+  while (fitted && estimateChatTextWidth(`${fitted}${ellipsis}`) > CHAT_BUBBLE_TEXT_MAX_WIDTH) {
+    fitted = fitted.slice(0, -1);
+  }
+
+  return `${fitted}${ellipsis}`;
+}
+
+function estimateChatTextWidth(text: string): number {
+  let width = 0;
+
+  for (const character of text) {
+    if (character === " ") {
+      width += 4;
+    } else if (/[A-Z]/.test(character)) {
+      width += 10;
+    } else if (/[0-9]/.test(character)) {
+      width += 8;
+    } else if (/[il.,:;!'|]/.test(character)) {
+      width += 4;
+    } else if (/[-_]/.test(character)) {
+      width += 6;
+    } else {
+      width += 7;
+    }
+  }
+
+  return width;
 }
 
 export function drawAvatarBody(graphics: Graphics, options: AvatarBodyDrawOptions): void {

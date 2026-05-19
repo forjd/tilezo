@@ -182,7 +182,7 @@ describe("Avatar", () => {
 
     expect(state.chatBubble.visible).toBe(true);
     expect(state.chatBubbleText.text).toBe("Dan: hello room");
-    expect(state.chatBubbleText.x).toBe(-42);
+    expect(state.chatBubbleText.x).toBe(-36);
     expect(state.label.visible).toBe(true);
 
     avatar.update(5);
@@ -244,7 +244,7 @@ describe("Avatar", () => {
 
     avatar.say("this message can stay on a wider single line");
 
-    expect(state.chatBubbleText.text).toBe("Dan: this message can stay on a\nwider single line");
+    expect(state.chatBubbleText.text).toBe("Dan: this message can stay on a wider single line");
     expect(state.chatBubbles.at(-1)?.width).toBeGreaterThan(212);
   });
 
@@ -252,13 +252,27 @@ describe("Avatar", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
       chatBubbleText: { text: string };
+      chatBubbles: { width: number }[];
     };
 
     avatar.say("123123123123123123123123123123123123123123123123123123123123123123");
 
     const lines = state.chatBubbleText.text.split("\n");
-    expect(lines).toHaveLength(4);
-    expect(lines.every((line) => line.length <= 32)).toBe(true);
+    expect(lines).toHaveLength(3);
+    expect(state.chatBubbles.at(-1)?.width).toBeLessThanOrEqual(348);
     expect(lines.at(-1)?.endsWith("...")).toBe(false);
+  });
+
+  test("wraps wide uppercase chat before it overflows the bubble", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubbleText: { text: string };
+      chatBubbles: { width: number }[];
+    };
+
+    avatar.say("DFDSFSDGDSFGSDFSDFFGHJKLQWERTY");
+
+    expect(state.chatBubbleText.text.split("\n").length).toBeGreaterThan(1);
+    expect(state.chatBubbles.at(-1)?.width).toBeLessThanOrEqual(348);
   });
 });
