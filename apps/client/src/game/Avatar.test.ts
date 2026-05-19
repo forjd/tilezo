@@ -45,6 +45,19 @@ describe("Avatar", () => {
     });
   });
 
+  test("keeps idle avatars fixed on their tile", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      body: { y: number };
+    };
+
+    avatar.update(1.2);
+    avatar.update(1.2);
+
+    expect(state.body.y).toBe(0);
+    expect({ x: avatar.view.x, y: avatar.view.y }).toEqual({ x: 0, y: 0 });
+  });
+
   test("renders username text cleanly while keeping bubble art pixel-snapped", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
