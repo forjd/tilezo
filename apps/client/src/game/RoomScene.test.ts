@@ -243,6 +243,39 @@ describe("RoomScene", () => {
     expect(world?.y).toBe(348);
     expect(moves).toEqual([{ x: 0, y: 0 }]);
   });
+
+  test("restores the saved camera scale when loading a room snapshot", () => {
+    const { restore } = installFakeLocalStorage({ "tilezo.roomCameraScale": "1.5" });
+
+    try {
+      const app = createApp();
+      const scene = new RoomScene(app, () => {});
+
+      scene.loadSnapshot(snapshot([]));
+
+      const world = app.stage.children[0];
+      expect(world?.scale.x).toBe(1.5);
+      expect(world?.scale.y).toBe(1.5);
+    } finally {
+      restore();
+    }
+  });
+
+  test("persists the camera scale after wheel zoom", () => {
+    const { restore, storage } = installFakeLocalStorage();
+
+    try {
+      const app = createApp();
+      const scene = new RoomScene(app, () => {});
+
+      scene.loadSnapshot(snapshot([]));
+      app.canvas.wheel({ clientX: 384, clientY: 348, deltaY: -100 });
+
+      expect(storage.getItem("tilezo.roomCameraScale")).toBe("1.15");
+    } finally {
+      restore();
+    }
+  });
 });
 
 function snapshot(users: RoomSnapshotMessage["users"]): RoomSnapshotMessage {
@@ -414,3 +447,44 @@ type FakePointerEvent = {
   deltaY?: number;
   preventDefault?: () => void;
 };
+
+function installFakeLocalStorage(initial: Record<string, string> = {}): {
+  restore: () => void;
+  storage: FakeStorage;
+} {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const storage = new FakeStorage(initial);
+
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+
+  return {
+    restore: () => {
+      if (previous) {
+        Object.defineProperty(globalThis, "localStorage", previous);
+        return;
+      }
+
+      delete (globalThis as { localStorage?: Storage }).localStorage;
+    },
+    storage,
+  };
+}
+
+class FakeStorage {
+  private readonly values: Map<string, string>;
+
+  constructor(initial: Record<string, string>) {
+    this.values = new Map(Object.entries(initial));
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
+}

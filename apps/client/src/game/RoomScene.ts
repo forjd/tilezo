@@ -15,11 +15,13 @@ type Point = {
 
 const MIN_CAMERA_SCALE = 0.5;
 const MAX_CAMERA_SCALE = 2.25;
+const DEFAULT_CAMERA_SCALE = 1;
 const ZOOM_STEP = 0.0015;
 const PAN_THRESHOLD_PIXELS = 4;
 const DOOR_LAYER_SWITCH_PROGRESS = 0.55;
 const DOOR_LAYER_DISTANCE_TOLERANCE = 18;
 const CHAT_BUBBLE_COLLISION_GAP = 6;
+const CAMERA_SCALE_STORAGE_KEY = "tilezo.roomCameraScale";
 
 export class RoomScene {
   private readonly world = new Container();
@@ -233,7 +235,7 @@ export class RoomScene {
   }
 
   private resetCamera(): void {
-    this.world.scale.set(1);
+    this.world.scale.set(readStoredCameraScale());
     this.centerRoom();
   }
 
@@ -358,6 +360,7 @@ export class RoomScene {
     this.world.scale.set(nextScale);
     this.world.x = point.x - worldPoint.x * nextScale;
     this.world.y = point.y - worldPoint.y * nextScale;
+    writeStoredCameraScale(nextScale);
   }
 
   destroy(): void {
@@ -408,6 +411,29 @@ function calculateRoomBounds(tiles: RoomTile[]): RoomBounds | undefined {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function readStoredCameraScale(): number {
+  try {
+    const raw = globalThis.localStorage?.getItem(CAMERA_SCALE_STORAGE_KEY);
+    const scale = raw ? Number.parseFloat(raw) : DEFAULT_CAMERA_SCALE;
+
+    if (!Number.isFinite(scale)) {
+      return DEFAULT_CAMERA_SCALE;
+    }
+
+    return clamp(scale, MIN_CAMERA_SCALE, MAX_CAMERA_SCALE);
+  } catch {
+    return DEFAULT_CAMERA_SCALE;
+  }
+}
+
+function writeStoredCameraScale(scale: number): void {
+  try {
+    globalThis.localStorage?.setItem(CAMERA_SCALE_STORAGE_KEY, String(scale));
+  } catch {
+    // Private browsing or storage quota errors should not block room navigation.
+  }
 }
 
 function rectsOverlap(
