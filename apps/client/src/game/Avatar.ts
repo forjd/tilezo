@@ -56,8 +56,6 @@ const AVATAR_EYE_PUPIL = 0x1f1a16;
 const AVATAR_BLUSH = 0xe7867f;
 const AVATAR_SHADING_STRENGTH = 0.78;
 const AVATAR_SHADING_ALPHA = 0.32;
-const IDLE_BOB_AMPLITUDE_PX = 1;
-const IDLE_BOB_PERIOD_SECONDS = 2.4;
 const CHAT_BUBBLE_MAX_WIDTH = 348;
 const CHAT_BUBBLE_LEFT_PADDING = 10;
 const CHAT_BUBBLE_RIGHT_PADDING = 14;
@@ -95,7 +93,6 @@ export class Avatar {
   private animationState: AvatarAnimationState = "idle";
   private direction: AvatarRenderDirection = "south";
   private animationSeconds = 0;
-  private idleSeconds = 0;
   private renderedBodyKey = "";
   private isTyping = false;
   private readonly secondsPerTile = 0.36;
@@ -237,7 +234,6 @@ export class Avatar {
 
   update(deltaSeconds: number): void {
     const safeDelta = Math.max(0, deltaSeconds);
-    this.idleSeconds += safeDelta;
     this.updateChatBubbles(safeDelta);
 
     if (!this.to) {
@@ -245,7 +241,6 @@ export class Avatar {
 
       if (!next) {
         this.setAnimationState("idle");
-        this.applyIdleBob();
         return;
       }
 
@@ -278,11 +273,6 @@ export class Avatar {
         this.rebuildBody();
       }
     }
-  }
-
-  private applyIdleBob(): void {
-    const phase = (this.idleSeconds / IDLE_BOB_PERIOD_SECONDS) * Math.PI * 2;
-    this.body.y = Math.round(Math.sin(phase) * IDLE_BOB_AMPLITUDE_PX);
   }
 
   private syncViewToTile(position: TilePosition): void {
@@ -778,15 +768,15 @@ function estimateChatTextWidth(text: string): number {
     if (character === " ") {
       width += 4;
     } else if (/[A-Z]/.test(character)) {
-      width += 10;
+      width += 11;
     } else if (/[0-9]/.test(character)) {
-      width += 8;
+      width += 9;
     } else if (/[il.,:;!'|]/.test(character)) {
-      width += 4;
+      width += 5;
     } else if (/[-_]/.test(character)) {
       width += 6;
     } else {
-      width += 7;
+      width += 9;
     }
   }
 

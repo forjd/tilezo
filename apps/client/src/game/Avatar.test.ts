@@ -182,7 +182,7 @@ describe("Avatar", () => {
 
     expect(state.chatBubble.visible).toBe(true);
     expect(state.chatBubbleText.text).toBe("Dan: hello room");
-    expect(state.chatBubbleText.x).toBe(-36);
+    expect(state.chatBubbleText.x).toBe(-47);
     expect(state.label.visible).toBe(true);
 
     avatar.update(5);
@@ -244,7 +244,7 @@ describe("Avatar", () => {
 
     avatar.say("this message can stay on a wider single line");
 
-    expect(state.chatBubbleText.text).toBe("Dan: this message can stay on a wider single line");
+    expect(state.chatBubbleText.text).toBe("Dan: this message can stay on a wider\nsingle line");
     expect(state.chatBubbles.at(-1)?.width).toBeGreaterThan(212);
   });
 
