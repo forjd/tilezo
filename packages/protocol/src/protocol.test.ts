@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  AVATAR_HAIR_STYLES,
   createRandomAvatarAppearance,
   DEFAULT_AVATAR_APPEARANCE,
   parseClientMessage,
@@ -92,6 +93,32 @@ describe("protocol parser", () => {
         type: "avatar.appearance.update",
         appearance: {
           ...DEFAULT_AVATAR_APPEARANCE,
+          hair: "locs",
+          hairColor: "#2f6f6a",
+          skinTone: "#f3dfc8",
+          shirt: "workwear",
+          shirtColor: "#f5f0e5",
+          pants: "cuffed",
+          pantsColor: "#efe6d5",
+          shoes: "runners",
+          shoesColor: "#9f4f3f",
+        },
+      }).ok,
+    ).toBe(true);
+    expect(
+      parseClientMessage({
+        type: "avatar.appearance.update",
+        appearance: {
+          ...DEFAULT_AVATAR_APPEARANCE,
+          hair: "wizard",
+        },
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseClientMessage({
+        type: "avatar.appearance.update",
+        appearance: {
+          ...DEFAULT_AVATAR_APPEARANCE,
           shirtColor: "blue",
         },
       }).ok,
@@ -113,17 +140,22 @@ describe("protocol parser", () => {
     );
 
     expect(appearance).toEqual({
-      hair: "buzz",
+      hair: "locs",
       hairColor: "#3b2418",
-      skinTone: "#b77a58",
-      shirt: "striped",
-      shirtColor: "#7f3b44",
-      pants: "skirt",
+      skinTone: "#a86c4d",
+      shirt: "overshirt",
+      shirtColor: "#5a4b7f",
+      pants: "cuffed",
       pantsColor: "#3f4d5c",
-      shoes: "flats",
-      shoesColor: "#e5ded1",
+      shoes: "work-boots",
+      shoesColor: "#9f4f3f",
     });
     expect(parseClientMessage({ type: "avatar.appearance.update", appearance }).ok).toBe(true);
+  });
+
+  test("keeps the expanded avatar catalog available to consumers", () => {
+    expect(AVATAR_HAIR_STYLES).toContain("afro");
+    expect(AVATAR_HAIR_STYLES).toContain("locs");
   });
 });
 

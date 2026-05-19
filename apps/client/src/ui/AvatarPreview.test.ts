@@ -20,22 +20,22 @@ describe("AvatarPreview", () => {
 
     preview.update({
       ...DEFAULT_AVATAR_APPEARANCE,
-      hair: "curls",
-      hairColor: "#3b2418",
-      shirt: "striped",
-      shirtColor: "#7f3b44",
-      pants: "skirt",
-      shoes: "flats",
+      hair: "afro",
+      hairColor: "#5b3f6f",
+      shirt: "blazer",
+      shirtColor: "#5a4b7f",
+      pants: "cargo",
+      shoes: "platforms",
     });
 
     expect(preview.appearance).toEqual({
       ...DEFAULT_AVATAR_APPEARANCE,
-      hair: "curls",
-      hairColor: "#3b2418",
-      shirt: "striped",
-      shirtColor: "#7f3b44",
-      pants: "skirt",
-      shoes: "flats",
+      hair: "afro",
+      hairColor: "#5b3f6f",
+      shirt: "blazer",
+      shirtColor: "#5a4b7f",
+      pants: "cargo",
+      shoes: "platforms",
     });
   });
 

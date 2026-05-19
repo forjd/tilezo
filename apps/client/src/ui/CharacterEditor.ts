@@ -62,14 +62,14 @@ export class CharacterEditor {
     const form = document.createElement("form");
     form.className = "character-form";
     form.append(
-      this.createField("Hair", this.hair),
+      this.createChoiceField("Hair", this.hair),
       this.createColorField("Hair color", this.hairColor, COLOR_PALETTES.hair),
       this.createColorField("Skin tone", this.skinTone, COLOR_PALETTES.skin),
-      this.createField("Top", this.shirt),
+      this.createChoiceField("Top", this.shirt),
       this.createColorField("Top color", this.shirtColor, COLOR_PALETTES.shirt),
-      this.createField("Bottoms", this.pants),
+      this.createChoiceField("Bottoms", this.pants),
       this.createColorField("Bottoms color", this.pantsColor, COLOR_PALETTES.pants),
-      this.createField("Shoes", this.shoes),
+      this.createChoiceField("Shoes", this.shoes),
       this.createColorField("Shoe color", this.shoesColor, COLOR_PALETTES.shoes),
     );
 
@@ -142,11 +142,13 @@ export class CharacterEditor {
     this.shoesColor.value = appearance.shoesColor;
     this.updatePreview();
     this.syncSwatches();
+    this.syncChoiceButtons();
   }
 
   private updatePreview(): void {
     this.preview.update(this.readAppearance());
     this.syncSwatches();
+    this.syncChoiceButtons();
   }
 
   private createField(
@@ -158,6 +160,29 @@ export class CharacterEditor {
     label.className = "field";
     labelContent.textContent = labelText;
     label.append(labelContent, input);
+    return label;
+  }
+
+  private createChoiceField(labelText: string, select: HTMLSelectElement): HTMLLabelElement {
+    const label = this.createField(labelText, select);
+    const choices = document.createElement("div");
+    choices.className = "option-list";
+    select.classList.add("choice-select");
+
+    for (const option of Array.from(select.options)) {
+      const button = document.createElement("button");
+      button.className = "option-choice";
+      button.type = "button";
+      button.textContent = option.textContent;
+      button.setAttribute("data-value", option.value);
+      button.addEventListener("click", () => {
+        select.value = option.value;
+        this.updatePreview();
+      });
+      choices.append(button);
+    }
+
+    label.append(choices);
     return label;
   }
 
@@ -238,6 +263,19 @@ export class CharacterEditor {
 
       for (const swatch of swatches) {
         swatch.classList.toggle("selected", swatch.dataset.color === input.value);
+      }
+    }
+  }
+
+  private syncChoiceButtons(): void {
+    for (const select of [this.hair, this.shirt, this.pants, this.shoes]) {
+      const field = select.parentElement;
+      const choices = Array.from(
+        field?.querySelectorAll<HTMLButtonElement>(".option-choice") ?? [],
+      );
+
+      for (const choice of choices) {
+        choice.classList.toggle("selected", choice.dataset.value === select.value);
       }
     }
   }

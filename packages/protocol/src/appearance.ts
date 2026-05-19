@@ -1,7 +1,57 @@
-export const AVATAR_HAIR_STYLES = ["short", "side-part", "bob", "curls", "buzz"] as const;
-export const AVATAR_SHIRT_STYLES = ["crew", "hoodie", "jacket", "striped"] as const;
-export const AVATAR_PANTS_STYLES = ["straight", "wide", "tapered", "skirt"] as const;
-export const AVATAR_SHOE_STYLES = ["boots", "sneakers", "high-tops", "flats"] as const;
+export const AVATAR_HAIR_STYLES = [
+  "short",
+  "side-part",
+  "bob",
+  "curls",
+  "buzz",
+  "afro",
+  "ponytail",
+  "braids",
+  "undercut",
+  "waves",
+  "bun",
+  "pixie",
+  "mohawk",
+  "locs",
+] as const;
+export const AVATAR_SHIRT_STYLES = [
+  "crew",
+  "hoodie",
+  "jacket",
+  "striped",
+  "tee",
+  "tank",
+  "sweater",
+  "vest",
+  "blazer",
+  "overshirt",
+  "polo",
+  "workwear",
+] as const;
+export const AVATAR_PANTS_STYLES = [
+  "straight",
+  "wide",
+  "tapered",
+  "skirt",
+  "shorts",
+  "cargo",
+  "joggers",
+  "pleated-skirt",
+  "leggings",
+  "cuffed",
+] as const;
+export const AVATAR_SHOE_STYLES = [
+  "boots",
+  "sneakers",
+  "high-tops",
+  "flats",
+  "loafers",
+  "sandals",
+  "platforms",
+  "slip-ons",
+  "work-boots",
+  "runners",
+] as const;
 export const AVATAR_HAIR_COLORS = [
   "#3b2418",
   "#6f3f22",
@@ -10,8 +60,28 @@ export const AVATAR_HAIR_COLORS = [
   "#9a5a2d",
   "#c99743",
   "#1f2326",
+  "#121416",
+  "#4a2b1b",
+  "#a84f2a",
+  "#d47832",
+  "#d9b45f",
+  "#b8a789",
+  "#7f8588",
+  "#5b3f6f",
+  "#2f6f6a",
 ] as const;
-export const AVATAR_SKIN_TONES = ["#8f5f45", "#b77a58", "#d59a73", "#f2c097", "#f6d7b8"] as const;
+export const AVATAR_SKIN_TONES = [
+  "#6f4637",
+  "#8f5f45",
+  "#a86c4d",
+  "#b77a58",
+  "#c88963",
+  "#d59a73",
+  "#e4ad84",
+  "#f2c097",
+  "#f6d7b8",
+  "#f3dfc8",
+] as const;
 export const AVATAR_SHIRT_COLORS = [
   "#24546f",
   "#2f5f7f",
@@ -19,6 +89,16 @@ export const AVATAR_SHIRT_COLORS = [
   "#7f3b44",
   "#d69a35",
   "#ece3cf",
+  "#1f2933",
+  "#3f4d5c",
+  "#5a4b7f",
+  "#7a5a2d",
+  "#9f4f3f",
+  "#b7aa78",
+  "#d85f45",
+  "#4c8a6a",
+  "#f0d06a",
+  "#f5f0e5",
 ] as const;
 export const AVATAR_PANTS_COLORS = [
   "#3f4d5c",
@@ -27,8 +107,27 @@ export const AVATAR_PANTS_COLORS = [
   "#d2c294",
   "#503d33",
   "#d8d0ba",
+  "#222a31",
+  "#2f3b40",
+  "#394c6a",
+  "#5b5144",
+  "#6b3f36",
+  "#87928a",
+  "#a68b5b",
+  "#efe6d5",
 ] as const;
-export const AVATAR_SHOE_COLORS = ["#2a2118", "#5b4218", "#6c3328", "#2f3b40", "#e5ded1"] as const;
+export const AVATAR_SHOE_COLORS = [
+  "#2a2118",
+  "#5b4218",
+  "#6c3328",
+  "#2f3b40",
+  "#e5ded1",
+  "#151719",
+  "#47362d",
+  "#7d6a4f",
+  "#9f4f3f",
+  "#d8d0ba",
+] as const;
 
 export type AvatarHairStyle = (typeof AVATAR_HAIR_STYLES)[number];
 export type AvatarShirtStyle = (typeof AVATAR_SHIRT_STYLES)[number];

@@ -488,6 +488,62 @@ export class Avatar {
       ] as const) {
         graphics.circle(centerX + dx, centerY + dy, 2).fill(hairColor);
       }
+    } else if (this.appearance.hair === "afro") {
+      for (const [dx, dy, radius] of [
+        [-6, -4, 4],
+        [-2, -7, 4],
+        [3, -7, 4],
+        [7, -3, 4],
+        [0, -2, 5],
+      ] as const) {
+        graphics.circle(centerX + dx, centerY + dy, radius).fill(hairColor);
+      }
+      graphics.ellipse(centerX, centerY + 3, headRadius - 1, 5).fill(skinTone);
+    } else if (this.appearance.hair === "ponytail") {
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 2, headRadius - 1, 5).fill(skinTone);
+      graphics.ellipse(centerX + headRadius - 1, centerY - 1, 3, 6).fill(hairColor);
+      graphics.rect(centerX - 5, centerY - 3, 8, 2).fill(hairColor);
+    } else if (this.appearance.hair === "braids") {
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 3, headRadius - 2, 5).fill(skinTone);
+      graphics.rect(centerX - 8, centerY + 1, 2, 7).fill(hairColor);
+      graphics.rect(centerX + 6, centerY + 1, 2, 7).fill(hairColor);
+      graphics.rect(centerX - 8, centerY + 4, 2, 1).fill(hairHighlight);
+      graphics.rect(centerX + 6, centerY + 4, 2, 1).fill(hairHighlight);
+    } else if (this.appearance.hair === "undercut") {
+      graphics.circle(centerX, centerY, headRadius).fill(darken(hairColor, 0.55));
+      graphics.rect(centerX - 7, centerY - 7, 13, 5).fill(hairColor);
+      graphics.rect(centerX - 2, centerY - 7, 8, 2).fill(hairHighlight);
+      graphics.ellipse(centerX, centerY + 3, headRadius - 1, 5).fill(skinTone);
+    } else if (this.appearance.hair === "waves") {
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 2, headRadius - 1, 5).fill(skinTone);
+      graphics.rect(centerX - 7, centerY - 4, 4, 1).fill(hairHighlight);
+      graphics.rect(centerX - 1, centerY - 5, 4, 1).fill(hairHighlight);
+      graphics.rect(centerX + 5, centerY - 4, 3, 1).fill(hairHighlight);
+    } else if (this.appearance.hair === "bun") {
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.circle(centerX, centerY - headRadius + 1, 4).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 3, headRadius - 1, 5).fill(skinTone);
+      graphics.rect(centerX - 5, centerY - 3, 10, 2).fill(hairColor);
+    } else if (this.appearance.hair === "pixie") {
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 3, headRadius - 1, 5).fill(skinTone);
+      graphics.rect(centerX - 8, centerY - 5, 6, 3).fill(hairColor);
+      graphics.rect(centerX - 1, centerY - 6, 5, 2).fill(hairColor);
+      graphics.rect(centerX + 5, centerY - 4, 3, 2).fill(hairColor);
+    } else if (this.appearance.hair === "mohawk") {
+      graphics.circle(centerX, centerY, headRadius).fill(darken(hairColor, 0.55));
+      graphics.rect(centerX - 2, centerY - 9, 4, 9).fill(hairColor);
+      graphics.rect(centerX - 1, centerY - 10, 2, 1).fill(hairHighlight);
+      graphics.ellipse(centerX, centerY + 3, headRadius - 1, 5).fill(skinTone);
+    } else if (this.appearance.hair === "locs") {
+      graphics.circle(centerX, centerY, headRadius).fill(hairColor);
+      graphics.ellipse(centerX, centerY + 3, headRadius - 2, 5).fill(skinTone);
+      for (const x of [-7, -4, 4, 7]) {
+        graphics.rect(centerX + x, centerY - 1, 2, 8).fill(hairColor);
+      }
     } else {
       // short (default)
       graphics.circle(centerX, centerY, headRadius).fill(hairColor);
@@ -840,17 +896,52 @@ function drawBottoms(
     return;
   }
 
-  const legWidth = appearance.pants === "wide" ? 7 : appearance.pants === "tapered" ? 4 : 5;
-  const leftX = appearance.pants === "wide" ? -7 : -5;
-  const rightX = appearance.pants === "wide" ? 1 : 2;
+  if (appearance.pants === "pleated-skirt") {
+    graphics.roundRect(-10, -12 + bob, 20, 10, 2).fill(pantsColor);
+    graphics
+      .roundRect(-10, -12 + bob, 20, 10, 2)
+      .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+    for (const x of [-6, -2, 2, 6]) {
+      graphics.rect(x, -11 + bob, 1, 8).fill({ color: pantsShadow, alpha: 0.45 });
+    }
+    graphics.roundRect(-5, -4 + bob - stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
+    graphics.roundRect(2, -4 + bob + stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
+    drawShoes(graphics, appearance, shoesColor, stride, 5);
+    return;
+  }
 
-  graphics.roundRect(leftX, -11 + bob - stride, legWidth, 13, 2).fill(pantsColor);
-  graphics.roundRect(rightX, -11 + bob + stride, legWidth, 13, 2).fill(pantsColor);
+  if (appearance.pants === "shorts") {
+    graphics.roundRect(-8, -11 + bob - stride, 7, 8, 2).fill(pantsColor);
+    graphics.roundRect(1, -11 + bob + stride, 7, 8, 2).fill(pantsColor);
+    graphics
+      .roundRect(-8, -11 + bob - stride, 7, 8, 2)
+      .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+    graphics
+      .roundRect(1, -11 + bob + stride, 7, 8, 2)
+      .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
+    graphics.roundRect(-6, -4 + bob - stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
+    graphics.roundRect(2, -4 + bob + stride, 5, 6, 2).fill(darken(pantsColor, 0.82));
+    drawShoes(graphics, appearance, shoesColor, stride, 4);
+    return;
+  }
+
+  const legWidth =
+    appearance.pants === "wide" || appearance.pants === "cargo"
+      ? 7
+      : appearance.pants === "tapered" || appearance.pants === "leggings"
+        ? 4
+        : 5;
+  const leftX = appearance.pants === "wide" || appearance.pants === "cargo" ? -7 : -5;
+  const rightX = appearance.pants === "wide" || appearance.pants === "cargo" ? 1 : 2;
+  const legRadius = appearance.pants === "leggings" ? 3 : 2;
+
+  graphics.roundRect(leftX, -11 + bob - stride, legWidth, 13, legRadius).fill(pantsColor);
+  graphics.roundRect(rightX, -11 + bob + stride, legWidth, 13, legRadius).fill(pantsColor);
   graphics
-    .roundRect(leftX, -11 + bob - stride, legWidth, 13, 2)
+    .roundRect(leftX, -11 + bob - stride, legWidth, 13, legRadius)
     .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
   graphics
-    .roundRect(rightX, -11 + bob + stride, legWidth, 13, 2)
+    .roundRect(rightX, -11 + bob + stride, legWidth, 13, legRadius)
     .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
   graphics
     .rect(leftX + legWidth - 2, -10 + bob - stride, 1, 11)
@@ -858,7 +949,28 @@ function drawBottoms(
   graphics
     .rect(rightX + legWidth - 2, -10 + bob + stride, 1, 11)
     .fill({ color: pantsShadow, alpha: AVATAR_SHADING_ALPHA });
-  drawShoes(graphics, appearance, shoesColor, stride, appearance.shoes === "high-tops" ? 5 : 4);
+
+  if (appearance.pants === "cargo") {
+    graphics.rect(leftX + 1, -7 + bob - stride, 4, 3).fill({ color: pantsShadow, alpha: 0.55 });
+    graphics.rect(rightX + 1, -7 + bob + stride, 4, 3).fill({ color: pantsShadow, alpha: 0.55 });
+  } else if (appearance.pants === "joggers" || appearance.pants === "cuffed") {
+    graphics.rect(leftX, 0 + bob - stride, legWidth, 2).fill(darken(pantsColor, 0.72));
+    graphics.rect(rightX, 0 + bob + stride, legWidth, 2).fill(darken(pantsColor, 0.72));
+  } else if (appearance.pants === "leggings") {
+    graphics.rect(leftX + 1, -10 + bob - stride, 1, 11).fill({ color: pantsShadow, alpha: 0.25 });
+    graphics.rect(rightX + 1, -10 + bob + stride, 1, 11).fill({
+      color: pantsShadow,
+      alpha: 0.25,
+    });
+  }
+
+  drawShoes(
+    graphics,
+    appearance,
+    shoesColor,
+    stride,
+    appearance.shoes === "high-tops" || appearance.shoes === "work-boots" ? 5 : 4,
+  );
 }
 
 function drawArms(
@@ -870,7 +982,10 @@ function drawArms(
   shirtShadow: number,
   bob: number,
 ): void {
-  const isLongSleeve = appearance.shirt === "hoodie" || appearance.shirt === "jacket";
+  const isLongSleeve = ["hoodie", "jacket", "sweater", "blazer", "overshirt", "workwear"].includes(
+    appearance.shirt,
+  );
+  const isSleeveless = appearance.shirt === "tank" || appearance.shirt === "vest";
   const armColor = isLongSleeve ? shirtColor : skinTone;
   const armTop = -27 + bob;
   const armHeight = 14;
@@ -881,11 +996,14 @@ function drawArms(
   graphics.roundRect(7, armTop, 4, armHeight, 1.5).fill(armColor);
 
   // Short sleeve cap (only when shirt is short-sleeved)
-  if (!isLongSleeve) {
+  if (!isLongSleeve && !isSleeveless) {
     graphics.rect(-11, armTop, 4, 4).fill(shirtColor);
     graphics.rect(7, armTop, 4, 4).fill(shirtColor);
     graphics.rect(-11, armTop + 3, 4, 1).fill({ color: shirtShadow, alpha: 0.6 });
     graphics.rect(7, armTop + 3, 4, 1).fill({ color: shirtShadow, alpha: 0.6 });
+  } else if (isSleeveless) {
+    graphics.rect(-10, armTop, 2, 3).fill(shirtColor);
+    graphics.rect(8, armTop, 2, 3).fill(shirtColor);
   }
 
   // Outer-edge shading
@@ -912,10 +1030,21 @@ function drawShoes(
   stride: number,
   height: number,
 ): void {
-  const shoeWidth = appearance.shoes === "flats" ? 7 : 8;
+  const shoeWidth =
+    appearance.shoes === "flats" || appearance.shoes === "sandals" || appearance.shoes === "loafers"
+      ? 7
+      : appearance.shoes === "platforms"
+        ? 9
+        : 8;
   const leftY = -1 - stride - (height - 4);
   const rightY = -1 + stride - (height - 4);
   const shoeShadow = darken(color, 0.7);
+  const soleColor =
+    appearance.shoes === "sneakers" ||
+    appearance.shoes === "high-tops" ||
+    appearance.shoes === "runners"
+      ? AVATAR_DETAIL_LIGHT
+      : shoeShadow;
 
   graphics.roundRect(-8, leftY, shoeWidth, height, 2).fill(color);
   graphics.roundRect(1, rightY, shoeWidth, height, 2).fill(color);
@@ -925,12 +1054,36 @@ function drawShoes(
   graphics
     .roundRect(1, rightY, shoeWidth, height, 2)
     .stroke({ color: AVATAR_OUTLINE, width: 1, alignment: 0 });
-  graphics.rect(-8, leftY + height - 1, shoeWidth, 1).fill(shoeShadow);
-  graphics.rect(1, rightY + height - 1, shoeWidth, 1).fill(shoeShadow);
+  graphics.rect(-8, leftY + height - 1, shoeWidth, 1).fill(soleColor);
+  graphics.rect(1, rightY + height - 1, shoeWidth, 1).fill(soleColor);
 
   if (appearance.shoes === "sneakers" || appearance.shoes === "high-tops") {
     graphics.rect(-6, leftY + height - 2, 4, 1).fill(AVATAR_DETAIL_LIGHT);
     graphics.rect(3, rightY + height - 2, 4, 1).fill(AVATAR_DETAIL_LIGHT);
+  } else if (appearance.shoes === "runners") {
+    graphics.rect(-7, leftY + 1, 3, 1).fill(AVATAR_DETAIL_LIGHT);
+    graphics.rect(2, rightY + 1, 3, 1).fill(AVATAR_DETAIL_LIGHT);
+    graphics.rect(-3, leftY + 2, 3, 1).fill(darken(color, 0.55));
+    graphics.rect(6, rightY + 2, 3, 1).fill(darken(color, 0.55));
+  } else if (appearance.shoes === "loafers") {
+    graphics.rect(-6, leftY + 1, 4, 1).fill(darken(color, 0.55));
+    graphics.rect(3, rightY + 1, 4, 1).fill(darken(color, 0.55));
+  } else if (appearance.shoes === "sandals") {
+    graphics.rect(-7, leftY + 1, 5, 1).fill(AVATAR_DETAIL_LIGHT);
+    graphics.rect(2, rightY + 1, 5, 1).fill(AVATAR_DETAIL_LIGHT);
+    graphics.rect(-5, leftY, 1, height).fill(darken(color, 0.55));
+    graphics.rect(4, rightY, 1, height).fill(darken(color, 0.55));
+  } else if (appearance.shoes === "platforms") {
+    graphics.rect(-8, leftY + height, shoeWidth, 2).fill(shoeShadow);
+    graphics.rect(1, rightY + height, shoeWidth, 2).fill(shoeShadow);
+  } else if (appearance.shoes === "slip-ons") {
+    graphics.rect(-6, leftY, 5, 1).fill(darken(color, 0.55));
+    graphics.rect(3, rightY, 5, 1).fill(darken(color, 0.55));
+  } else if (appearance.shoes === "work-boots") {
+    graphics.rect(-7, leftY + 1, 5, 1).fill(darken(color, 0.55));
+    graphics.rect(2, rightY + 1, 5, 1).fill(darken(color, 0.55));
+    graphics.rect(-4, leftY + 2, 2, 1).fill(AVATAR_DETAIL_LIGHT);
+    graphics.rect(5, rightY + 2, 2, 1).fill(AVATAR_DETAIL_LIGHT);
   }
 }
 
@@ -979,6 +1132,75 @@ function drawTopDetail(
   if (appearance.shirt === "striped") {
     graphics.rect(-9, -24 + bob, 18, 3).fill(darken(color, 0.74));
     graphics.rect(-9, -17 + bob, 18, 3).fill(darken(color, 0.74));
+    return;
+  }
+
+  if (appearance.shirt === "tee") {
+    graphics.rect(-8, -28 + bob, 16, 3).fill(darken(color, 0.72));
+    graphics.rect(-4, -20 + bob, 8, 1).fill({ color: shadow, alpha: 0.45 });
+    return;
+  }
+
+  if (appearance.shirt === "tank") {
+    graphics.rect(-8, -28 + bob, 3, 10).fill(darken(color, 0.78));
+    graphics.rect(5, -28 + bob, 3, 10).fill(darken(color, 0.78));
+    graphics.roundRect(-4, -30 + bob, 8, 3, 2).fill(darken(color, 0.7));
+    return;
+  }
+
+  if (appearance.shirt === "sweater") {
+    graphics.roundRect(-8, -30 + bob, 16, 5, 2).fill(darken(color, 0.76));
+    graphics.rect(-8, -21 + bob, 16, 2).fill(darken(color, 0.7));
+    graphics.rect(-5, -25 + bob, 10, 1).fill({ color: shadow, alpha: 0.5 });
+    return;
+  }
+
+  if (appearance.shirt === "vest") {
+    graphics.rect(-9, -28 + bob, 5, 19).fill(darken(color, 0.68));
+    graphics.rect(4, -28 + bob, 5, 19).fill(darken(color, 0.68));
+    if (!facingBack) {
+      graphics.rect(-2, -27 + bob, 4, 18).fill(AVATAR_DETAIL_LIGHT);
+    }
+    return;
+  }
+
+  if (appearance.shirt === "blazer") {
+    graphics.rect(-9, -29 + bob, 5, 20).fill(darken(color, 0.66));
+    graphics.rect(4, -29 + bob, 5, 20).fill(darken(color, 0.66));
+    if (!facingBack) {
+      graphics.rect(-2, -28 + bob, 4, 18).fill(AVATAR_DETAIL_LIGHT);
+      graphics.rect(-1, -20 + bob, 2, 2).fill(darken(color, 0.45));
+      graphics.rect(-6, -25 + bob, 3, 1).fill({ color: shadow, alpha: 0.6 });
+    }
+    return;
+  }
+
+  if (appearance.shirt === "overshirt") {
+    graphics.rect(-9, -28 + bob, 5, 19).fill(darken(color, 0.7));
+    graphics.rect(4, -28 + bob, 5, 19).fill(darken(color, 0.7));
+    graphics.rect(-8, -21 + bob, 16, 2).fill({ color: shadow, alpha: 0.5 });
+    if (!facingBack) {
+      graphics.rect(-1, -28 + bob, 2, 18).fill(AVATAR_DETAIL_LIGHT);
+    }
+    return;
+  }
+
+  if (appearance.shirt === "polo") {
+    graphics.roundRect(-5, -30 + bob, 10, 4, 2).fill(darken(color, 0.68));
+    if (!facingBack) {
+      graphics.rect(-1, -28 + bob, 2, 5).fill(AVATAR_DETAIL_LIGHT);
+      graphics.rect(-4, -28 + bob, 3, 2).fill(darken(color, 0.58));
+      graphics.rect(1, -28 + bob, 3, 2).fill(darken(color, 0.58));
+    }
+    return;
+  }
+
+  if (appearance.shirt === "workwear") {
+    graphics.rect(-9, -21 + bob, 18, 2).fill(darken(color, 0.62));
+    graphics.rect(-5, -27 + bob, 3, 8).fill(darken(color, 0.68));
+    graphics.rect(2, -27 + bob, 3, 8).fill(darken(color, 0.68));
+    graphics.rect(-6, -17 + bob, 4, 3).fill({ color: shadow, alpha: 0.6 });
+    graphics.rect(2, -17 + bob, 4, 3).fill({ color: shadow, alpha: 0.6 });
     return;
   }
 
@@ -1158,6 +1380,154 @@ function drawHair(
     }
     graphics.circle(-3, headCenterY - 8, 1).fill({ color: highlight, alpha: 0.7 });
     graphics.circle(3, headCenterY - 8, 1).fill({ color: highlight, alpha: 0.7 });
+    return;
+  }
+
+  if (appearance.hair === "afro") {
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+
+    for (const [x, y, r] of [
+      [-9, headCenterY - 4, 5],
+      [-5, headCenterY - 9, 5],
+      [0, headCenterY - 11, 5],
+      [5, headCenterY - 9, 5],
+      [9, headCenterY - 4, 5],
+      [0, headCenterY - 5, 6],
+    ] as const) {
+      graphics.circle(x, y, r).fill(color);
+    }
+    graphics.circle(-4, headCenterY - 11, 1).fill({ color: highlight, alpha: 0.7 });
+    graphics.circle(4, headCenterY - 10, 1).fill({ color: highlight, alpha: 0.7 });
+    return;
+  }
+
+  if (appearance.hair === "ponytail") {
+    graphics.ellipse(11, headCenterY - 1, 4, 8).fill(color);
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+
+    if (!facingBack) {
+      graphics.rect(-6, headCenterY - 4, 10, 2).fill(color);
+      graphics.rect(3, headCenterY - 3, 6, 3).fill(color);
+    }
+    graphics.rect(2, headCenterY - 9, 5, 1).fill({ color: highlight, alpha: 0.55 });
+    return;
+  }
+
+  if (appearance.hair === "braids") {
+    graphics.ellipse(0, headCenterY + 4, headRadius - 2, 6).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 3, 6)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    graphics.roundRect(-11, headCenterY - 1, 3, 14, 2).fill(color);
+    graphics.roundRect(8, headCenterY - 1, 3, 14, 2).fill(color);
+    for (const y of [headCenterY + 2, headCenterY + 6, headCenterY + 10]) {
+      graphics.rect(-11, y, 3, 1).fill({ color: highlight, alpha: 0.55 });
+      graphics.rect(8, y, 3, 1).fill({ color: highlight, alpha: 0.55 });
+    }
+    if (!facingBack) {
+      graphics.rect(-7, headCenterY - 5, 14, 3).fill(color);
+    }
+    return;
+  }
+
+  if (appearance.hair === "undercut") {
+    graphics.circle(0, headCenterY, headRadius).fill(darken(color, 0.55));
+    graphics.roundRect(-8, headCenterY - 10, 15, 7, 3).fill(color);
+    graphics.rect(-2, headCenterY - 9, 8, 2).fill({ color: highlight, alpha: 0.5 });
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    return;
+  }
+
+  if (appearance.hair === "waves") {
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    for (const [x, y, width] of [
+      [-8, headCenterY - 5, 5],
+      [-2, headCenterY - 7, 6],
+      [5, headCenterY - 5, 5],
+    ] as const) {
+      graphics.rect(x, y, width, 2).fill(color);
+      graphics.rect(x + 1, y - 1, width - 2, 1).fill({ color: highlight, alpha: 0.55 });
+    }
+    graphics.rect(-10, headCenterY - 3, 1, 4).fill(color);
+    graphics.rect(9, headCenterY - 3, 1, 4).fill(color);
+    return;
+  }
+
+  if (appearance.hair === "bun") {
+    graphics.circle(0, headCenterY - 12, 5).fill(color);
+    graphics.circle(0, headCenterY - 12, 5).stroke({
+      color: AVATAR_OUTLINE,
+      width: 1,
+      alignment: 0,
+    });
+    graphics.ellipse(0, headCenterY + 4, headRadius - 1, 6).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 3, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    if (!facingBack) {
+      graphics.rect(-7, headCenterY - 4, 14, 2).fill(color);
+      graphics.rect(-9, headCenterY - 2, 1, 5).fill(color);
+      graphics.rect(8, headCenterY - 2, 1, 5).fill(color);
+    }
+    graphics.rect(-3, headCenterY - 15, 5, 1).fill({ color: highlight, alpha: 0.55 });
+    return;
+  }
+
+  if (appearance.hair === "pixie") {
+    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 2, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    if (!facingBack) {
+      graphics.rect(-9, headCenterY - 6, 7, 4).fill(color);
+      graphics.rect(-2, headCenterY - 8, 6, 3).fill(color);
+      graphics.rect(4, headCenterY - 6, 6, 4).fill(color);
+      graphics.rect(-10, headCenterY - 2, 1, 3).fill(color);
+    }
+    graphics.rect(-2, headCenterY - 10, 6, 1).fill({ color: highlight, alpha: 0.55 });
+    return;
+  }
+
+  if (appearance.hair === "mohawk") {
+    graphics.circle(0, headCenterY, headRadius).fill(darken(color, 0.55));
+    graphics.roundRect(-3, headCenterY - 13, 6, 14, 2).fill(color);
+    graphics.rect(-1, headCenterY - 14, 2, 2).fill({ color: highlight, alpha: 0.65 });
+    graphics.ellipse(0, headCenterY + 4, headRadius - 1, 6).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 3, 7)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    return;
+  }
+
+  if (appearance.hair === "locs") {
+    graphics.ellipse(0, headCenterY + 4, headRadius - 2, 6).fill(skinTone);
+    graphics
+      .circle(3, headCenterY + 3, 6)
+      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+    for (const [x, length] of [
+      [-10, 11],
+      [-6, 14],
+      [5, 13],
+      [9, 10],
+    ] as const) {
+      graphics.roundRect(x, headCenterY - 3, 3, length, 2).fill(color);
+      graphics.rect(x + 1, headCenterY + 2, 1, 2).fill({ color: highlight, alpha: 0.55 });
+    }
+    if (!facingBack) {
+      graphics.rect(-7, headCenterY - 5, 14, 3).fill(color);
+    }
     return;
   }
 }

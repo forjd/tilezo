@@ -165,22 +165,24 @@ describe("Avatar", () => {
 
     avatar.setAppearance({
       ...DEFAULT_AVATAR_APPEARANCE,
-      hair: "curls",
-      hairColor: "#3b2418",
-      shirt: "jacket",
-      shirtColor: "#7f3b44",
-      pants: "skirt",
-      shoes: "high-tops",
+      hair: "locs",
+      hairColor: "#2f6f6a",
+      shirt: "workwear",
+      shirtColor: "#f5f0e5",
+      pants: "cuffed",
+      shoes: "work-boots",
     });
 
     const state = avatar as unknown as {
       renderedBodyKey?: string;
     };
 
-    expect(state.renderedBodyKey).toContain("#3b2418");
-    expect(state.renderedBodyKey).toContain("#7f3b44");
-    expect(state.renderedBodyKey).toContain("skirt");
-    expect(state.renderedBodyKey).toContain("high-tops");
+    expect(state.renderedBodyKey).toContain("locs");
+    expect(state.renderedBodyKey).toContain("#2f6f6a");
+    expect(state.renderedBodyKey).toContain("workwear");
+    expect(state.renderedBodyKey).toContain("#f5f0e5");
+    expect(state.renderedBodyKey).toContain("cuffed");
+    expect(state.renderedBodyKey).toContain("work-boots");
   });
 
   test("shows chat bubbles briefly above the avatar", () => {

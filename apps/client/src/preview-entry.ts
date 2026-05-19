@@ -1,12 +1,13 @@
-import { Application, Container, Graphics } from "pixi.js";
 import {
+  AVATAR_HAIR_STYLES,
   type AvatarAppearance,
   type AvatarHairStyle,
   DEFAULT_AVATAR_APPEARANCE,
 } from "@tilezo/protocol/appearance";
-import { Avatar, drawAvatarBody, type AvatarRenderDirection } from "./game/Avatar";
+import { Application, Container, Graphics } from "pixi.js";
+import { Avatar, type AvatarRenderDirection, drawAvatarBody } from "./game/Avatar";
 
-const hairStyles: readonly AvatarHairStyle[] = ["short", "side-part", "bob", "curls", "buzz"];
+const hairStyles: readonly AvatarHairStyle[] = AVATAR_HAIR_STYLES;
 
 const bodyVariants: {
   label: string;
@@ -18,12 +19,18 @@ const bodyVariants: {
   direction: "south",
 }));
 
-const bubbleVariants: { label: string; appearance: AvatarAppearance }[] = hairStyles.map((hair) => ({
-  label: `bubble: ${hair}`,
-  appearance: { ...DEFAULT_AVATAR_APPEARANCE, hair },
-}));
+const bubbleVariants: { label: string; appearance: AvatarAppearance }[] = hairStyles.map(
+  (hair) => ({
+    label: `bubble: ${hair}`,
+    appearance: { ...DEFAULT_AVATAR_APPEARANCE, hair },
+  }),
+);
 
-const grid = document.getElementById("grid")!;
+const grid = document.getElementById("grid");
+
+if (!grid) {
+  throw new Error("Preview grid element is missing");
+}
 
 for (const variant of bodyVariants) {
   const cell = document.createElement("div");

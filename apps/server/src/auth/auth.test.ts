@@ -174,15 +174,15 @@ describe("AuthPasswordLimiter", () => {
 });
 
 const RANDOM_APPEARANCE: AvatarAppearance = {
-  hair: "buzz",
+  hair: "locs",
   hairColor: "#3b2418",
-  skinTone: "#b77a58",
-  shirt: "striped",
-  shirtColor: "#7f3b44",
-  pants: "skirt",
+  skinTone: "#a86c4d",
+  shirt: "overshirt",
+  shirtColor: "#5a4b7f",
+  pants: "cuffed",
   pantsColor: "#3f4d5c",
-  shoes: "flats",
-  shoesColor: "#e5ded1",
+  shoes: "work-boots",
+  shoesColor: "#9f4f3f",
 };
 
 function createAuthStore() {

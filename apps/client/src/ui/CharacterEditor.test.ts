@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
+import {
+  AVATAR_HAIR_STYLES,
+  AVATAR_SHIRT_COLORS,
+  type AvatarAppearance,
+  DEFAULT_AVATAR_APPEARANCE,
+} from "@tilezo/protocol/appearance";
 import { CharacterEditor } from "./CharacterEditor";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -85,6 +90,42 @@ describe("CharacterEditor", () => {
 
     expect(editorState.preview.appearance.hair).toBe("bob");
     expect(editorState.preview.appearance.hairColor).toBe("#8b4a24");
+  });
+
+  test("populates controls from the expanded protocol catalog", () => {
+    installDocument();
+    const editor = new CharacterEditor({
+      initialAppearance: DEFAULT_AVATAR_APPEARANCE,
+      onSubmit() {},
+    });
+    const form = editor.element.children[2] as unknown as FakeElement;
+    const hair = form.children[0]?.children[1] as FakeElement;
+    const hairChoices = form.children[0]?.children[2] as FakeElement;
+    const shirtColorField = form.children[4] as FakeElement;
+    const shirtSwatches = shirtColorField.children[2] as FakeElement;
+
+    expect(hair.options.map((option) => option.value)).toEqual([...AVATAR_HAIR_STYLES]);
+    expect(hairChoices.children.map((choice) => choice.textContent)).toContain("Afro");
+    expect(hairChoices.children.map((choice) => choice.textContent)).toContain("Locs");
+    expect(shirtSwatches.children.map((swatch) => swatch.dataset.color)).toEqual([
+      ...AVATAR_SHIRT_COLORS,
+    ]);
+  });
+
+  test("updates the preview from visible option buttons", () => {
+    installDocument();
+    const editor = new CharacterEditor({
+      initialAppearance: DEFAULT_AVATAR_APPEARANCE,
+      onSubmit() {},
+    });
+    const form = editor.element.children[2] as unknown as FakeElement;
+    const hairChoices = form.children[0]?.children[2] as FakeElement;
+    const afro = hairChoices.children.find((choice) => choice.dataset.value === "afro");
+    const editorState = editor as unknown as { preview: { appearance: AvatarAppearance } };
+
+    afro?.click();
+
+    expect(editorState.preview.appearance.hair).toBe("afro");
   });
 });
 

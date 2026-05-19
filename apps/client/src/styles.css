@@ -368,6 +368,17 @@ select {
   font-size: 13px;
 }
 
+.field select.choice-select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .field input:not([type="hidden"]):focus,
 .field select:focus,
 .chat-input:focus {
@@ -381,6 +392,36 @@ select {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
+}
+
+.option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.option-choice {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 2px solid #6f6a60;
+  border-radius: 4px;
+  background: #f5f0e5;
+  color: #302c27;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    1px 1px 0 rgba(31, 45, 47, 0.12);
+}
+
+.option-choice.selected {
+  border-color: #1d2324;
+  outline: 2px solid #f7c84a;
+  outline-offset: 1px;
+  background: #d8f0f1;
+  color: #1d4f63;
 }
 
 .color-swatch {
