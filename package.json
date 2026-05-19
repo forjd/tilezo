@@ -18,6 +18,7 @@
     "cleanup:stress-users": "bun run scripts/cleanup-stress-users.ts",
     "dev": "bun run --filter '@tilezo/server' --filter '@tilezo/client' --parallel dev",
     "dev:client": "bun run --filter '@tilezo/client' dev",
+    "dev:share": "bun run scripts/share-dev.ts",
     "dev:server": "bun run --filter '@tilezo/server' dev",
     "format": "biome format --write .",
     "lint": "biome check .",
