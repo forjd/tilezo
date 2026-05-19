@@ -1,10 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { AuthBackpressureError, AuthPasswordLimiter, AuthService, normalizeUsername } from "./auth";
+import {
+  AuthBackpressureError,
+  AuthPasswordLimiter,
+  AuthService,
+  isValidUsername,
+  normalizeUsername,
+  USERNAME_MAX_LENGTH,
+} from "./auth";
 
 describe("normalizeUsername", () => {
   test("trims and lowercases usernames for uniqueness checks", () => {
     expect(normalizeUsername("  DaN  ")).toBe("dan");
+  });
+});
+
+describe("isValidUsername", () => {
+  test("allows ascii letters, numbers, underscores, and hyphens", () => {
+    expect(isValidUsername("Dan_42-test")).toBe(true);
+  });
+
+  test("rejects usernames with spaces, unicode, punctuation, or excessive length", () => {
+    expect(isValidUsername("Dan Test")).toBe(false);
+    expect(isValidUsername("Dán")).toBe(false);
+    expect(isValidUsername("Dan!")).toBe(false);
+    expect(isValidUsername("d".repeat(USERNAME_MAX_LENGTH + 1))).toBe(false);
   });
 });
 
@@ -28,6 +48,28 @@ describe("AuthService", () => {
     await expect(auth.createUser("dan", "another password")).rejects.toThrow(
       "Username is already taken",
     );
+  });
+
+  test("rejects invalid usernames before hashing or persistence", async () => {
+    const store = createAuthStore();
+    let hashCalls = 0;
+    const auth = new AuthService(store, {
+      secret: "test-secret",
+      passwordHash: async () => {
+        hashCalls += 1;
+        return "hashed-password";
+      },
+    });
+
+    await expect(auth.createUser("Dan!", "correct horse battery staple")).rejects.toThrow(
+      "Username must be 24 characters or fewer",
+    );
+    await expect(
+      auth.createUser("d".repeat(USERNAME_MAX_LENGTH + 1), "correct horse battery staple"),
+    ).rejects.toThrow("Username must be 24 characters or fewer");
+
+    expect(hashCalls).toBe(0);
+    expect(store.users).toEqual([]);
   });
 
   test("logs in usernames case-insensitively and rejects bad passwords", async () => {

@@ -62,6 +62,8 @@ type AuthPasswordWaiter = {
 };
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+export const USERNAME_MAX_LENGTH = 24;
+const USERNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export class AuthService {
   private readonly now: () => number;
@@ -83,6 +85,13 @@ export class AuthService {
 
     if (!username || !password.trim()) {
       throw new AuthError("INVALID_AUTH_INPUT", "Username and password are required");
+    }
+
+    if (!isValidUsername(username)) {
+      throw new AuthError(
+        "INVALID_USERNAME",
+        `Username must be ${USERNAME_MAX_LENGTH.toString()} characters or fewer and can only use letters, numbers, underscores, or hyphens`,
+      );
     }
 
     const passwordHash = await this.runPasswordTask("hash", () => this.passwordHash(password));
@@ -376,6 +385,10 @@ export class AuthError extends Error {
 
 export function normalizeUsername(username: string): string {
   return username.trim().toLocaleLowerCase("en-US");
+}
+
+export function isValidUsername(username: string): boolean {
+  return username.length <= USERNAME_MAX_LENGTH && USERNAME_PATTERN.test(username);
 }
 
 function toAuthUser(user: AuthUser): AuthUser {
