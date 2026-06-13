@@ -4,7 +4,7 @@ import {
   avatarAppearanceSchema,
   createRandomAvatarAppearance,
 } from "@tilezo/protocol";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
 import { users } from "../db/schema";
 import { createId } from "../util/ids";
@@ -18,6 +18,7 @@ export type AuthUser = {
 export type StoredAuthUser = AuthUser & {
   usernameKey: string;
   passwordHash: string;
+  tokenVersion: number;
 };
 
 export type AuthSession = {
@@ -38,11 +39,14 @@ export type AuthStore = {
     id: string,
     appearance: AvatarAppearance,
   ): Promise<StoredAuthUser | undefined>;
+  // Invalidates every token previously issued to the user (logout / forced sign-out).
+  incrementTokenVersion(id: string): Promise<void>;
 };
 
 type AuthOptions = {
   metrics?: AuthMetrics;
   now?: () => number;
+  nowSeconds?: () => number;
   passwordHash?: (password: string) => Promise<string>;
   passwordLimiter?: AuthPasswordLimiter;
   passwordVerify?: (password: string, passwordHash: string) => Promise<boolean>;
@@ -63,18 +67,26 @@ type AuthPasswordWaiter = {
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 export const USERNAME_MAX_LENGTH = 24;
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 200;
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+// Used to run a constant-cost argon2 verify when a username does not exist, so login
+// latency does not reveal which usernames are registered.
+const DUMMY_VERIFY_PASSWORD = "tilezo-dummy-verify-password";
 
 export class AuthService {
   private readonly now: () => number;
+  private readonly nowSeconds: () => number;
   private readonly passwordHash: (password: string) => Promise<string>;
   private readonly passwordVerify: (password: string, passwordHash: string) => Promise<boolean>;
+  private dummyPasswordHash?: Promise<string>;
 
   constructor(
     private readonly store: AuthStore,
     private readonly options: AuthOptions,
   ) {
     this.now = options.now ?? (() => performance.now());
+    this.nowSeconds = options.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
     this.passwordHash = options.passwordHash ?? Bun.password.hash;
     this.passwordVerify = options.passwordVerify ?? verifyPassword;
   }
@@ -94,6 +106,13 @@ export class AuthService {
       );
     }
 
+    if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+      throw new AuthError(
+        "INVALID_PASSWORD",
+        `Password must be between ${PASSWORD_MIN_LENGTH.toString()} and ${PASSWORD_MAX_LENGTH.toString()} characters`,
+      );
+    }
+
     const passwordHash = await this.runPasswordTask("hash", () => this.passwordHash(password));
 
     try {
@@ -106,18 +125,33 @@ export class AuthService {
         }),
       );
       return this.createSession(user);
-    } catch {
-      throw new AuthError("USERNAME_TAKEN", "Username is already taken");
+    } catch (error) {
+      if (error instanceof UsernameTakenError) {
+        throw new AuthError("USERNAME_TAKEN", "Username is already taken");
+      }
+
+      // Surface real persistence failures (connection drops, timeouts) instead of
+      // masking them as a username collision and silently swallowing the error.
+      this.options.metrics?.increment("auth.user_create.failed");
+      throw error;
     }
   }
 
   async login(username: string, password: string): Promise<AuthSession> {
+    // Reject oversized passwords before paying for an argon2 verify (KDF DoS guard).
+    if (password.length > PASSWORD_MAX_LENGTH) {
+      throw new AuthError("INVALID_CREDENTIALS", "Invalid username or password");
+    }
+
     const user = await this.measure("auth.user_lookup.duration", () =>
       this.store.findUserByUsernameKey(normalizeUsername(username)),
     );
-    const passwordMatches = user
-      ? await this.runPasswordTask("verify", () => this.passwordVerify(password, user.passwordHash))
-      : false;
+    // Always run a verify (against a dummy hash when the user is unknown) so response
+    // latency does not reveal whether a username exists (timing enumeration).
+    const passwordHash = user?.passwordHash ?? (await this.getDummyPasswordHash());
+    const passwordMatches = await this.runPasswordTask("verify", () =>
+      this.passwordVerify(password, passwordHash),
+    );
 
     if (!user || !passwordMatches) {
       throw new AuthError("INVALID_CREDENTIALS", "Invalid username or password");
@@ -129,14 +163,29 @@ export class AuthService {
   async verifyToken(token: string): Promise<AuthUser | undefined> {
     const parsed = this.parseToken(token);
 
-    if (!parsed || parsed.expiresAt < Math.floor(Date.now() / 1000)) {
+    if (!parsed || parsed.expiresAt < this.nowSeconds()) {
       return undefined;
     }
 
     const user = await this.measure("auth.user_token_lookup.duration", () =>
       this.store.findUserById(parsed.userId),
     );
-    return user ? toAuthUser(user) : undefined;
+
+    if (!user || user.tokenVersion !== parsed.tokenVersion) {
+      return undefined;
+    }
+
+    return toAuthUser(user);
+  }
+
+  // Invalidates all of a user's existing tokens (logout / forced sign-out).
+  async logout(userId: string): Promise<void> {
+    await this.store.incrementTokenVersion(userId);
+  }
+
+  private getDummyPasswordHash(): Promise<string> {
+    this.dummyPasswordHash ??= this.passwordHash(DUMMY_VERIFY_PASSWORD);
+    return this.dummyPasswordHash;
   }
 
   async updateAppearance(userId: string, appearance: AvatarAppearance): Promise<AuthUser> {
@@ -157,9 +206,9 @@ export class AuthService {
     return toAuthUser(user);
   }
 
-  private createSession(user: AuthUser): AuthSession {
-    const expiresAt = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
-    const payload = `${user.id}.${expiresAt}`;
+  private createSession(user: StoredAuthUser): AuthSession {
+    const expiresAt = this.nowSeconds() + TOKEN_TTL_SECONDS;
+    const payload = `${user.id}.${user.tokenVersion}.${expiresAt}`;
     const signature = this.sign(payload);
     return {
       user: toAuthUser(user),
@@ -167,22 +216,36 @@ export class AuthService {
     };
   }
 
-  private parseToken(token: string): { userId: string; expiresAt: number } | undefined {
-    const [userId, expiresAtRaw, signature] = token.split(".");
+  private parseToken(
+    token: string,
+  ): { userId: string; tokenVersion: number; expiresAt: number } | undefined {
+    const parts = token.split(".");
 
-    if (!userId || !expiresAtRaw || !signature) {
+    if (parts.length !== 4) {
       return undefined;
     }
 
-    const payload = `${userId}.${expiresAtRaw}`;
+    const [userId, tokenVersionRaw, expiresAtRaw, signature] = parts;
+
+    if (!userId || !tokenVersionRaw || !expiresAtRaw || !signature) {
+      return undefined;
+    }
+
+    const payload = `${userId}.${tokenVersionRaw}.${expiresAtRaw}`;
     const expectedSignature = this.sign(payload);
 
     if (!safeEqual(signature, expectedSignature)) {
       return undefined;
     }
 
+    const tokenVersion = Number(tokenVersionRaw);
     const expiresAt = Number(expiresAtRaw);
-    return Number.isFinite(expiresAt) ? { userId, expiresAt } : undefined;
+
+    if (!Number.isInteger(tokenVersion) || !Number.isFinite(expiresAt)) {
+      return undefined;
+    }
+
+    return { userId, tokenVersion, expiresAt };
   }
 
   private sign(payload: string): string {
@@ -293,6 +356,19 @@ export class AuthPasswordLimiter {
 
 export class AuthBackpressureError extends Error {}
 
+// Thrown by an AuthStore when a username already exists, so AuthService can map only a
+// genuine uniqueness conflict to USERNAME_TAKEN and surface every other failure as-is.
+export class UsernameTakenError extends Error {}
+
+const STORED_USER_COLUMNS = {
+  id: users.id,
+  username: users.username,
+  usernameKey: users.usernameKey,
+  passwordHash: users.passwordHash,
+  appearance: users.appearance,
+  tokenVersion: users.tokenVersion,
+} as const;
+
 export class DrizzleAuthStore implements AuthStore {
   constructor(private readonly db: TilezoDatabase) {}
 
@@ -302,19 +378,23 @@ export class DrizzleAuthStore implements AuthStore {
     usernameKey: string;
     passwordHash: string;
   }): Promise<StoredAuthUser> {
-    const [created] = await this.db
-      .insert(users)
-      .values({
-        id: createId("user"),
-        ...user,
-      })
-      .returning({
-        id: users.id,
-        username: users.username,
-        usernameKey: users.usernameKey,
-        passwordHash: users.passwordHash,
-        appearance: users.appearance,
-      });
+    let created: StoredAuthUser | undefined;
+
+    try {
+      [created] = await this.db
+        .insert(users)
+        .values({
+          id: createId("user"),
+          ...user,
+        })
+        .returning(STORED_USER_COLUMNS);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new UsernameTakenError("Username is already taken");
+      }
+
+      throw error;
+    }
 
     if (!created) {
       throw new Error("User creation failed");
@@ -325,29 +405,14 @@ export class DrizzleAuthStore implements AuthStore {
 
   async findUserByUsernameKey(usernameKey: string): Promise<StoredAuthUser | undefined> {
     const [user] = await this.db
-      .select({
-        id: users.id,
-        username: users.username,
-        usernameKey: users.usernameKey,
-        passwordHash: users.passwordHash,
-        appearance: users.appearance,
-      })
+      .select(STORED_USER_COLUMNS)
       .from(users)
       .where(eq(users.usernameKey, usernameKey));
     return user;
   }
 
   async findUserById(id: string): Promise<StoredAuthUser | undefined> {
-    const [user] = await this.db
-      .select({
-        id: users.id,
-        username: users.username,
-        usernameKey: users.usernameKey,
-        passwordHash: users.passwordHash,
-        appearance: users.appearance,
-      })
-      .from(users)
-      .where(eq(users.id, id));
+    const [user] = await this.db.select(STORED_USER_COLUMNS).from(users).where(eq(users.id, id));
     return user;
   }
 
@@ -362,16 +427,33 @@ export class DrizzleAuthStore implements AuthStore {
         updatedAt: new Date(),
       })
       .where(eq(users.id, id))
-      .returning({
-        id: users.id,
-        username: users.username,
-        usernameKey: users.usernameKey,
-        passwordHash: users.passwordHash,
-        appearance: users.appearance,
-      });
+      .returning(STORED_USER_COLUMNS);
 
     return user;
   }
+
+  async incrementTokenVersion(id: string): Promise<void> {
+    await this.db
+      .update(users)
+      .set({
+        tokenVersion: sql`${users.tokenVersion} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id));
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  if ((error as { code?: unknown }).code === "23505") {
+    return true;
+  }
+
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" && /unique|duplicate key/i.test(message);
 }
 
 export class AuthError extends Error {

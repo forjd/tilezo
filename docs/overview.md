@@ -24,24 +24,32 @@ Implemented:
 - TypeScript across client, server, and shared packages.
 - PixiJS isometric room renderer.
 - Shared isometric projection, grid, and pathfinding logic.
-- Shared JSON WebSocket protocol types and validation.
+- Shared JSON WebSocket protocol types and validation (client and server message schemas).
 - Bun WebSocket server with in-memory authoritative room state.
-- Account creation and login with case-insensitive usernames and hashed passwords.
-- Multi-user presence.
-- Public room browser with live room population counts.
+- Account creation and login with case-insensitive usernames, argon2id password hashing,
+  token revocation, and rate limiting.
+- Avatar appearance customization persisted per account.
+- Multi-user presence and friends (add/remove, online status, join a friend's room).
+- Public room browser with live room population counts, plus per-user private rooms and
+  player-created rooms persisted to PostgreSQL.
+- Scripted, server-authoritative room bots (movement and chat).
 - Server-authoritative tile movement.
-- Basic realtime chat.
-- PostgreSQL schema, migrations, and account persistence.
-- Bun tests for shared deterministic logic and room state.
+- Realtime chat with typing indicators.
+- Reconnect/resume of the last joined room.
+- PostgreSQL schema, migrations, and persistence (accounts, rooms, sessions, friendships).
+- Bun tests for shared deterministic logic, room state, auth, and HTTP routing.
 
 Not implemented yet:
 
-- Durable room customization persistence.
 - Room editor UI.
-- Inventory, catalogue, economy, moderation dashboard, trading, pets, bots, or quests.
+- Provider-backed (AI) bot conversations (see [FOLLOW_UPS.md](../FOLLOW_UPS.md)).
+- Direct messaging / whispers (see [FOLLOW_UPS.md](../FOLLOW_UPS.md)).
+- Furniture/items placement (the `room_items` table is reserved but unused).
+- Inventory, catalogue, economy, moderation dashboard, trading, pets, or quests.
 
 ## Scope Discipline
 
-The near-term product should stay focused on the browser multiplayer room loop. Add durable storage and operational foundations before expanding gameplay systems.
-
-Do not add non-core social-game systems until the room, presence, movement, chat, and persistence foundations are stable.
+The near-term product should stay focused on the browser multiplayer room loop and its
+supporting room, presence, movement, chat, friends, bot, and persistence foundations. Add
+durable storage and operational hardening before expanding into new gameplay systems
+(inventory, catalogue, economy, trading, pets, quests, moderation dashboards).

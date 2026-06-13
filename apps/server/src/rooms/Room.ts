@@ -39,6 +39,32 @@ export class Room {
     return roomUser;
   }
 
+  // Re-points an already-present user at a new connection (a newer socket for the same
+  // user) without resetting their avatar position. Returns the existing room user so a
+  // duplicate `user.joined` is not broadcast for an avatar that already exists.
+  reattach(
+    user: Pick<RoomUser, "id" | "username"> &
+      Partial<Pick<RoomUser, "connectionId" | "appearance">>,
+  ): RoomUser {
+    const existing = this.users.get(user.id);
+
+    if (!existing) {
+      return this.join(user);
+    }
+
+    existing.connectionId = user.connectionId;
+
+    if (user.appearance) {
+      existing.appearance = { ...user.appearance };
+    }
+
+    return existing;
+  }
+
+  getConnectionId(userId: string): string | undefined {
+    return this.users.get(userId)?.connectionId;
+  }
+
   leave(userId: string, connectionId?: string): boolean {
     const user = this.users.get(userId);
 

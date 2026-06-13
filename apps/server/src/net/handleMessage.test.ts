@@ -3,7 +3,13 @@ import { createRectRoomLayout } from "@tilezo/engine";
 import { DEFAULT_AVATAR_APPEARANCE, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import { RoomManager } from "../rooms/RoomManager";
-import { handleClose, handleMessage, handleOpen } from "./handleMessage";
+import {
+  consumeRateLimit,
+  handleClose,
+  handleMessage,
+  handleOpen,
+  RATE_LIMITS,
+} from "./handleMessage";
 import type { SocketData } from "./socketTypes";
 
 describe("handleMessage", () => {
@@ -582,6 +588,130 @@ describe("handleOpen", () => {
         },
       },
     });
+  });
+});
+
+describe("duplicate connections and movement guards", () => {
+  test("suppresses a duplicate user.joined when a newer socket reconnects the same user", async () => {
+    const rooms = await RoomManager.create();
+    const socketA = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_a",
+    });
+    const socketB = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_b",
+    });
+    const published: ServerMessage[] = [];
+    const publish = (_topic: string, message: ServerMessage) => published.push(message);
+
+    handleMessage(socketA, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish,
+    });
+    handleMessage(socketB, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish,
+    });
+
+    expect(published.filter((message) => message.type === "user.joined")).toHaveLength(1);
+    expect(rooms.get("lobby")?.getConnectionId("user_db_1")).toBe("socket_b");
+    expect(rooms.get("lobby")?.getUsers()).toHaveLength(1);
+  });
+
+  test("ignores movement from a socket superseded by a newer connection", async () => {
+    const rooms = await RoomManager.create();
+    const socketA = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_a",
+    });
+    const socketB = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_b",
+    });
+
+    handleMessage(socketA, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    handleMessage(socketB, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    socketA.sent.length = 0;
+
+    handleMessage(
+      socketA,
+      JSON.stringify({ type: "avatar.move.request", target: { x: 2, y: 1 } }),
+      {
+        rooms,
+        publish() {},
+      },
+    );
+
+    expect(socketA.sent).toEqual([
+      { type: "error", code: "NOT_IN_ROOM", message: "Join a room before moving" },
+    ]);
+  });
+
+  test("does not broadcast an empty path when moving to the current tile", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: ServerMessage[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    const spawn = rooms.get("lobby")?.getUsers()[0]?.position;
+    ws.sent.length = 0;
+
+    handleMessage(ws, JSON.stringify({ type: "avatar.move.request", target: spawn }), {
+      rooms,
+      publish(_topic, message) {
+        published.push(message);
+      },
+    });
+
+    expect(published).toEqual([]);
+    expect(ws.sent).toEqual([]);
+  });
+});
+
+describe("consumeRateLimit", () => {
+  test("exhausts the burst then refills over time", () => {
+    const ws = { data: {} } as unknown as ServerWebSocket<SocketData>;
+    const { burst, refillPerSecond } = RATE_LIMITS.chat;
+    let now = 1000;
+
+    for (let index = 0; index < burst; index += 1) {
+      expect(consumeRateLimit(ws, "chat", now)).toBe(true);
+    }
+
+    // Burst is exhausted at the same instant.
+    expect(consumeRateLimit(ws, "chat", now)).toBe(false);
+
+    // After enough elapsed time for one token to refill, a single message is allowed.
+    now += Math.ceil(1000 / refillPerSecond);
+    expect(consumeRateLimit(ws, "chat", now)).toBe(true);
+    expect(consumeRateLimit(ws, "chat", now)).toBe(false);
+  });
+
+  test("tracks message kinds independently", () => {
+    const ws = { data: {} } as unknown as ServerWebSocket<SocketData>;
+    const now = 0;
+
+    for (let index = 0; index < RATE_LIMITS.movement.burst; index += 1) {
+      expect(consumeRateLimit(ws, "movement", now)).toBe(true);
+    }
+
+    expect(consumeRateLimit(ws, "movement", now)).toBe(false);
+    // The chat bucket is independent and still full.
+    expect(consumeRateLimit(ws, "chat", now)).toBe(true);
   });
 });
 

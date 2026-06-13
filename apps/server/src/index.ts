@@ -1,23 +1,20 @@
 import type { ServerMessage } from "@tilezo/protocol";
-import { avatarAppearanceSchema, MAX_RAW_MESSAGE_BYTES } from "@tilezo/protocol";
-import { AuthError, AuthPasswordLimiter, AuthService, DrizzleAuthStore } from "./auth/auth";
+import { MAX_RAW_MESSAGE_BYTES } from "@tilezo/protocol";
+import type { Server } from "bun";
+import { AuthPasswordLimiter, AuthService, DrizzleAuthStore } from "./auth/auth";
 import { FixedWindowRateLimiter } from "./auth/rateLimit";
-import { getConfig } from "./config";
+import { getConfig, type ServerConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
-import { DrizzleFriendStore, FriendError, FriendService } from "./friends/friends";
+import { DrizzleFriendStore, FriendService } from "./friends/friends";
+import { corsHeaders, createHttpRouter } from "./http/router";
 import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
-import { createLogger, type Logger, type LogLevel, parseLogLevel } from "./observability/logger";
+import { createLogger, parseLogLevel } from "./observability/logger";
 import { Metrics } from "./observability/metrics";
 import { PresenceTracker } from "./presence/presence";
 import { DEFAULT_ROOM_BOTS, RoomBotController } from "./rooms/bots";
 import { RoomManager } from "./rooms/RoomManager";
-import {
-  createRoomLayoutFromTemplate,
-  listRoomCreationTemplates,
-  parseCreateRoomInput,
-} from "./rooms/roomCreation";
 import { createId } from "./util/ids";
 import { encodeServerMessage } from "./util/safeJson";
 
@@ -28,20 +25,43 @@ const logger = createLogger({
 });
 const metrics = new Metrics();
 metrics.startEventLoopMonitor();
+
 const registerRateLimiter = new FixedWindowRateLimiter({
   limit: config.authRegisterRateLimitMax,
   windowMs: config.authRegisterRateLimitWindowMs,
 });
-const registerRateLimiterPruneTimer = setInterval(
-  () => registerRateLimiter.prune(),
-  config.authRegisterRateLimitWindowMs,
-);
-registerRateLimiterPruneTimer.unref?.();
+const loginRateLimiter = new FixedWindowRateLimiter({
+  limit: config.authLoginRateLimitMax,
+  windowMs: config.authLoginRateLimitWindowMs,
+});
+const roomCreateRateLimiter = new FixedWindowRateLimiter({
+  limit: config.roomCreateRateLimitMax,
+  windowMs: config.roomCreateRateLimitWindowMs,
+});
+const friendRateLimiter = new FixedWindowRateLimiter({
+  limit: config.friendRateLimitMax,
+  windowMs: config.friendRateLimitWindowMs,
+});
+const rateLimiters = [
+  registerRateLimiter,
+  loginRateLimiter,
+  roomCreateRateLimiter,
+  friendRateLimiter,
+];
+const rateLimiterPruneTimer = setInterval(() => {
+  for (const limiter of rateLimiters) {
+    limiter.prune();
+  }
+}, config.authRegisterRateLimitWindowMs);
+rateLimiterPruneTimer.unref?.();
+
 const database = createDatabase(config.databaseUrl);
 const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
 const presence = new PresenceTracker();
 const friends = database
-  ? new FriendService(new DrizzleFriendStore(database), (userId) => presence.get(userId))
+  ? new FriendService(new DrizzleFriendStore(database), (userId) => presence.get(userId), {
+      maxFriends: config.maxFriendsPerUser,
+    })
   : undefined;
 const auth = database
   ? new AuthService(new DrizzleAuthStore(database), {
@@ -56,124 +76,31 @@ const auth = database
   : undefined;
 const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
 
+const router = createHttpRouter({
+  config,
+  logger,
+  metrics,
+  auth,
+  friends,
+  persistence,
+  rooms,
+  registerRateLimiter,
+  loginRateLimiter,
+  roomCreateRateLimiter,
+  friendRateLimiter,
+});
+
 const server = Bun.serve<SocketData>({
   hostname: config.host,
   port: config.port,
   async fetch(request, server) {
     const url = new URL(request.url);
-    const requestId = request.headers.get("x-request-id") ?? createId("req");
-    const requestLogger = logger.child({
-      requestId,
-      method: request.method,
-      path: url.pathname,
-    });
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
-    }
-
-    if (url.pathname === "/auth/register" && request.method === "POST") {
-      const rateLimit = registerRateLimiter.consume(clientRateLimitKey(request));
-
-      if (!rateLimit.allowed) {
-        metrics.increment("auth.register.rate_limited");
-        requestLogger.warn("auth.register.rate_limited", {
-          retryAfterSeconds: rateLimit.retryAfterSeconds,
-        });
-        return authJson(
-          {
-            error: {
-              code: "RATE_LIMITED",
-              message: "Too many account registrations, try again shortly",
-            },
-          },
-          429,
-          { "retry-after": rateLimit.retryAfterSeconds.toString() },
-        );
-      }
-
-      return handleAuthRequest(request, auth, "register", requestLogger);
-    }
-
-    if (url.pathname === "/auth/login" && request.method === "POST") {
-      return handleAuthRequest(request, auth, "login", requestLogger);
-    }
-
-    if (url.pathname === "/me/appearance") {
-      return handleAppearanceRequest(request, auth, requestLogger);
-    }
-
-    if (url.pathname === "/client-events" && request.method === "POST") {
-      return handleClientEventRequest(request, auth, requestLogger);
-    }
-
-    if (url.pathname === "/friends" || url.pathname.startsWith("/friends/")) {
-      return handleFriendsRequest(request, url, auth, friends, requestLogger);
-    }
-
-    if (url.pathname === "/room-templates" && request.method === "GET") {
-      requestLogger.info("room_templates.listed");
-      return authJson({ templates: listRoomCreationTemplates() }, 200);
-    }
-
-    if (url.pathname === "/rooms" && request.method === "POST") {
-      return handleCreateRoomRequest(request, auth, persistence, rooms, requestLogger);
-    }
 
     if (url.pathname === "/ws") {
-      const user = await auth?.verifyToken(url.searchParams.get("token") ?? "");
-
-      if (!user) {
-        requestLogger.warn("websocket.auth.rejected");
-        return Response.json(
-          { error: { code: "UNAUTHENTICATED", message: "Log in before connecting" } },
-          { status: 401, headers: corsHeaders() },
-        );
-      }
-
-      const upgraded = server.upgrade(request, {
-        data: {
-          userId: user.id,
-          username: user.username,
-          connectionId: createId("socket"),
-          resumeRoomId: await readResumeRoomId(user.id, persistence),
-          appearance: user.appearance,
-        },
-      });
-
-      if (upgraded) {
-        requestLogger.info("websocket.upgraded", { userId: user.id });
-        return undefined;
-      }
+      return handleWebSocketUpgrade(request, server, url);
     }
 
-    if (url.pathname === "/health") {
-      return Response.json({ ok: true }, { headers: corsHeaders() });
-    }
-
-    if (url.pathname === "/debug/metrics") {
-      return Response.json(metrics.snapshot(rooms.getMetrics()), { headers: corsHeaders() });
-    }
-
-    if (url.pathname === "/debug/metrics/reset" && request.method === "POST") {
-      if (config.nodeEnv === "production") {
-        return Response.json(
-          { error: { code: "NOT_FOUND", message: "Not found" } },
-          { status: 404, headers: corsHeaders() },
-        );
-      }
-
-      metrics.reset();
-      requestLogger.info("metrics.reset");
-      return Response.json({ ok: true }, { headers: corsHeaders() });
-    }
-
-    return new Response("Tilezo room server", {
-      headers: {
-        ...corsHeaders(),
-        "content-type": "text/plain;charset=utf-8",
-      },
-    });
+    return router(request, resolveClientKey(request, server, config));
   },
   websocket: {
     maxPayloadLength: MAX_RAW_MESSAGE_BYTES,
@@ -229,6 +156,64 @@ const botController = new RoomBotController({
 const botTimer = setInterval(() => botController.tick(), 5_000);
 botTimer.unref?.();
 
+async function handleWebSocketUpgrade(
+  request: Request,
+  bunServer: Server<SocketData>,
+  url: URL,
+): Promise<Response | undefined> {
+  const user = await auth?.verifyToken(url.searchParams.get("token") ?? "");
+
+  if (!user) {
+    logger.warn("websocket.auth.rejected");
+    return Response.json(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before connecting" } },
+      { status: 401, headers: corsHeaders() },
+    );
+  }
+
+  const upgraded = bunServer.upgrade(request, {
+    data: {
+      userId: user.id,
+      username: user.username,
+      connectionId: createId("socket"),
+      resumeRoomId: await readResumeRoomId(user.id, persistence),
+      appearance: user.appearance,
+    },
+  });
+
+  if (upgraded) {
+    logger.info("websocket.upgraded", { userId: user.id });
+    return undefined;
+  }
+
+  return new Response("WebSocket upgrade failed", {
+    status: 400,
+    headers: corsHeaders(),
+  });
+}
+
+function resolveClientKey(
+  request: Request,
+  bunServer: Server<SocketData>,
+  serverConfig: ServerConfig,
+): string {
+  // Only trust client-supplied forwarding headers when explicitly running behind a
+  // trusted proxy. Otherwise use the real socket peer address so an attacker cannot
+  // bypass rate limits by rotating forged x-forwarded-for / x-real-ip values.
+  if (serverConfig.trustProxy) {
+    const forwarded =
+      request.headers.get("cf-connecting-ip") ??
+      request.headers.get("x-real-ip") ??
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+
+    if (forwarded) {
+      return forwarded;
+    }
+  }
+
+  return bunServer.requestIP(request)?.address ?? "local";
+}
+
 function publish(topic: string, message: ServerMessage): void {
   const result = server.publish(topic, encodeServerMessage(message));
   metrics.increment(`publish.${message.type}`);
@@ -251,396 +236,27 @@ async function readResumeRoomId(
   }
 }
 
+let shuttingDown = false;
+
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+  logger.info("server.shutdown", { signal });
+  clearInterval(botTimer);
+  clearInterval(rateLimiterPruneTimer);
+  metrics.stopEventLoopMonitor();
+  await server.stop(true);
+  process.exit(0);
+}
+
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
 logger.info("server.started", {
   host: config.host,
   port: server.port,
   persistence: Boolean(persistence),
 });
-
-type AuthMode = "login" | "register";
-
-async function handleAuthRequest(
-  request: Request,
-  authService: AuthService | undefined,
-  mode: AuthMode,
-  requestLogger: Logger,
-): Promise<Response> {
-  if (!authService) {
-    requestLogger.warn("auth.database_required", { mode });
-    return authJson(
-      { error: { code: "DATABASE_REQUIRED", message: "Database is required for login" } },
-      503,
-    );
-  }
-
-  try {
-    const body = (await request.json()) as { username?: unknown; password?: unknown };
-
-    if (typeof body.username !== "string" || typeof body.password !== "string") {
-      return authJson(
-        { error: { code: "INVALID_AUTH_INPUT", message: "Username and password are required" } },
-        400,
-      );
-    }
-
-    const session =
-      mode === "register"
-        ? await authService.createUser(body.username, body.password)
-        : await authService.login(body.username, body.password);
-
-    requestLogger.info("auth.succeeded", { mode, userId: session.user.id });
-
-    return authJson(session, mode === "register" ? 201 : 200);
-  } catch (error) {
-    if (error instanceof AuthError) {
-      requestLogger.warn("auth.failed", { mode, code: error.code });
-      return authJson(
-        { error: { code: error.code, message: error.message } },
-        authStatus(error),
-        authHeaders(error),
-      );
-    }
-
-    requestLogger.warn("auth.invalid_request", { mode, error });
-    return authJson(
-      { error: { code: "INVALID_AUTH_INPUT", message: "Invalid authentication request" } },
-      400,
-    );
-  }
-}
-
-async function handleAppearanceRequest(
-  request: Request,
-  authService: AuthService | undefined,
-  requestLogger: Logger,
-): Promise<Response> {
-  if (!authService) {
-    requestLogger.warn("appearance.database_required");
-    return authJson(
-      { error: { code: "DATABASE_REQUIRED", message: "Database is required for profiles" } },
-      503,
-    );
-  }
-
-  const user = await authService.verifyToken(readBearerToken(request) ?? "");
-
-  if (!user) {
-    requestLogger.warn("appearance.unauthenticated");
-    return authJson(
-      { error: { code: "UNAUTHENTICATED", message: "Log in before editing your character" } },
-      401,
-    );
-  }
-
-  if (request.method === "GET") {
-    return authJson({ appearance: user.appearance }, 200);
-  }
-
-  if (request.method !== "PUT") {
-    return authJson({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } }, 405);
-  }
-
-  try {
-    const body = (await request.json()) as { appearance?: unknown };
-    const parsed = avatarAppearanceSchema.safeParse(body.appearance);
-
-    if (!parsed.success) {
-      return authJson(
-        { error: { code: "INVALID_APPEARANCE", message: "Invalid character appearance" } },
-        400,
-      );
-    }
-
-    const updated = await authService.updateAppearance(user.id, parsed.data);
-    requestLogger.info("appearance.updated", { userId: user.id });
-    return authJson({ appearance: updated.appearance }, 200);
-  } catch (error) {
-    if (error instanceof AuthError) {
-      requestLogger.warn("appearance.failed", { userId: user.id, code: error.code });
-      return authJson({ error: { code: error.code, message: error.message } }, authStatus(error));
-    }
-
-    requestLogger.warn("appearance.invalid_request", { userId: user.id, error });
-    return authJson(
-      { error: { code: "INVALID_APPEARANCE", message: "Invalid character appearance" } },
-      400,
-    );
-  }
-}
-
-async function handleClientEventRequest(
-  request: Request,
-  authService: AuthService | undefined,
-  requestLogger: Logger,
-): Promise<Response> {
-  try {
-    const user = await authService?.verifyToken(readBearerToken(request) ?? "");
-    const body = (await request.json()) as {
-      event?: unknown;
-      fields?: unknown;
-      level?: unknown;
-    };
-    const eventName = sanitizeClientEventName(body.event);
-    const level = sanitizeClientLogLevel(body.level);
-    const fields = sanitizeClientFields(body.fields);
-    const logFields = {
-      ...fields,
-      userId: user?.id,
-    };
-
-    if (level === "debug") {
-      requestLogger.debug(`client.${eventName}`, logFields);
-    } else if (level === "warn") {
-      requestLogger.warn(`client.${eventName}`, logFields);
-    } else if (level === "error") {
-      requestLogger.error(`client.${eventName}`, logFields);
-    } else {
-      requestLogger.info(`client.${eventName}`, logFields);
-    }
-
-    return authJson({ ok: true }, 202);
-  } catch (error) {
-    requestLogger.warn("client_event.invalid_request", { error });
-    return authJson(
-      { error: { code: "INVALID_CLIENT_EVENT", message: "Invalid client event" } },
-      400,
-    );
-  }
-}
-
-async function handleFriendsRequest(
-  request: Request,
-  url: URL,
-  authService: AuthService | undefined,
-  friendService: FriendService | undefined,
-  requestLogger: Logger,
-): Promise<Response> {
-  if (!authService || !friendService) {
-    requestLogger.warn("friends.database_required");
-    return authJson(
-      { error: { code: "DATABASE_REQUIRED", message: "Database is required for friends" } },
-      503,
-    );
-  }
-
-  const user = await authService.verifyToken(readBearerToken(request) ?? "");
-
-  if (!user) {
-    requestLogger.warn("friends.unauthenticated");
-    return authJson(
-      { error: { code: "UNAUTHENTICATED", message: "Log in before managing friends" } },
-      401,
-    );
-  }
-
-  try {
-    if (url.pathname === "/friends" && request.method === "GET") {
-      return authJson({ friends: await friendService.list(user.id) }, 200);
-    }
-
-    if (url.pathname === "/friends" && request.method === "POST") {
-      const body = (await request.json()) as { username?: unknown };
-
-      if (typeof body.username !== "string" || !body.username.trim()) {
-        return authJson(
-          { error: { code: "INVALID_FRIEND", message: "Friend username is required" } },
-          400,
-        );
-      }
-
-      const friend = await friendService.add(user.id, body.username);
-      requestLogger.info("friends.added", { userId: user.id, friendUserId: friend.id });
-      return authJson({ friend }, 201);
-    }
-
-    if (url.pathname.startsWith("/friends/") && request.method === "DELETE") {
-      const friendUserId = decodeURIComponent(url.pathname.slice("/friends/".length));
-
-      if (!friendUserId) {
-        return authJson(
-          { error: { code: "INVALID_FRIEND", message: "Friend id is required" } },
-          400,
-        );
-      }
-
-      await friendService.remove(user.id, friendUserId);
-      requestLogger.info("friends.removed", { userId: user.id, friendUserId });
-      return authJson({ ok: true }, 200);
-    }
-
-    return authJson({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } }, 405);
-  } catch (error) {
-    if (error instanceof FriendError) {
-      return authJson({ error: { code: error.code, message: error.message } }, 400);
-    }
-
-    requestLogger.warn("friends.failed", { userId: user.id, error });
-    return authJson({ error: { code: "FRIENDS_FAILED", message: "Friends request failed" } }, 400);
-  }
-}
-
-async function handleCreateRoomRequest(
-  request: Request,
-  authService: AuthService | undefined,
-  persistenceStore: PersistenceStore | undefined,
-  roomManager: RoomManager,
-  requestLogger: Logger,
-): Promise<Response> {
-  if (!authService || !persistenceStore) {
-    requestLogger.warn("room.create.database_required");
-    return authJson(
-      { error: { code: "DATABASE_REQUIRED", message: "Database is required to create rooms" } },
-      503,
-    );
-  }
-
-  const user = await authService.verifyToken(readBearerToken(request) ?? "");
-
-  if (!user) {
-    requestLogger.warn("room.create.unauthenticated");
-    return authJson(
-      { error: { code: "UNAUTHENTICATED", message: "Log in before creating a room" } },
-      401,
-    );
-  }
-
-  try {
-    const parsed = parseCreateRoomInput(await request.json());
-
-    if (!parsed.ok) {
-      requestLogger.warn("room.create.invalid_input", { userId: user.id, message: parsed.message });
-      return authJson({ error: { code: "INVALID_ROOM", message: parsed.message } }, 400);
-    }
-
-    const roomId = createId("room");
-    const layout = createRoomLayoutFromTemplate(roomId, parsed.value);
-
-    await persistenceStore.seedRoom(layout, {
-      ownerUserId: user.id,
-      visibility: parsed.value.visibility,
-      description: parsed.value.description,
-      capacity: parsed.value.capacity,
-      access: parsed.value.access,
-    });
-    roomManager.addRoom(layout, {
-      access: parsed.value.access,
-      ownerUserId: user.id,
-      visibility: parsed.value.visibility,
-    });
-    requestLogger.info("room.created", {
-      userId: user.id,
-      roomId,
-      templateId: parsed.value.templateId,
-      visibility: parsed.value.visibility,
-      access: parsed.value.access,
-      capacity: parsed.value.capacity,
-    });
-
-    return authJson(
-      {
-        roomId,
-        room: {
-          id: roomId,
-          name: parsed.value.name,
-          userCount: 0,
-          joined: false,
-        },
-      },
-      201,
-    );
-  } catch (error) {
-    requestLogger.warn("room.create.failed", { userId: user.id, error });
-    return authJson({ error: { code: "INVALID_ROOM", message: "Unable to create room" } }, 400);
-  }
-}
-
-function sanitizeClientEventName(value: unknown): string {
-  if (typeof value !== "string") {
-    return "unknown";
-  }
-
-  const trimmed = value.trim().toLowerCase();
-
-  if (!trimmed) {
-    return "unknown";
-  }
-
-  return trimmed.replace(/[^a-z0-9_.:-]/g, "_").slice(0, 96);
-}
-
-function sanitizeClientLogLevel(value: unknown): LogLevel {
-  return value === "debug" || value === "info" || value === "warn" || value === "error"
-    ? value
-    : "info";
-}
-
-function sanitizeClientFields(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-
-  const fields: Record<string, unknown> = {};
-
-  for (const [key, fieldValue] of Object.entries(value).slice(0, 20)) {
-    if (fieldValue === undefined) {
-      continue;
-    }
-
-    fields[key.slice(0, 64)] =
-      typeof fieldValue === "string" ? fieldValue.slice(0, 240) : fieldValue;
-  }
-
-  return fields;
-}
-
-function authStatus(error: AuthError): number {
-  if (error.code === "AUTH_BUSY") {
-    return 429;
-  }
-
-  if (error.code === "USERNAME_TAKEN") {
-    return 409;
-  }
-
-  if (error.code === "INVALID_CREDENTIALS") {
-    return 401;
-  }
-
-  if (error.code === "USER_NOT_FOUND") {
-    return 404;
-  }
-
-  return 400;
-}
-
-function authHeaders(error: AuthError): Record<string, string> {
-  return error.code === "AUTH_BUSY" ? { "retry-after": "1" } : {};
-}
-
-function readBearerToken(request: Request): string | undefined {
-  const authorization = request.headers.get("authorization");
-  const [scheme, token] = authorization?.split(" ") ?? [];
-  return scheme?.toLocaleLowerCase("en-US") === "bearer" ? token : undefined;
-}
-
-function clientRateLimitKey(request: Request): string {
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return (
-    request.headers.get("cf-connecting-ip") ??
-    request.headers.get("x-real-ip") ??
-    forwardedFor ??
-    "local"
-  );
-}
-
-function authJson(body: unknown, status: number, headers: Record<string, string> = {}): Response {
-  return Response.json(body, { status, headers: { ...corsHeaders(), ...headers } });
-}
-
-function corsHeaders(): Record<string, string> {
-  return {
-    "access-control-allow-headers": "authorization,content-type,x-request-id",
-    "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
-    "access-control-allow-origin": "*",
-  };
-}

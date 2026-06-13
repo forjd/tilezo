@@ -4,16 +4,13 @@ export type ClientLogLevel = "debug" | "info" | "warn" | "error";
 
 export type ClientLoggerOptions = {
   fetcher?: typeof fetch;
-  getToken?: () => string | undefined;
 };
 
 export class ClientLogger {
   private readonly fetcher: typeof fetch;
-  private readonly getToken?: () => string | undefined;
 
   constructor(options: ClientLoggerOptions = {}) {
     this.fetcher = options.fetcher ?? fetch;
-    this.getToken = options.getToken;
   }
 
   async event(
@@ -27,19 +24,15 @@ export class ClientLogger {
       return;
     }
 
-    const token = this.getToken?.();
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-    };
-
-    if (token) {
-      headers.authorization = `Bearer ${token}`;
-    }
-
+    // Telemetry is sent anonymously: the server treats the user as optional and the API
+    // base URL is runtime-overridable, so attaching the bearer token here would risk
+    // exfiltrating it to an attacker-controlled origin via a crafted ?tilezoApiUrl link.
     try {
       await this.fetcher(`${getApiUrl()}/client-events`, {
         method: "POST",
-        headers,
+        headers: {
+          "content-type": "application/json",
+        },
         body,
         keepalive: true,
       });

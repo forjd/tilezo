@@ -28,6 +28,48 @@ describe("Room", () => {
     expect(room.getUsers()).toEqual([]);
   });
 
+  test("leave only removes the user when the connection id matches", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
+    room.join({ id: "user_1", username: "Dan", connectionId: "socket_new" });
+
+    // A stale socket closing with an older connection id must not evict the user.
+    expect(room.leave("user_1", "socket_old")).toBe(false);
+    expect(room.hasUser("user_1")).toBe(true);
+
+    // The current connection (or an unguarded leave) does remove them.
+    expect(room.leave("user_1", "socket_new")).toBe(true);
+    expect(room.hasUser("user_1")).toBe(false);
+  });
+
+  test("reattach re-points an existing user at a new connection without resetting position", () => {
+    let now = 1_000;
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 0, y: 0 }), () => now);
+    room.join({ id: "user_1", username: "Dan", connectionId: "socket_old" });
+    room.moveUser("user_1", { x: 2, y: 0 });
+    now += 720;
+    expect(room.getUsers()[0]?.position).toEqual({ x: 2, y: 0 });
+
+    room.reattach({ id: "user_1", username: "Dan", connectionId: "socket_new" });
+
+    expect(room.getConnectionId("user_1")).toBe("socket_new");
+    // Position is preserved (not reset to spawn) and the new connection owns the avatar.
+    expect(room.getUsers()[0]?.position).toEqual({ x: 2, y: 0 });
+    // The stale connection can no longer evict the (now reattached) user.
+    expect(room.leave("user_1", "socket_old")).toBe(false);
+  });
+
+  test("moveUser returns null for unknown users and unreachable targets", () => {
+    const room = new Room(
+      createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }, [{ x: 2, y: 2 }]),
+    );
+
+    expect(room.moveUser("ghost", { x: 1, y: 1 })).toBeNull();
+
+    room.join({ id: "user_1", username: "Dan" });
+    expect(room.moveUser("user_1", { x: 99, y: 99 })).toBeNull();
+    expect(room.moveUser("user_1", { x: 2, y: 2 })).toBeNull();
+  });
+
   test("movement updates authoritative user position after the path completes", () => {
     let now = 1_000;
     const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 0, y: 0 }), () => now);

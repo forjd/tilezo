@@ -38,7 +38,7 @@ export function findPath(
     closedKeys.add(currentKey);
 
     if (current.x === target.x && current.y === target.y) {
-      return reconstructPath(cameFrom, start, current);
+      return reconstructPath(cameFrom, start, current) ?? null;
     }
 
     for (const neighbor of grid.getNeighbors(current)) {
@@ -78,7 +78,7 @@ function reconstructPath(
   cameFrom: Map<string, TilePosition>,
   start: TilePosition,
   target: TilePosition,
-): TilePosition[] {
+): TilePosition[] | null {
   const path: TilePosition[] = [target];
   let current = target;
 
@@ -86,7 +86,10 @@ function reconstructPath(
     const parent = cameFrom.get(tileKey(current));
 
     if (!parent) {
-      break;
+      // A broken parent chain would otherwise yield a partial path that does not start
+      // at `start`. Fail loudly instead of returning a truncated, authoritative-looking
+      // path the server would broadcast as valid.
+      return null;
     }
 
     current = parent;

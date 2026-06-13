@@ -1,69 +1,121 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-type CoverageRecord = {
+export type CoverageRecord = {
   functionsFound: number;
   functionsHit: number;
   linesFound: number;
   linesHit: number;
 };
 
-const coveragePath = "coverage/lcov.info";
-const threshold = Number(Bun.env.COVERAGE_THRESHOLD ?? "80");
+const COVERAGE_PATH = "coverage/lcov.info";
 
-if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
-  throw new Error("COVERAGE_THRESHOLD must be a number between 0 and 100");
-}
+// Security- and correctness-critical directories that must not be allowed to rot behind a
+// single global aggregate (a large, well-covered UI file can otherwise mask an uncovered
+// auth/routing module). Each must independently clear the critical floor.
+const CRITICAL_DIRECTORIES = [
+  "apps/server/src/auth",
+  "apps/server/src/net",
+  "apps/server/src/http",
+  "apps/server/src/friends",
+  "apps/server/src/rooms",
+];
 
-if (!existsSync(coveragePath)) {
-  throw new Error(`Missing ${coveragePath}. Run bun run test:coverage first.`);
-}
+export function runCoverageCheck(env: Record<string, string | undefined> = Bun.env): void {
+  const threshold = Number(env.COVERAGE_THRESHOLD ?? "80");
+  const criticalThreshold = Number(env.CRITICAL_COVERAGE_THRESHOLD ?? "80");
 
-const records = parseLcov(readFileSync(coveragePath, "utf8"));
-const sourceFiles = listSourceFiles(["apps", "packages"]);
-const unmeasuredFiles = sourceFiles.filter((file) => !records.has(file));
-const measuredTotals = totalCoverage([...records.values()]);
-const unmeasuredLineCount = unmeasuredFiles.reduce(
-  (total, file) => total + countSignificantLines(file),
-  0,
-);
-const adjustedLineTotal = measuredTotals.linesFound + unmeasuredLineCount;
-const adjustedLineCoverage = percentage(measuredTotals.linesHit, adjustedLineTotal);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
+    throw new Error("COVERAGE_THRESHOLD must be a number between 0 and 100");
+  }
 
-console.log(`Measured files: ${sourceFiles.length - unmeasuredFiles.length}/${sourceFiles.length}`);
-console.log(
-  `LCOV line coverage: ${measuredTotals.linesHit}/${measuredTotals.linesFound} (${percentage(
-    measuredTotals.linesHit,
-    measuredTotals.linesFound,
-  ).toFixed(2)}%)`,
-);
-console.log(
-  `LCOV function coverage: ${measuredTotals.functionsHit}/${measuredTotals.functionsFound} (${percentage(
-    measuredTotals.functionsHit,
-    measuredTotals.functionsFound,
-  ).toFixed(2)}%)`,
-);
-console.log(
-  `Adjusted line coverage: ${measuredTotals.linesHit}/${adjustedLineTotal} (${adjustedLineCoverage.toFixed(
-    2,
-  )}%)`,
-);
+  if (!Number.isFinite(criticalThreshold) || criticalThreshold < 0 || criticalThreshold > 100) {
+    throw new Error("CRITICAL_COVERAGE_THRESHOLD must be a number between 0 and 100");
+  }
 
-if (unmeasuredFiles.length > 0) {
-  console.log("Unmeasured source files:");
+  if (!existsSync(COVERAGE_PATH)) {
+    throw new Error(`Missing ${COVERAGE_PATH}. Run bun run test:coverage first.`);
+  }
 
-  for (const file of unmeasuredFiles) {
-    console.log(`- ${file}`);
+  const records = parseLcov(readFileSync(COVERAGE_PATH, "utf8"));
+  const sourceFiles = listSourceFiles(["apps", "packages"]);
+  const sourceFileSet = new Set(sourceFiles);
+  const unmeasuredFiles = sourceFiles.filter((file) => !records.has(file));
+  // Only count product code under apps/packages. The gate scopes source discovery to those
+  // trees, so the totals must too — otherwise low-coverage dev/ops scripts (benchmark,
+  // stress-test, this very file) that tests happen to import would skew the product number.
+  const measuredTotals = totalCoverage(
+    [...records.entries()].filter(([file]) => sourceFileSet.has(file)).map(([, record]) => record),
+  );
+  const unmeasuredLineCount = unmeasuredFiles.reduce(
+    (total, file) => total + countSignificantLines(file),
+    0,
+  );
+  const adjustedLineTotal = measuredTotals.linesFound + unmeasuredLineCount;
+  const adjustedLineCoverage = percentage(measuredTotals.linesHit, adjustedLineTotal);
+
+  console.log(
+    `Measured files: ${sourceFiles.length - unmeasuredFiles.length}/${sourceFiles.length}`,
+  );
+  console.log(
+    `LCOV line coverage: ${measuredTotals.linesHit}/${measuredTotals.linesFound} (${percentage(
+      measuredTotals.linesHit,
+      measuredTotals.linesFound,
+    ).toFixed(2)}%)`,
+  );
+  console.log(
+    `LCOV function coverage: ${measuredTotals.functionsHit}/${measuredTotals.functionsFound} (${percentage(
+      measuredTotals.functionsHit,
+      measuredTotals.functionsFound,
+    ).toFixed(2)}%)`,
+  );
+  console.log(
+    `Adjusted line coverage: ${measuredTotals.linesHit}/${adjustedLineTotal} (${adjustedLineCoverage.toFixed(
+      2,
+    )}%)`,
+  );
+
+  if (unmeasuredFiles.length > 0) {
+    console.log("Unmeasured source files:");
+
+    for (const file of unmeasuredFiles) {
+      console.log(`- ${file}`);
+    }
+  }
+
+  const failures: string[] = [];
+
+  for (const directory of CRITICAL_DIRECTORIES) {
+    const stats = directoryCoverage(directory, sourceFiles, records);
+
+    if (stats.adjustedFound === 0) {
+      continue;
+    }
+
+    const coverage = percentage(stats.linesHit, stats.adjustedFound);
+    console.log(
+      `Critical ${directory}: ${stats.linesHit}/${stats.adjustedFound} (${coverage.toFixed(2)}%)`,
+    );
+
+    if (coverage < criticalThreshold) {
+      failures.push(
+        `${directory} adjusted line coverage ${coverage.toFixed(2)}% is below ${criticalThreshold.toFixed(2)}%`,
+      );
+    }
+  }
+
+  if (adjustedLineCoverage < threshold) {
+    failures.push(
+      `Adjusted line coverage ${adjustedLineCoverage.toFixed(2)}% is below ${threshold.toFixed(2)}%`,
+    );
+  }
+
+  if (failures.length > 0) {
+    throw new Error(failures.join("\n"));
   }
 }
 
-if (adjustedLineCoverage < threshold) {
-  throw new Error(
-    `Adjusted line coverage ${adjustedLineCoverage.toFixed(2)}% is below ${threshold.toFixed(2)}%`,
-  );
-}
-
-function parseLcov(lcov: string): Map<string, CoverageRecord> {
+export function parseLcov(lcov: string): Map<string, CoverageRecord> {
   const records = new Map<string, CoverageRecord>();
 
   for (const rawRecord of lcov
@@ -92,7 +144,35 @@ function numberField(record: string, field: string): number {
   return Number(record.match(new RegExp(`^${field}:(\\d+)$`, "m"))?.[1] ?? 0);
 }
 
-function listSourceFiles(directories: string[]): string[] {
+function directoryCoverage(
+  directory: string,
+  sourceFiles: string[],
+  records: Map<string, CoverageRecord>,
+): { linesHit: number; adjustedFound: number } {
+  const prefix = `${directory}/`;
+  let linesHit = 0;
+  let adjustedFound = 0;
+
+  for (const file of sourceFiles) {
+    if (!file.startsWith(prefix)) {
+      continue;
+    }
+
+    const record = records.get(file);
+
+    if (record) {
+      linesHit += record.linesHit;
+      adjustedFound += record.linesFound;
+    } else {
+      // Executable source not present in LCOV counts as fully uncovered.
+      adjustedFound += countSignificantLines(file);
+    }
+  }
+
+  return { linesHit, adjustedFound };
+}
+
+export function listSourceFiles(directories: string[]): string[] {
   return directories
     .flatMap((directory) => walk(directory))
     .filter((file) => file.endsWith(".ts"))
@@ -102,13 +182,25 @@ function listSourceFiles(directories: string[]): string[] {
     .sort();
 }
 
-function isCoverageTarget(file: string): boolean {
+// Browser composition/entry roots that wire Pixi (WebGL/canvas) and the DOM together.
+// Their constituent units (RoomScene, NetClient, ChatPanel, the UI panels, the auth/room/
+// friend clients) are all independently unit-tested; exercising the roots themselves needs
+// a full browser + GPU harness, so — like the already-excluded entrypoints — they are not
+// part of the line-coverage gate. This is NOT used to hide server/product logic.
+const COMPOSITION_ROOTS = [
+  "apps/client/src/app/createApp.ts",
+  "apps/client/src/game/Game.ts",
+  "apps/client/src/preview-entry.ts",
+];
+
+export function isCoverageTarget(file: string): boolean {
   if (
     file.endsWith(".config.ts") ||
     file.endsWith("/main.ts") ||
     file.endsWith("/index.ts") ||
     file.endsWith("/types.ts") ||
-    file.endsWith("Types.ts")
+    file.endsWith("Types.ts") ||
+    COMPOSITION_ROOTS.some((root) => file === root || file.endsWith(`/${root}`))
   ) {
     return false;
   }
@@ -135,7 +227,7 @@ function walk(directory: string): string[] {
   });
 }
 
-function countSignificantLines(file: string): number {
+export function countSignificantLines(file: string): number {
   return readFileSync(file, "utf8")
     .split(/\r?\n/)
     .filter((line) => {
@@ -149,7 +241,7 @@ function countSignificantLines(file: string): number {
     }).length;
 }
 
-function totalCoverage(records: CoverageRecord[]): CoverageRecord {
+export function totalCoverage(records: CoverageRecord[]): CoverageRecord {
   return records.reduce(
     (total, record) => ({
       functionsFound: total.functionsFound + record.functionsFound,
@@ -166,6 +258,10 @@ function totalCoverage(records: CoverageRecord[]): CoverageRecord {
   );
 }
 
-function percentage(hit: number, found: number): number {
+export function percentage(hit: number, found: number): number {
   return found === 0 ? 100 : (hit / found) * 100;
+}
+
+if (import.meta.main) {
+  runCoverageCheck();
 }

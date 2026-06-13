@@ -62,6 +62,17 @@ export class RoomScene {
     this.doorTile = this.tiles.getAttachedDoorTile();
     this.roomBounds = calculateRoomBounds(snapshot.tiles);
     this.resetCamera();
+    this.clear();
+
+    for (const user of snapshot.users) {
+      this.addAvatar(user.id, user.username, user.position, user.appearance);
+    }
+  }
+
+  // Removes every avatar from the scene without tearing down the world/pointer bindings.
+  // Used before a reconnect so stale avatars are not left animating until (or unless) a
+  // fresh snapshot arrives.
+  clear(): void {
     for (const avatar of this.avatars.values()) {
       avatar.destroy();
     }
@@ -69,10 +80,6 @@ export class RoomScene {
     this.avatarLayer.removeChildren();
     this.avatarOverlayLayer.removeChildren();
     this.avatars.clear();
-
-    for (const user of snapshot.users) {
-      this.addAvatar(user.id, user.username, user.position, user.appearance);
-    }
   }
 
   handleServerMessage(message: ServerMessage): void {

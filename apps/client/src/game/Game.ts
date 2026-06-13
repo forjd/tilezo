@@ -78,7 +78,14 @@ export class Game {
           this.options.setStatus(`${message.code}: ${message.message}`);
         }
 
-        this.scene?.handleServerMessage(message);
+        try {
+          this.scene?.handleServerMessage(message);
+        } catch (error) {
+          // Never let one malformed/unexpected message tear down the message loop or the
+          // scene; surface it and keep processing subsequent updates.
+          this.options.setStatus("error rendering room update");
+          console.error("RoomScene failed to handle server message", message.type, error);
+        }
       }),
     );
 
@@ -120,6 +127,10 @@ export class Game {
   }
 
   async reconnect(token: string): Promise<void> {
+    // Drop stale avatars before reconnecting so the player does not see a frozen copy of
+    // the previous room while the server re-sends a snapshot (or, in edge cases where no
+    // snapshot arrives, an honest empty scene instead of a misleading stale one).
+    this.scene?.clear();
     await this.net.connect(token);
     this.connected = true;
     this.app.ticker.start();

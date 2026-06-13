@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   username: text("username").notNull(),
   usernameKey: text("username_key").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  tokenVersion: integer("token_version").notNull().default(0),
   appearance: jsonb("appearance")
     .$type<AvatarAppearance>()
     .notNull()
@@ -36,6 +37,9 @@ export const rooms = pgTable(
   ],
 );
 
+// Reserved for future room furniture/items. The schema and indexes exist so the table is
+// ready, but no item-placement feature reads or writes it yet (RoomLayout has no items),
+// so there is no data loss today — this is scaffolding, not an active table.
 export const roomItems = pgTable(
   "room_items",
   {
