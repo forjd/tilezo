@@ -66,4 +66,46 @@ describe("migration journal", () => {
       previousId = snapshot.id;
     }
   });
+
+  test("records check constraints introduced by manual SQL migrations", async () => {
+    const metaDirectory = new URL("./migrations/meta/", import.meta.url);
+    const friendshipSnapshot = (await Bun.file(
+      new URL("0007_snapshot.json", metaDirectory),
+    ).json()) as MigrationSnapshot;
+    const directMessageSnapshot = (await Bun.file(
+      new URL("0009_snapshot.json", metaDirectory),
+    ).json()) as MigrationSnapshot;
+    const requestSnapshot = (await Bun.file(
+      new URL("0010_snapshot.json", metaDirectory),
+    ).json()) as MigrationSnapshot;
+
+    expect(
+      friendshipSnapshot.tables["public.friendships"]?.checkConstraints.friendships_no_self_check,
+    ).toEqual({
+      name: "friendships_no_self_check",
+      value: '"friendships"."user_id" <> "friendships"."friend_user_id"',
+    });
+    expect(
+      directMessageSnapshot.tables["public.direct_messages"]?.checkConstraints
+        .direct_messages_no_self_check,
+    ).toEqual({
+      name: "direct_messages_no_self_check",
+      value: '"direct_messages"."sender_user_id" <> "direct_messages"."recipient_user_id"',
+    });
+    expect(
+      requestSnapshot.tables["public.friendships"]?.checkConstraints.friendships_status_check,
+    ).toEqual({
+      name: "friendships_status_check",
+      value: "\"friendships\".\"status\" IN ('pending', 'accepted')",
+    });
+  });
 });
+
+type MigrationSnapshot = {
+  tables: Record<
+    string,
+    {
+      checkConstraints: Record<string, { name: string; value: string }>;
+    }
+  >;
+};

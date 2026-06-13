@@ -1,6 +1,16 @@
 import type { RoomLayout } from "@tilezo/engine";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
-import { index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -95,6 +105,8 @@ export const friendships = pgTable(
     primaryKey({ columns: [table.userId, table.friendUserId] }),
     index("friendships_friend_user_id_idx").on(table.friendUserId),
     index("friendships_status_idx").on(table.status),
+    check("friendships_no_self_check", sql`${table.userId} <> ${table.friendUserId}`),
+    check("friendships_status_check", sql`${table.status} IN ('pending', 'accepted')`),
   ],
 );
 
@@ -118,5 +130,6 @@ export const directMessages = pgTable(
       table.createdAt,
     ),
     index("direct_messages_recipient_idx").on(table.recipientUserId, table.createdAt),
+    check("direct_messages_no_self_check", sql`${table.senderUserId} <> ${table.recipientUserId}`),
   ],
 );

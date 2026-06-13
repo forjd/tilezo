@@ -529,7 +529,16 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "friendships_no_self_check": {
+          "name": "friendships_no_self_check",
+          "value": "\"friendships\".\"user_id\" <> \"friendships\".\"friend_user_id\""
+        },
+        "friendships_status_check": {
+          "name": "friendships_status_check",
+          "value": "\"friendships\".\"status\" IN ('pending', 'accepted')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.direct_messages": {
@@ -641,7 +650,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "direct_messages_no_self_check": {
+          "name": "direct_messages_no_self_check",
+          "value": "\"direct_messages\".\"sender_user_id\" <> \"direct_messages\".\"recipient_user_id\""
+        }
+      },
       "isRLSEnabled": false
     }
   },
