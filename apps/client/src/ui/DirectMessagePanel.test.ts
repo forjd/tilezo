@@ -68,6 +68,23 @@ describe("DirectMessagePanel", () => {
     expect(sent).toEqual([{ friendId: "user_2", text: "yo" }]);
     expect(input.value).toBe("");
   });
+
+  test("keeps the typed message when local send fails", () => {
+    installDocument();
+    const panel = new DirectMessagePanel({
+      onSend() {
+        return false;
+      },
+    });
+    panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
+
+    const form = panel.element.children[2] as unknown as FakeElement;
+    const input = form.children[0] as FakeElement;
+    input.value = "  try again  ";
+    form.dispatch("submit", { preventDefault() {} });
+
+    expect(input.value).toBe("  try again  ");
+  });
 });
 
 function installDocument() {

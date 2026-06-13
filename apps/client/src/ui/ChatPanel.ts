@@ -4,7 +4,7 @@ export class ChatPanel {
   private readonly maxMessages = 100;
   private readonly list = document.createElement("div");
   private readonly input = document.createElement("input");
-  private sendHandler?: (text: string) => void;
+  private sendHandler?: (text: string) => boolean | void;
   private typingHandler?: (isTyping: boolean) => void;
   private typingTimeout?: ReturnType<typeof setTimeout>;
   private isTyping = false;
@@ -27,7 +27,10 @@ export class ChatPanel {
         return;
       }
 
-      this.sendHandler?.(text);
+      if (this.sendHandler?.(text) === false) {
+        return;
+      }
+
       this.input.value = "";
       this.setTyping(false);
     });
@@ -54,7 +57,7 @@ export class ChatPanel {
     this.setTyping(false);
   }
 
-  onSend(handler: (text: string) => void): void {
+  onSend(handler: (text: string) => boolean | void): void {
     this.sendHandler = handler;
   }
 

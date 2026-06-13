@@ -46,7 +46,9 @@ describe("ChatPanel", () => {
     const sent: string[] = [];
     const input = getInput(panel);
 
-    panel.onSend((text) => sent.push(text));
+    panel.onSend((text) => {
+      sent.push(text);
+    });
     input.value = "  hello room  ";
     input.dispatch("keydown", { key: "Enter" });
     input.value = "   ";
@@ -56,6 +58,18 @@ describe("ChatPanel", () => {
 
     expect(sent).toEqual(["hello room"]);
     expect(input.value).toBe("ignored");
+  });
+
+  test("keeps text when the send handler rejects the local send", () => {
+    installDocument();
+    const panel = new ChatPanel();
+    const input = getInput(panel);
+
+    panel.onSend(() => false);
+    input.value = "  still here  ";
+    input.dispatch("keydown", { key: "Enter" });
+
+    expect(input.value).toBe("  still here  ");
   });
 
   test("emits typing status from input changes and message sends", () => {

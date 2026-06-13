@@ -1,7 +1,7 @@
 import type { DirectMessage } from "@tilezo/protocol/messages";
 
 type DirectMessagePanelOptions = {
-  onSend: (friendId: string, text: string) => void;
+  onSend: (friendId: string, text: string) => boolean | void;
 };
 
 type Conversation = {
@@ -55,7 +55,10 @@ export class DirectMessagePanel {
         return;
       }
 
-      this.options.onSend(this.conversation.friendId, text);
+      if (this.options.onSend(this.conversation.friendId, text) === false) {
+        return;
+      }
+
       this.input.value = "";
     });
 

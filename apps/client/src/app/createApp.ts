@@ -178,7 +178,7 @@ export function createApp(root: HTMLElement): void {
 
   const directMessagePanel = new DirectMessagePanel({
     onSend(friendId, text) {
-      game?.sendDirectMessage(friendId, text);
+      return game?.sendDirectMessage(friendId, text) ?? false;
     },
   });
 

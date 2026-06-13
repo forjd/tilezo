@@ -100,7 +100,7 @@ export class Game {
     this.refreshRooms();
 
     this.options.chat.onSend((text) => {
-      this.sendIfConnected({ type: "chat.say", text });
+      return this.sendIfConnected({ type: "chat.say", text });
     });
     this.options.chat.onTypingChange((isTyping) => {
       this.sendIfConnected({ type: "chat.typing", isTyping });
