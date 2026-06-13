@@ -65,7 +65,11 @@ export class RoomScene {
     this.clear();
 
     for (const user of snapshot.users) {
-      this.addAvatar(user.id, user.username, user.position, user.appearance);
+      const avatar = this.addAvatar(user.id, user.username, user.position, user.appearance);
+
+      if (user.movementPath && user.movementPath.length > 1) {
+        avatar.setPath(user.movementPath);
+      }
     }
   }
 
@@ -132,12 +136,13 @@ export class RoomScene {
     username: string,
     position: TilePosition,
     appearance: AvatarAppearance,
-  ): void {
+  ): Avatar {
     this.removeAvatar(userId);
     const avatar = new Avatar(userId, username, position, appearance);
     this.avatars.set(userId, avatar);
     this.placeAvatarBody(avatar);
     this.avatarOverlayLayer.addChild(avatar.overlayView);
+    return avatar;
   }
 
   private removeAvatar(userId: string): void {

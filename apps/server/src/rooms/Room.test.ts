@@ -119,17 +119,33 @@ describe("Room", () => {
 
     room.join({ id: "user_1", username: "Dan" });
     room.moveUser("user_1", { x: 3, y: 0 });
-    now += 180;
+    now += 360;
 
     expect(room.moveUser("user_1", { x: 3, y: 0 })).toEqual([
-      { x: 0, y: 0 },
       { x: 1, y: 0 },
       { x: 2, y: 0 },
       { x: 3, y: 0 },
     ]);
 
-    now += 180;
-
     expect(room.getUsers()[0]?.position).toEqual({ x: 1, y: 0 });
+  });
+
+  test("snapshots include remaining movement for users mid-walk", () => {
+    let now = 1_000;
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 4, 3, { x: 0, y: 0 }), () => now);
+
+    room.join({ id: "user_1", username: "Dan" });
+    room.moveUser("user_1", { x: 3, y: 0 });
+    now += 360;
+
+    expect(room.getUsers()[0]).toMatchObject({
+      id: "user_1",
+      position: { x: 1, y: 0 },
+      movementPath: [
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+        { x: 3, y: 0 },
+      ],
+    });
   });
 });

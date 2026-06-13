@@ -61,6 +61,7 @@ export type RoomUserSnapshot = {
   username: string;
   position: TilePosition;
   appearance: AvatarAppearance;
+  movementPath?: TilePosition[];
 };
 
 export type RoomSnapshotMessage = {

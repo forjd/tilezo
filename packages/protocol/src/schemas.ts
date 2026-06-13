@@ -122,6 +122,7 @@ const roomUserSnapshotSchema = z.object({
   username: z.string(),
   position: tilePositionSchema,
   appearance: avatarAppearanceSchema,
+  movementPath: z.array(tilePositionSchema).optional(),
 });
 
 const publicRoomSummarySchema = z.object({

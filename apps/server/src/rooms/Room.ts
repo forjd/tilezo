@@ -89,7 +89,7 @@ export class Room {
     const activeMovement = this.movements.get(userId);
 
     if (activeMovement && sameTile(activeMovement.path.at(-1), target)) {
-      return activeMovement.path.map((position) => ({ ...position }));
+      return this.getRemainingPath(userId) ?? [currentPosition];
     }
 
     const path = findPath(this.grid, currentPosition, target);
@@ -140,12 +140,17 @@ export class Room {
 
   getUsers() {
     this.sweepCompletedMovements();
-    return [...this.users.values()].map((user) => ({
-      id: user.id,
-      username: user.username,
-      position: this.resolveUserPosition(user.id, user),
-      appearance: { ...user.appearance },
-    }));
+    return [...this.users.values()].map((user) => {
+      const position = this.resolveUserPosition(user.id, user);
+      const snapshot = {
+        id: user.id,
+        username: user.username,
+        position,
+        appearance: { ...user.appearance },
+      };
+      const movementPath = this.getRemainingPath(user.id);
+      return movementPath ? { ...snapshot, movementPath } : snapshot;
+    });
   }
 
   isWalkable(position: TilePosition): boolean {
@@ -226,6 +231,22 @@ export class Room {
 
       this.movements.delete(userId);
     }
+  }
+
+  private getRemainingPath(userId: string): TilePosition[] | undefined {
+    const movement = this.movements.get(userId);
+
+    if (!movement) {
+      return undefined;
+    }
+
+    const elapsed = Math.max(0, this.clock() - movement.startedAt);
+    const reachedIndex = Math.min(
+      movement.path.length - 1,
+      Math.floor(elapsed / MOVEMENT_MILLISECONDS_PER_TILE),
+    );
+    const remainingPath = movement.path.slice(reachedIndex).map((position) => ({ ...position }));
+    return remainingPath.length > 1 ? remainingPath : undefined;
   }
 }
 

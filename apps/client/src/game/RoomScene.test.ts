@@ -97,6 +97,28 @@ describe("RoomScene", () => {
     expect(world?.y).toBe(348);
   });
 
+  test("continues snapshot movement paths for late joiners", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.handleServerMessage(
+      snapshot([
+        {
+          ...user("user_1", "Dan", { x: 0, y: 0 }),
+          movementPath: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+          ],
+        },
+      ]),
+    );
+    scene.update(0.36);
+
+    const avatar = sceneState(scene).avatars.get("user_1");
+    expect(avatar?.view.x).toBe(32);
+    expect(avatar?.view.y).toBe(16);
+  });
+
   test("shows chat messages above the matching avatar", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});

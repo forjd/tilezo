@@ -224,6 +224,10 @@ describe("parseServerMessage", () => {
           username: "Dan",
           position: { x: 0, y: 0 },
           appearance: DEFAULT_AVATAR_APPEARANCE,
+          movementPath: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+          ],
         },
       }).ok,
     ).toBe(true);
