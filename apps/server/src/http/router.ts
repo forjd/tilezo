@@ -4,6 +4,7 @@ import type { FixedWindowRateLimiter } from "../auth/rateLimit";
 import type { ServerConfig } from "../config";
 import type { PersistenceStore } from "../db/persistence";
 import { FriendError, type FriendService } from "../friends/friends";
+import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger, LogLevel } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
 import type { RoomManager } from "../rooms/RoomManager";
@@ -20,6 +21,7 @@ export type RouterDeps = {
   metrics: Metrics;
   auth?: AuthService;
   friends?: FriendService;
+  directMessages?: DirectMessageService;
   persistence?: PersistenceStore;
   rooms: RoomManager;
   registerRateLimiter: FixedWindowRateLimiter;
@@ -115,6 +117,14 @@ async function dispatch(ctx: RouteContext): Promise<Response> {
 
   if (url.pathname === "/client-events" && request.method === "POST") {
     return handleClientEventRequest(ctx);
+  }
+
+  if (
+    url.pathname.startsWith("/friends/") &&
+    url.pathname.endsWith("/messages") &&
+    request.method === "GET"
+  ) {
+    return handleDirectMessageHistoryRequest(ctx);
   }
 
   if (url.pathname === "/friends" || url.pathname.startsWith("/friends/")) {
@@ -453,6 +463,49 @@ async function handleFriendsRequest(ctx: RouteContext): Promise<Response> {
 
     requestLogger.error("friends.failed", { userId: user.id, error });
     return authJson({ error: { code: "FRIENDS_FAILED", message: "Friends request failed" } }, 400);
+  }
+}
+
+async function handleDirectMessageHistoryRequest(ctx: RouteContext): Promise<Response> {
+  const { auth, directMessages, requestLogger, url } = ctx;
+
+  if (!auth || !directMessages) {
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for messages" } },
+      503,
+    );
+  }
+
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
+
+  if (!user) {
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before reading messages" } },
+      401,
+    );
+  }
+
+  const friendId = decodeURIComponent(url.pathname.slice("/friends/".length, -"/messages".length));
+
+  if (!friendId) {
+    return authJson({ error: { code: "INVALID_FRIEND", message: "Friend id is required" } }, 400);
+  }
+
+  try {
+    const requestedLimit = Number(url.searchParams.get("limit"));
+    const messages = await directMessages.history(
+      user.id,
+      friendId,
+      Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : undefined,
+    );
+    return authJson({ messages }, 200);
+  } catch (error) {
+    if (error instanceof DirectMessageError) {
+      return authJson({ error: { code: error.code, message: error.message } }, 400);
+    }
+
+    requestLogger.error("dm.history.failed", { userId: user.id, friendId, error });
+    return authJson({ error: { code: "DM_FAILED", message: "Could not load messages" } }, 400);
   }
 }
 

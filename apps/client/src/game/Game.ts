@@ -1,6 +1,7 @@
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 import type {
   ClientMessage,
+  DirectMessage,
   PublicRoomSummary,
   RoomSnapshotMessage,
 } from "@tilezo/protocol/messages";
@@ -15,6 +16,7 @@ type GameOptions = {
   setStatus: (status: string) => void;
   setRooms: (rooms: PublicRoomSummary[]) => void;
   onRoomJoined: (snapshot: RoomSnapshotMessage) => void;
+  onDirectMessage: (message: DirectMessage) => void;
   onDisconnected: () => void;
 };
 
@@ -74,6 +76,10 @@ export class Game {
           this.options.chat.addMessage(message.username, message.text, message.sentAt);
         }
 
+        if (message.type === "dm.message") {
+          this.options.onDirectMessage(message);
+        }
+
         if (message.type === "error") {
           this.options.setStatus(`${message.code}: ${message.message}`);
         }
@@ -124,6 +130,10 @@ export class Game {
 
   updateAppearance(appearance: AvatarAppearance): void {
     this.sendIfConnected({ type: "avatar.appearance.update", appearance });
+  }
+
+  sendDirectMessage(toUserId: string, text: string): boolean {
+    return this.sendIfConnected({ type: "dm.send", toUserId, text });
   }
 
   async reconnect(): Promise<void> {

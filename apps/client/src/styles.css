@@ -524,6 +524,66 @@ select {
   right: 20px;
 }
 
+.dm-panel {
+  position: absolute;
+  top: 86px;
+  right: 20px;
+  z-index: 6;
+  display: grid;
+  width: min(380px, calc(100vw - 40px));
+  max-height: calc(100vh - 118px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 2px solid #1d2324;
+  border-radius: 8px;
+  background: #eeeade;
+  box-shadow:
+    inset 0 0 0 2px #ffffff,
+    7px 7px 0 rgba(31, 45, 47, 0.32);
+  pointer-events: auto;
+}
+
+.dm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.dm-message {
+  max-width: 78%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.dm-message-theirs {
+  align-self: flex-start;
+  background: #d7d2c4;
+  color: #1f2d2f;
+}
+
+.dm-message-mine {
+  align-self: flex-end;
+  background: #2f6f5f;
+  color: #fafaf5;
+}
+
+.dm-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 2px solid #d2ccbd;
+}
+
+.dm-form input {
+  flex: 1;
+  min-width: 0;
+}
+
 .room-browser-header {
   display: flex;
   align-items: center;

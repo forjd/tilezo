@@ -11,7 +11,7 @@ export type SocketData = {
   lastTypingState?: boolean;
 };
 
-export type RateLimitedMessageKind = "movement" | "chat" | "typing" | "default";
+export type RateLimitedMessageKind = "movement" | "chat" | "typing" | "dm" | "default";
 
 export type RateLimitState = {
   tokens: number;

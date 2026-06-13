@@ -5,6 +5,7 @@ import {
 } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
+import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
 import type { PresenceTracker } from "../presence/presence";
@@ -17,6 +18,7 @@ type Context = {
   rooms: RoomManager;
   publish: (topic: string, message: ServerMessage) => void;
   persistence?: PersistenceStore;
+  directMessages?: DirectMessageService;
   logger?: Logger;
   metrics?: Metrics;
   presence?: PresenceTracker;
@@ -231,6 +233,22 @@ export function handleMessage(
         break;
       }
 
+      case "dm.send": {
+        if (!consumeRateLimit(ws, "dm")) {
+          context.metrics?.increment("rate_limited.dm");
+          sendError(ws, "RATE_LIMITED", "Slow down before sending another message");
+          return;
+        }
+
+        if (!ws.data.username) {
+          sendError(ws, "UNAUTHENTICATED", "Log in before sending messages");
+          return;
+        }
+
+        void sendDirectMessage(ws, parsed.value.toUserId, parsed.value.text, context);
+        break;
+      }
+
       case "ping":
         if (!consumeRateLimit(ws, "default")) {
           context.metrics?.increment("rate_limited.ping");
@@ -258,6 +276,9 @@ export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): v
   }
   context.metrics?.socketOpened();
   context.logger?.info("websocket.opened", socketFields(ws));
+  // Subscribe to a per-user topic so direct messages can be delivered to this user's
+  // sockets regardless of which room (if any) they are in.
+  ws.subscribe(userTopic(ws.data.userId));
   send(ws, {
     type: "connected",
     userId: ws.data.userId,
@@ -532,8 +553,50 @@ function getJoinedRoom(ws: ServerWebSocket<SocketData>, rooms: RoomManager) {
   return room;
 }
 
+async function sendDirectMessage(
+  ws: ServerWebSocket<SocketData>,
+  toUserId: string,
+  text: string,
+  context: Context,
+): Promise<void> {
+  if (!context.directMessages) {
+    sendError(ws, "DM_UNAVAILABLE", "Direct messages are unavailable");
+    return;
+  }
+
+  try {
+    const record = await context.directMessages.send(ws.data.userId, toUserId, text);
+    const message: ServerMessage = {
+      type: "dm.message",
+      id: record.id,
+      fromUserId: record.fromUserId,
+      toUserId: record.toUserId,
+      text: record.text,
+      sentAt: record.sentAt,
+    };
+    // Deliver to the recipient's sockets and echo to the sender's (so every tab and the
+    // server-assigned id/timestamp stay in sync).
+    context.publish(userTopic(record.toUserId), message);
+    context.publish(userTopic(record.fromUserId), message);
+    context.metrics?.increment("dm.sent");
+  } catch (error) {
+    if (error instanceof DirectMessageError) {
+      context.metrics?.increment(`dm.rejected.${error.code}`);
+      sendError(ws, error.code, error.message);
+      return;
+    }
+
+    context.logger?.warn("dm.send.failed", { ...socketFields(ws), error });
+    sendError(ws, "DM_FAILED", "Could not send your message");
+  }
+}
+
 function roomTopic(roomId: string): string {
   return `room:${roomId}`;
+}
+
+function userTopic(userId: string): string {
+  return `user:${userId}`;
 }
 
 function send(ws: ServerWebSocket<SocketData>, message: ServerMessage): void {
@@ -565,6 +628,7 @@ export const RATE_LIMITS = {
   movement: { burst: 12, refillPerSecond: 8 },
   chat: { burst: 5, refillPerSecond: 2 },
   typing: { burst: 8, refillPerSecond: 4 },
+  dm: { burst: 5, refillPerSecond: 1 },
   default: { burst: 20, refillPerSecond: 10 },
 } satisfies Record<string, { burst: number; refillPerSecond: number }>;
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createRectRoomLayout } from "@tilezo/engine";
 import { DEFAULT_AVATAR_APPEARANCE, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
+import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import { RoomManager } from "../rooms/RoomManager";
 import {
   consumeRateLimit,
@@ -551,7 +552,8 @@ describe("handleOpen", () => {
     });
     await Promise.resolve();
 
-    expect(ws.subscribed).toEqual(["room:studio"]);
+    // The socket subscribes to its per-user DM topic on open, then resumes the room.
+    expect(ws.subscribed).toEqual(["user:user_db_1", "room:studio"]);
     expect(ws.sent).toEqual([
       { type: "connected", userId: "user_db_1" },
       {
@@ -679,6 +681,63 @@ describe("duplicate connections and movement guards", () => {
 
     expect(published).toEqual([]);
     expect(ws.sent).toEqual([]);
+  });
+});
+
+describe("direct messages", () => {
+  const sent = {
+    id: "dm_1",
+    fromUserId: "user_db_1",
+    toUserId: "user_db_2",
+    text: "hello",
+    sentAt: "2026-06-13T00:00:00.000Z",
+  };
+
+  test("delivers a direct message to the recipient and sender topics", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const directMessages = {
+      async send(from: string, to: string, text: string) {
+        return { ...sent, fromUserId: from, toUserId: to, text };
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.send", toUserId: "user_db_2", text: "hello" }), {
+      rooms,
+      publish(topic, message) {
+        published.push({ topic, message });
+      },
+      directMessages,
+    });
+    await flushAsyncMessages();
+
+    const message: ServerMessage = { type: "dm.message", ...sent };
+    expect(published).toContainEqual({ topic: "user:user_db_2", message });
+    expect(published).toContainEqual({ topic: "user:user_db_1", message });
+  });
+
+  test("surfaces a friendship rejection as an error", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const directMessages = {
+      async send() {
+        throw new DirectMessageError("NOT_FRIENDS", "You can only message your friends");
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.send", toUserId: "user_db_2", text: "hi" }), {
+      rooms,
+      publish() {},
+      directMessages,
+    });
+    await flushAsyncMessages();
+
+    expect(ws.sent).toContainEqual({
+      type: "error",
+      code: "NOT_FRIENDS",
+      message: "You can only message your friends",
+    });
   });
 });
 

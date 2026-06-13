@@ -92,3 +92,26 @@ export const friendships = pgTable(
     index("friendships_friend_user_id_idx").on(table.friendUserId),
   ],
 );
+
+export const directMessages = pgTable(
+  "direct_messages",
+  {
+    id: text("id").primaryKey(),
+    senderUserId: text("sender_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    recipientUserId: text("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("direct_messages_pair_idx").on(
+      table.senderUserId,
+      table.recipientUserId,
+      table.createdAt,
+    ),
+    index("direct_messages_recipient_idx").on(table.recipientUserId, table.createdAt),
+  ],
+);

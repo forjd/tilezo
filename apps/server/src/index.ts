@@ -8,6 +8,7 @@ import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
 import { DrizzleFriendStore, FriendService } from "./friends/friends";
 import { corsHeaders, createHttpRouter, readSessionToken } from "./http/router";
+import { DirectMessageService, DrizzleDirectMessageStore } from "./messaging/messaging";
 import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { createLogger, parseLogLevel } from "./observability/logger";
@@ -63,6 +64,12 @@ const friends = database
       maxFriends: config.maxFriendsPerUser,
     })
   : undefined;
+const directMessages =
+  database && friends
+    ? new DirectMessageService(new DrizzleDirectMessageStore(database), (a, b) =>
+        friends.areFriends(a, b),
+      )
+    : undefined;
 const auth = database
   ? new AuthService(new DrizzleAuthStore(database), {
       secret: config.authSecret,
@@ -82,6 +89,7 @@ const router = createHttpRouter({
   metrics,
   auth,
   friends,
+  directMessages,
   persistence,
   rooms,
   registerRateLimiter,
@@ -111,6 +119,7 @@ const server = Bun.serve<SocketData>({
         rooms,
         publish,
         persistence,
+        directMessages,
         logger,
         metrics,
         presence,
@@ -122,6 +131,7 @@ const server = Bun.serve<SocketData>({
           rooms,
           publish,
           persistence,
+          directMessages,
           logger,
           metrics,
           presence,

@@ -156,6 +156,9 @@ function createStore(users: FriendUser[]): FriendStore {
     async addFriend(userId, friendUserId) {
       friendships.add(friendshipKey(userId, friendUserId));
     },
+    async areFriends(userId, friendUserId) {
+      return friendships.has(friendshipKey(userId, friendUserId));
+    },
     async countFriends(userId) {
       return [...friendships]
         .map((key) => key.split(":"))
