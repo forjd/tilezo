@@ -22,7 +22,7 @@ describe("authenticate", () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
       requests.push({ url: String(url), init });
-      return Response.json({ user, token: "session-token" });
+      return Response.json({ user });
     }) as unknown as typeof fetch;
 
     await expect(
@@ -60,7 +60,7 @@ describe("authenticate", () => {
     const requests: string[] = [];
     globalThis.fetch = (async (url: FetchArgs[0]) => {
       requests.push(String(url));
-      return Response.json({ user, token: "session-token" });
+      return Response.json({ user });
     }) as unknown as typeof fetch;
 
     await authenticate({ mode: "login", username: "dan", password: "secret" });
@@ -79,7 +79,7 @@ describe("authenticate", () => {
     const requests: string[] = [];
     globalThis.fetch = (async (url: FetchArgs[0]) => {
       requests.push(String(url));
-      return Response.json({ user, token: "session-token" });
+      return Response.json({ user });
     }) as unknown as typeof fetch;
 
     await authenticate({ mode: "register", username: "dan", password: "secret" });

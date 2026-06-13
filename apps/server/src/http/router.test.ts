@@ -125,7 +125,7 @@ describe("createHttpRouter", () => {
 
       const loggedIn = await route(request("/auth/login", { body: credentials }), "ip");
       expect(loggedIn.status).toBe(200);
-      expect(await loggedIn.json()).toMatchObject({ token: "good-token" });
+      expect(await loggedIn.json()).toEqual({ user: authUser });
     });
 
     test("rate limits registrations and logins", async () => {

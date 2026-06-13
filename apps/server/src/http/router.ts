@@ -219,9 +219,9 @@ async function handleAuthRequest(ctx: RouteContext, mode: AuthMode): Promise<Res
         : await auth.login(username, password);
 
     requestLogger.info("auth.succeeded", { mode, userId: session.user.id });
-    // Also deliver the token as an HttpOnly session cookie so the SPA never has to keep
-    // it in JS-readable storage; the JSON token stays for non-browser/back-compat clients.
-    return authJson(session, mode === "register" ? 201 : 200, {
+    // Deliver the token only as an HttpOnly session cookie so the SPA never receives a
+    // JS-readable bearer token in the response body.
+    return authJson({ user: session.user }, mode === "register" ? 201 : 200, {
       "set-cookie": sessionCookie(session.token, ctx.config),
     });
   } catch (error) {
