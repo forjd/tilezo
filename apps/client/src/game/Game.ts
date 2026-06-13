@@ -26,95 +26,102 @@ export class Game {
   private readonly cleanup: (() => void)[] = [];
   private scene?: RoomScene;
   private connected = false;
+  private initialized = false;
 
   constructor(private readonly options: GameOptions) {}
 
   async start(): Promise<void> {
-    await this.app.init({
-      antialias: false,
-      autoDensity: true,
-      backgroundAlpha: 0,
-      resizeTo: this.options.stage,
-      roundPixels: true,
-    });
+    try {
+      await this.app.init({
+        antialias: false,
+        autoDensity: true,
+        backgroundAlpha: 0,
+        resizeTo: this.options.stage,
+        roundPixels: true,
+      });
+      this.initialized = true;
 
-    this.app.canvas.style.imageRendering = "pixelated";
-    this.options.stage.appendChild(this.app.canvas);
-    this.scene = new RoomScene(
-      this.app,
-      (target) => {
-        this.sendIfConnected({ type: "avatar.move.request", target });
-      },
-      () => this.options.chat.focusInput(),
-    );
+      this.app.canvas.style.imageRendering = "pixelated";
+      this.options.stage.appendChild(this.app.canvas);
+      this.scene = new RoomScene(
+        this.app,
+        (target) => {
+          this.sendIfConnected({ type: "avatar.move.request", target });
+        },
+        () => this.options.chat.focusInput(),
+      );
 
-    this.cleanup.push(this.net.onStatus(this.options.setStatus));
-    this.cleanup.push(
-      this.net.onDisconnect(() => {
-        this.connected = false;
-        this.app.ticker.stop();
-        this.options.onDisconnected();
-      }),
-    );
-    this.cleanup.push(
-      this.net.onMessage((message) => {
-        if (message.type === "connected") {
-          this.options.setStatus(`connected as ${message.userId}`);
-        }
+      this.cleanup.push(this.net.onStatus(this.options.setStatus));
+      this.cleanup.push(
+        this.net.onDisconnect(() => {
+          this.connected = false;
+          this.app.ticker.stop();
+          this.options.onDisconnected();
+        }),
+      );
+      this.cleanup.push(
+        this.net.onMessage((message) => {
+          if (message.type === "connected") {
+            this.options.setStatus(`connected as ${message.userId}`);
+          }
 
-        if (message.type === "room.snapshot") {
-          this.options.setStatus(`joined ${message.roomId}`);
-          this.options.onRoomJoined(message);
-          this.refreshRooms();
-        }
+          if (message.type === "room.snapshot") {
+            this.options.setStatus(`joined ${message.roomId}`);
+            this.options.onRoomJoined(message);
+            this.refreshRooms();
+          }
 
-        if (message.type === "room.list") {
-          this.options.setRooms(message.rooms);
-        }
+          if (message.type === "room.list") {
+            this.options.setRooms(message.rooms);
+          }
 
-        if (message.type === "chat.message") {
-          this.options.chat.addMessage(message.username, message.text, message.sentAt);
-        }
+          if (message.type === "chat.message") {
+            this.options.chat.addMessage(message.username, message.text, message.sentAt);
+          }
 
-        if (message.type === "dm.message") {
-          this.options.onDirectMessage(message);
-        }
+          if (message.type === "dm.message") {
+            this.options.onDirectMessage(message);
+          }
 
-        if (message.type === "error") {
-          this.options.setStatus(`${message.code}: ${message.message}`);
-        }
+          if (message.type === "error") {
+            this.options.setStatus(`${message.code}: ${message.message}`);
+          }
 
-        try {
-          this.scene?.handleServerMessage(message);
-        } catch (error) {
-          // Never let one malformed/unexpected message tear down the message loop or the
-          // scene; surface it and keep processing subsequent updates.
-          this.options.setStatus("error rendering room update");
-          console.error("RoomScene failed to handle server message", message.type, error);
-        }
-      }),
-    );
+          try {
+            this.scene?.handleServerMessage(message);
+          } catch (error) {
+            // Never let one malformed/unexpected message tear down the message loop or the
+            // scene; surface it and keep processing subsequent updates.
+            this.options.setStatus("error rendering room update");
+            console.error("RoomScene failed to handle server message", message.type, error);
+          }
+        }),
+      );
 
-    await this.net.connect();
-    this.connected = true;
-    this.refreshRooms();
+      await this.net.connect();
+      this.connected = true;
+      this.refreshRooms();
 
-    this.options.chat.onSend((text) => {
-      return this.sendIfConnected({ type: "chat.say", text });
-    });
-    this.options.chat.onTypingChange((isTyping) => {
-      this.sendIfConnected({ type: "chat.typing", isTyping });
-    });
+      this.options.chat.onSend((text) => {
+        return this.sendIfConnected({ type: "chat.say", text });
+      });
+      this.options.chat.onTypingChange((isTyping) => {
+        this.sendIfConnected({ type: "chat.typing", isTyping });
+      });
 
-    const updateScene = (ticker: { deltaMS: number }) => {
-      this.scene?.update(ticker.deltaMS / 1000);
-    };
-    this.app.ticker.add(updateScene);
-    this.cleanup.push(() => this.app.ticker.remove(updateScene));
+      const updateScene = (ticker: { deltaMS: number }) => {
+        this.scene?.update(ticker.deltaMS / 1000);
+      };
+      this.app.ticker.add(updateScene);
+      this.cleanup.push(() => this.app.ticker.remove(updateScene));
 
-    const resizeScene = () => this.scene?.resize();
-    globalThis.addEventListener("resize", resizeScene);
-    this.cleanup.push(() => globalThis.removeEventListener("resize", resizeScene));
+      const resizeScene = () => this.scene?.resize();
+      globalThis.addEventListener("resize", resizeScene);
+      this.cleanup.push(() => globalThis.removeEventListener("resize", resizeScene));
+    } catch (error) {
+      this.stop();
+      throw error;
+    }
   }
 
   joinRoom(roomId: string): void {
@@ -155,7 +162,10 @@ export class Game {
     this.scene = undefined;
     this.connected = false;
     this.net.disconnect();
-    this.app.destroy(true);
+    if (this.initialized) {
+      this.initialized = false;
+      this.app.destroy(true);
+    }
   }
 
   private sendIfConnected(message: ClientMessage): boolean {

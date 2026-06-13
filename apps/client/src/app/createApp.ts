@@ -176,6 +176,23 @@ export function createApp(root: HTMLElement): void {
     return game;
   }
 
+  async function startGame(): Promise<Game> {
+    const activeGame = await ensureGame();
+
+    try {
+      await activeGame.start();
+      gameStarted = true;
+      return activeGame;
+    } catch (error) {
+      if (game === activeGame) {
+        game = undefined;
+      }
+
+      gameStarted = false;
+      throw error;
+    }
+  }
+
   const directMessagePanel = new DirectMessagePanel({
     onSend(friendId, text) {
       return game?.sendDirectMessage(friendId, text) ?? false;
@@ -213,8 +230,7 @@ export function createApp(root: HTMLElement): void {
         }
 
         status.textContent = "connecting";
-        await (await ensureGame()).start();
-        gameStarted = true;
+        await startGame();
         revealSignedInChrome();
         roomBrowser.show();
         status.textContent = "choose room";
@@ -269,8 +285,7 @@ export function createApp(root: HTMLElement): void {
         roomBrowser.hide();
 
         if (!gameStarted) {
-          await (await ensureGame()).start();
-          gameStarted = true;
+          await startGame();
         }
 
         revealSignedInChrome({ editCharacter: true });
@@ -373,8 +388,7 @@ export function createApp(root: HTMLElement): void {
     status.textContent = "connecting";
 
     try {
-      await (await ensureGame()).start();
-      gameStarted = true;
+      await startGame();
       revealSignedInChrome();
       roomBrowser.show();
       status.textContent = "choose room";
