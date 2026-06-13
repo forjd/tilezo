@@ -29,7 +29,7 @@
     "test:integration": "RUN_DB_TESTS=1 bun test apps/server/src/db/integration.test.ts",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
     "coverage:check": "bun run scripts/check-coverage.ts",
-    "typecheck": "bun run --filter '*' typecheck",
+    "typecheck": "bun run --filter '*' typecheck && tsc -p tsconfig.scripts.json",
     "worktree:setup": "bun run scripts/setup-worktree.ts"
   },
   "devDependencies": {

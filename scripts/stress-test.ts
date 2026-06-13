@@ -880,7 +880,9 @@ function includesChat(scenario: Scenario): boolean {
 function botAppearance(botId: number): typeof DEFAULT_AVATAR_APPEARANCE {
   return {
     ...DEFAULT_AVATAR_APPEARANCE,
-    shirtColor: AVATAR_SHIRT_COLORS[botId % AVATAR_SHIRT_COLORS.length],
+    shirtColor:
+      AVATAR_SHIRT_COLORS[botId % AVATAR_SHIRT_COLORS.length] ??
+      DEFAULT_AVATAR_APPEARANCE.shirtColor,
   };
 }
 

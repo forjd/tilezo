@@ -1,9 +1,9 @@
-import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { loadServerEnv, projectRoot } from "./server-env";
 
 const tunnelUrlPattern = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g;
-const children = new Set<ChildProcessWithoutNullStreams>();
+const children = new Set<ChildProcess>();
 
 const env = loadServerEnv();
 const serverPort = env.PORT ?? env.SERVER_PORT ?? "3000";
@@ -88,7 +88,7 @@ function spawnManaged(
     cwd: string;
     env?: NodeJS.ProcessEnv;
   },
-): ChildProcessWithoutNullStreams {
+): ChildProcess {
   const child = spawn(command, args, {
     cwd: options.cwd,
     env: options.env,
@@ -113,7 +113,7 @@ function spawnManaged(
 async function startTunnel(
   label: string,
   targetUrl: string,
-): Promise<{ child: ChildProcessWithoutNullStreams; url: string }> {
+): Promise<{ child: ChildProcess; url: string }> {
   const child = spawnManaged(label, "cloudflared", ["tunnel", "--url", targetUrl], {
     cwd: projectRoot,
     env: process.env,
@@ -123,8 +123,15 @@ async function startTunnel(
   return { child, url };
 }
 
-function waitForTunnelUrl(label: string, child: ChildProcessWithoutNullStreams): Promise<string> {
+function waitForTunnelUrl(label: string, child: ChildProcess): Promise<string> {
   return new Promise((resolveUrl, reject) => {
+    const { stdout, stderr } = child;
+
+    if (!stdout || !stderr) {
+      reject(new Error(`[${label}] started without readable tunnel output`));
+      shutdown(1);
+    }
+
     const timeout = setTimeout(() => {
       reject(new Error(`[${label}] timed out waiting for a trycloudflare.com URL`));
       shutdown(1);
@@ -135,14 +142,14 @@ function waitForTunnelUrl(label: string, child: ChildProcessWithoutNullStreams):
 
       if (match) {
         clearTimeout(timeout);
-        child.stdout.off("data", handleData);
-        child.stderr.off("data", handleData);
+        stdout.off("data", handleData);
+        stderr.off("data", handleData);
         resolveUrl(match);
       }
     };
 
-    child.stdout.on("data", handleData);
-    child.stderr.on("data", handleData);
+    stdout.on("data", handleData);
+    stderr.on("data", handleData);
 
     child.once("exit", (code, signal) => {
       clearTimeout(timeout);
@@ -153,9 +160,9 @@ function waitForTunnelUrl(label: string, child: ChildProcessWithoutNullStreams):
   });
 }
 
-function prefixOutput(label: string, child: ChildProcessWithoutNullStreams): void {
-  child.stdout.on("data", (chunk) => writePrefixedOutput(label, chunk));
-  child.stderr.on("data", (chunk) => writePrefixedOutput(label, chunk));
+function prefixOutput(label: string, child: ChildProcess): void {
+  child.stdout?.on("data", (chunk: Buffer) => writePrefixedOutput(label, chunk));
+  child.stderr?.on("data", (chunk: Buffer) => writePrefixedOutput(label, chunk));
 }
 
 function writePrefixedOutput(label: string, chunk: Buffer): void {
@@ -173,7 +180,7 @@ function toWebSocketUrl(url: string, pathname: string): string {
   return parsed.toString();
 }
 
-function waitForExit(child: ChildProcessWithoutNullStreams, label: string): Promise<void> {
+function waitForExit(child: ChildProcess, label: string): Promise<void> {
   return new Promise((resolveExit) => {
     child.once("exit", (code, signal) => {
       if (code && code !== 0) {
