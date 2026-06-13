@@ -94,6 +94,8 @@ const auth = database
     })
   : undefined;
 const websocketRateLimits: UserRateLimitStore = new Map();
+const joinVersions = new Map<string, number>();
+const joinTargets = new Map<string, string>();
 
 const router = createHttpRouter({
   config,
@@ -149,6 +151,8 @@ const server = Bun.serve<SocketData>({
           metrics,
           presence,
           userRateLimits: websocketRateLimits,
+          joinVersions,
+          joinTargets,
         });
         return;
       }

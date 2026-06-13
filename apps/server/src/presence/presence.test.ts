@@ -26,4 +26,13 @@ describe("PresenceTracker", () => {
 
     expect(presence.get("user_1")).toEqual({ online: true, roomId: "studio" });
   });
+
+  test("moves a user to one room across connections", () => {
+    const presence = new PresenceTracker();
+    presence.joinRoom("user_1", "socket_1", "lobby");
+
+    presence.moveUserToRoom("user_1", "socket_2", "studio");
+
+    expect(presence.get("user_1")).toEqual({ online: true, roomId: "studio" });
+  });
 });

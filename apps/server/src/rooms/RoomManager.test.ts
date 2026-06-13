@@ -56,6 +56,19 @@ describe("RoomManager", () => {
     expect(manager.get("lobby")).toBeUndefined();
   });
 
+  test("removes a user from every other active room", () => {
+    const manager = new RoomManager([
+      createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),
+      createRectRoomLayout("studio", "Studio", 3, 3, { x: 1, y: 1 }),
+    ]);
+    manager.getOrCreate("lobby")?.join({ id: "user_1", username: "Dan" });
+    manager.getOrCreate("studio")?.join({ id: "user_1", username: "Dan" });
+
+    expect(manager.removeUserFromOtherRooms("user_1", "studio")).toEqual(["lobby"]);
+    expect(manager.get("lobby")?.hasUser("user_1")).toBe(false);
+    expect(manager.get("studio")?.hasUser("user_1")).toBe(true);
+  });
+
   test("lists public rooms with live population and current-room state", () => {
     const manager = new RoomManager([
       createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),

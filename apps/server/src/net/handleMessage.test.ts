@@ -623,6 +623,38 @@ describe("duplicate connections and movement guards", () => {
     expect(rooms.get("lobby")?.getUsers()).toHaveLength(1);
   });
 
+  test("moves a user to only one room across multiple sockets", async () => {
+    const rooms = await RoomManager.create();
+    const socketA = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_a",
+    });
+    const socketB = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_b",
+    });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const publish = (topic: string, message: ServerMessage) => published.push({ topic, message });
+
+    handleMessage(socketA, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish,
+    });
+    handleMessage(socketB, JSON.stringify({ type: "room.join", roomId: "studio" }), {
+      rooms,
+      publish,
+    });
+
+    expect(rooms.get("lobby")).toBeUndefined();
+    expect(rooms.get("studio")?.getUsers().map((user) => user.id)).toEqual(["user_db_1"]);
+    expect(published).toContainEqual({
+      topic: "room:lobby",
+      message: { type: "user.left", userId: "user_db_1" },
+    });
+  });
+
   test("ignores movement from a socket superseded by a newer connection", async () => {
     const rooms = await RoomManager.create();
     const socketA = createSocket({
@@ -681,6 +713,43 @@ describe("duplicate connections and movement guards", () => {
 
     expect(published).toEqual([]);
     expect(ws.sent).toEqual([]);
+  });
+
+  test("keeps the newest room as the persisted resume room when saves finish out of order", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    let releaseLobbySave: (() => void) | undefined;
+    const saved: string[] = [];
+    const context = {
+      rooms,
+      publish() {},
+      joinVersions: new Map<string, number>(),
+      joinTargets: new Map<string, string>(),
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {},
+        async saveLastRoomIdForUser(_userId: string, roomId: string) {
+          if (roomId === "lobby" && !releaseLobbySave) {
+            await new Promise<void>((resolve) => {
+              releaseLobbySave = resolve;
+            });
+          }
+
+          saved.push(roomId);
+        },
+      },
+    };
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), context);
+    await flushAsyncMessages();
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "studio" }), context);
+    await flushAsyncMessages();
+    releaseLobbySave?.();
+    await flushAsyncMessages();
+
+    expect(saved).toEqual(["studio", "lobby", "studio"]);
   });
 });
 

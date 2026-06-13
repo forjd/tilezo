@@ -77,6 +77,15 @@ export class Room {
     return true;
   }
 
+  removeUser(userId: string): boolean {
+    if (!this.users.delete(userId)) {
+      return false;
+    }
+
+    this.movements.delete(userId);
+    return true;
+  }
+
   moveUser(userId: string, target: TilePosition): TilePosition[] | null {
     this.sweepCompletedMovements();
     const user = this.users.get(userId);

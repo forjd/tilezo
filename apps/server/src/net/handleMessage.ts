@@ -23,6 +23,8 @@ type Context = {
   metrics?: Metrics;
   presence?: PresenceTracker;
   userRateLimits?: UserRateLimitStore;
+  joinVersions?: Map<string, number>;
+  joinTargets?: Map<string, string>;
 };
 
 type RateLimitKind = keyof typeof RATE_LIMITS;
@@ -408,6 +410,8 @@ async function joinRoom(
       return;
     }
 
+    const joinVersion = nextJoinVersion(context, ws.data.userId, room.id);
+
     if (previousRoomId) {
       const previousRoom = context.rooms.get(previousRoomId);
 
@@ -424,6 +428,19 @@ async function joinRoom(
           roomId: previousRoomId,
         });
       }
+    }
+
+    for (const removedRoomId of context.rooms.removeUserFromOtherRooms(ws.data.userId, room.id)) {
+      context.publish(roomTopic(removedRoomId), {
+        type: "user.left",
+        userId: ws.data.userId,
+      });
+      context.rooms.removeIfEmpty(removedRoomId);
+      context.metrics?.increment("room.left");
+      context.logger?.info("room.left.superseded", {
+        ...socketFields(ws),
+        roomId: removedRoomId,
+      });
     }
 
     // If this user already has an avatar in the room, a newer socket is replacing an
@@ -446,7 +463,7 @@ async function joinRoom(
 
     ws.data.roomId = room.id;
     if (ws.data.connectionId) {
-      context.presence?.joinRoom(ws.data.userId, ws.data.connectionId, room.id);
+      context.presence?.moveUserToRoom(ws.data.userId, ws.data.connectionId, room.id);
     }
     ws.subscribe(roomTopic(room.id));
     send(ws, {
@@ -473,7 +490,7 @@ async function joinRoom(
       type: "room.list",
       rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
     });
-    await saveLastRoomId(context, ws.data.userId, room.id);
+    await saveLastRoomId(context, ws.data.userId, room.id, joinVersion);
     context.metrics?.increment("room.joined");
     context.logger?.info("room.joined", {
       ...socketFields(ws),
@@ -517,12 +534,44 @@ async function ensureOwnPersonalRoom(
   );
 }
 
-async function saveLastRoomId(context: Context, userId: string, roomId: string): Promise<void> {
+async function saveLastRoomId(
+  context: Context,
+  userId: string,
+  roomId: string,
+  joinVersion: number,
+): Promise<void> {
+  if (!isCurrentJoinVersion(context, userId, joinVersion)) {
+    context.metrics?.increment("room_session.save_stale");
+    return;
+  }
+
   try {
     await context.persistence?.saveLastRoomIdForUser?.(userId, roomId);
+    if (!isCurrentJoinVersion(context, userId, joinVersion)) {
+      const latestRoomId = context.joinTargets?.get(userId);
+
+      if (latestRoomId && latestRoomId !== roomId) {
+        await context.persistence?.saveLastRoomIdForUser?.(userId, latestRoomId);
+      }
+    }
   } catch (error) {
     context.logger?.warn("persistence.room_session.save_failed", { userId, roomId, error });
   }
+}
+
+function nextJoinVersion(context: Context, userId: string, roomId: string): number {
+  if (!context.joinVersions) {
+    return 0;
+  }
+
+  const next = (context.joinVersions.get(userId) ?? 0) + 1;
+  context.joinVersions.set(userId, next);
+  context.joinTargets?.set(userId, roomId);
+  return next;
+}
+
+function isCurrentJoinVersion(context: Context, userId: string, version: number): boolean {
+  return !context.joinVersions || context.joinVersions.get(userId) === version;
 }
 
 async function clearLastRoomId(context: Context, userId: string): Promise<void> {

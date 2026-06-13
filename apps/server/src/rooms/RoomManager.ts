@@ -187,6 +187,20 @@ export class RoomManager {
     return [...this.rooms.values()];
   }
 
+  removeUserFromOtherRooms(userId: string, exceptRoomId: string): string[] {
+    const removedRoomIds: string[] = [];
+
+    for (const room of this.rooms.values()) {
+      if (room.id === exceptRoomId || !room.removeUser(userId)) {
+        continue;
+      }
+
+      removedRoomIds.push(room.id);
+    }
+
+    return removedRoomIds;
+  }
+
   getMetrics(): RoomMetrics {
     return {
       activeRooms: this.rooms.size,

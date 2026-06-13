@@ -32,6 +32,17 @@ export class PresenceTracker {
     }
   }
 
+  moveUserToRoom(userId: string, connectionId: string, roomId: string): void {
+    const userConnections = this.connections.get(userId) ?? new Map<string, ConnectionPresence>();
+
+    for (const connection of userConnections.values()) {
+      connection.roomId = undefined;
+    }
+
+    userConnections.set(connectionId, { connectionId, roomId });
+    this.connections.set(userId, userConnections);
+  }
+
   disconnect(userId: string, connectionId: string): void {
     const userConnections = this.connections.get(userId);
 
