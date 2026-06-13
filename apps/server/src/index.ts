@@ -65,10 +65,16 @@ rateLimiterPruneTimer.unref?.();
 const database = createDatabase(config.databaseUrl);
 const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
 const presence = new PresenceTracker();
+const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
 const friends = database
-  ? new FriendService(new DrizzleFriendStore(database), (userId) => presence.get(userId), {
-      maxFriends: config.maxFriendsPerUser,
-    })
+  ? new FriendService(
+      new DrizzleFriendStore(database),
+      (userId) => presence.get(userId),
+      {
+        canJoinRoom: (userId, roomId) => rooms.canJoinRoom(roomId, userId).ok,
+        maxFriends: config.maxFriendsPerUser,
+      },
+    )
   : undefined;
 const directMessages =
   database && friends
@@ -87,7 +93,6 @@ const auth = database
       }),
     })
   : undefined;
-const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
 const websocketRateLimits: UserRateLimitStore = new Map();
 
 const router = createHttpRouter({

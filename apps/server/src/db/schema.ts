@@ -85,11 +85,16 @@ export const friendships = pgTable(
     friendUserId: text("friend_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.friendUserId] }),
     index("friendships_friend_user_id_idx").on(table.friendUserId),
+    index("friendships_status_idx").on(table.status),
   ],
 );
 

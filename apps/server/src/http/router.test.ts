@@ -39,7 +39,7 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
     } as unknown as AuthService,
     friends: {
       list: async () => [],
-      add: async () => ({ ...authUser, online: false, canJoinRoom: false }),
+      add: async () => ({ friend: { ...authUser, online: false, canJoinRoom: false }, status: "pending" }),
       remove: async () => {},
     } as unknown as FriendService,
     directMessages: {
@@ -319,14 +319,12 @@ describe("createHttpRouter", () => {
       expect(
         (await route(request("/friends", { method: "GET", token: "good-token" }), "ip")).status,
       ).toBe(200);
-      expect(
-        (
-          await route(
-            request("/friends", { method: "POST", token: "good-token", body: { username: "Kai" } }),
-            "ip",
-          )
-        ).status,
-      ).toBe(201);
+      const added = await route(
+        request("/friends", { method: "POST", token: "good-token", body: { username: "Kai" } }),
+        "ip",
+      );
+      expect(added.status).toBe(202);
+      expect(await added.json()).toMatchObject({ status: "pending" });
       expect(
         (await route(request("/friends/user_2", { method: "DELETE", token: "good-token" }), "ip"))
           .status,
@@ -361,7 +359,7 @@ describe("createHttpRouter", () => {
       expect(
         (await route(request("/friends", { method: "POST", token: "good-token", body }), "ip"))
           .status,
-      ).toBe(201);
+      ).toBe(202);
       expect(
         (await route(request("/friends", { method: "POST", token: "good-token", body }), "ip"))
           .status,

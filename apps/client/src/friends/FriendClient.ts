@@ -10,6 +10,11 @@ export type FriendSummary = {
   canJoinRoom: boolean;
 };
 
+export type FriendAddResult = {
+  friend: FriendSummary;
+  status: "pending" | "accepted";
+};
+
 export async function listFriends(): Promise<FriendSummary[]> {
   const response = await fetch(`${getApiUrl()}/friends`, { credentials: "include" });
   const body = await readJson<{ friends?: FriendSummary[] } | { error?: { message?: string } }>(
@@ -25,14 +30,14 @@ export async function listFriends(): Promise<FriendSummary[]> {
     : [];
 }
 
-export async function addFriend(username: string): Promise<FriendSummary> {
+export async function addFriend(username: string): Promise<FriendAddResult> {
   const response = await fetch(`${getApiUrl()}/friends`, {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ username }),
   });
-  const body = await readJson<{ friend?: FriendSummary } | { error?: { message?: string } }>(
+  const body = await readJson<FriendAddResult | { error?: { message?: string } }>(
     response,
   );
 
@@ -40,7 +45,7 @@ export async function addFriend(username: string): Promise<FriendSummary> {
     throw new Error(body && "error" in body ? body.error?.message : "Friend add failed");
   }
 
-  return (body as { friend: FriendSummary }).friend;
+  return body as FriendAddResult;
 }
 
 export async function removeFriend(friendId: string): Promise<void> {

@@ -447,9 +447,13 @@ async function handleFriendsRequest(ctx: RouteContext): Promise<Response> {
         );
       }
 
-      const friend = await friends.add(user.id, username);
-      requestLogger.info("friends.added", { userId: user.id, friendUserId: friend.id });
-      return authJson({ friend }, 201);
+      const result = await friends.add(user.id, username);
+      requestLogger.info("friends.added", {
+        userId: user.id,
+        friendUserId: result.friend.id,
+        status: result.status,
+      });
+      return authJson(result, result.status === "accepted" ? 200 : 202);
     }
 
     if (url.pathname.startsWith("/friends/") && ctx.request.method === "DELETE") {

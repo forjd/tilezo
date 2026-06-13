@@ -48,10 +48,12 @@ describe("FriendClient", () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
       requests.push({ url: String(url), init });
-      return Response.json(String(url).endsWith("/friends") ? { friend } : { ok: true });
+      return Response.json(
+        String(url).endsWith("/friends") ? { friend, status: "pending" } : { ok: true },
+      );
     }) as unknown as typeof fetch;
 
-    await expect(addFriend("Kai")).resolves.toEqual(friend);
+    await expect(addFriend("Kai")).resolves.toEqual({ friend, status: "pending" });
     await expect(removeFriend("user_2")).resolves.toBeUndefined();
 
     expect(requests).toEqual([

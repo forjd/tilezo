@@ -10,6 +10,8 @@ const DEFAULT_MAX_FRIENDS = 500;
 // unbounded number of rows even if the per-user cap is ever raised or bypassed.
 const FRIEND_LIST_QUERY_LIMIT = 1000;
 
+export type FriendshipStatus = "pending" | "accepted";
+
 export type FriendUser = {
   id: string;
   username: string;
@@ -21,8 +23,20 @@ export type FriendSummary = FriendUser &
     canJoinRoom: boolean;
   };
 
+export type FriendAddResult = {
+  friend: FriendSummary;
+  status: FriendshipStatus;
+};
+
+type FriendshipRecord = {
+  userId: string;
+  friendUserId: string;
+  requestedByUserId: string;
+  status: FriendshipStatus;
+};
+
 export type FriendStore = {
-  addFriend(userId: string, friendUserId: string): Promise<void>;
+  addFriend(userId: string, friendUserId: string): Promise<FriendshipStatus>;
   areFriends(userId: string, friendUserId: string): Promise<boolean>;
   countFriends(userId: string): Promise<number>;
   findUserByUsername(username: string): Promise<FriendUser | undefined>;
@@ -31,6 +45,7 @@ export type FriendStore = {
 };
 
 type PresenceLookup = (userId: string) => UserPresence;
+type RoomAccessLookup = (userId: string, roomId: string) => boolean;
 
 export class FriendService {
   private readonly maxFriends: number;
@@ -38,17 +53,20 @@ export class FriendService {
   constructor(
     private readonly store: FriendStore,
     private readonly presence: PresenceLookup,
-    options: { maxFriends?: number } = {},
+    options: { canJoinRoom?: RoomAccessLookup; maxFriends?: number } = {},
   ) {
     this.maxFriends = options.maxFriends ?? DEFAULT_MAX_FRIENDS;
+    this.canJoinRoom = options.canJoinRoom ?? (() => true);
   }
+
+  private readonly canJoinRoom: RoomAccessLookup;
 
   async list(userId: string): Promise<FriendSummary[]> {
     const friends = await this.store.listFriends(userId);
-    return friends.map((friend) => this.summarize(friend));
+    return friends.map((friend) => this.summarize(friend, userId));
   }
 
-  async add(userId: string, username: string): Promise<FriendSummary> {
+  async add(userId: string, username: string): Promise<FriendAddResult> {
     const friend = await this.store.findUserByUsername(username);
 
     if (!friend) {
@@ -68,8 +86,11 @@ export class FriendService {
       );
     }
 
-    await this.store.addFriend(userId, friend.id);
-    return this.summarize(friend);
+    const status = await this.store.addFriend(userId, friend.id);
+    return {
+      friend: status === "accepted" ? this.summarize(friend, userId) : this.summarizePending(friend),
+      status,
+    };
   }
 
   async remove(userId: string, friendUserId: string): Promise<void> {
@@ -80,12 +101,23 @@ export class FriendService {
     return this.store.areFriends(userId, friendUserId);
   }
 
-  private summarize(friend: FriendUser): FriendSummary {
+  private summarize(friend: FriendUser, requestingUserId: string): FriendSummary {
     const presence = this.presence(friend.id);
+    const canJoinRoom = Boolean(
+      presence.roomId && this.canJoinRoom(requestingUserId, presence.roomId),
+    );
     return {
       ...friend,
       ...presence,
-      canJoinRoom: Boolean(presence.roomId),
+      canJoinRoom,
+    };
+  }
+
+  private summarizePending(friend: FriendUser): FriendSummary {
+    return {
+      ...friend,
+      online: false,
+      canJoinRoom: false,
     };
   }
 }
@@ -105,23 +137,41 @@ export class DrizzleFriendStore implements FriendStore {
     return user;
   }
 
-  async addFriend(userId: string, friendUserId: string): Promise<void> {
+  async addFriend(userId: string, friendUserId: string): Promise<FriendshipStatus> {
     const [leftUserId, rightUserId] = friendshipPair(userId, friendUserId);
+    const existing = await this.findFriendship(leftUserId, rightUserId);
 
-    await this.db
-      .insert(friendships)
-      .values({
+    if (!existing) {
+      await this.db.insert(friendships).values({
         userId: leftUserId,
         friendUserId: rightUserId,
-      })
-      .onConflictDoNothing();
+        requestedByUserId: userId,
+        status: "pending",
+      });
+      return "pending";
+    }
+
+    if (existing.status === "accepted" || existing.requestedByUserId === userId) {
+      return existing.status;
+    }
+
+    await this.db
+      .update(friendships)
+      .set({ status: "accepted" })
+      .where(and(eq(friendships.userId, leftUserId), eq(friendships.friendUserId, rightUserId)));
+    return "accepted";
   }
 
   async countFriends(userId: string): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })
       .from(friendships)
-      .where(or(eq(friendships.userId, userId), eq(friendships.friendUserId, userId)));
+      .where(
+        and(
+          eq(friendships.status, "accepted"),
+          or(eq(friendships.userId, userId), eq(friendships.friendUserId, userId)),
+        ),
+      );
     return row?.value ?? 0;
   }
 
@@ -130,7 +180,13 @@ export class DrizzleFriendStore implements FriendStore {
     const [row] = await this.db
       .select({ userId: friendships.userId })
       .from(friendships)
-      .where(and(eq(friendships.userId, leftUserId), eq(friendships.friendUserId, rightUserId)))
+      .where(
+        and(
+          eq(friendships.userId, leftUserId),
+          eq(friendships.friendUserId, rightUserId),
+          eq(friendships.status, "accepted"),
+        ),
+      )
       .limit(1);
     return Boolean(row);
   }
@@ -150,7 +206,12 @@ export class DrizzleFriendStore implements FriendStore {
         friendUserId: friendships.friendUserId,
       })
       .from(friendships)
-      .where(or(eq(friendships.userId, userId), eq(friendships.friendUserId, userId)))
+      .where(
+        and(
+          eq(friendships.status, "accepted"),
+          or(eq(friendships.userId, userId), eq(friendships.friendUserId, userId)),
+        ),
+      )
       .limit(FRIEND_LIST_QUERY_LIMIT);
     const friendIds = rows.map((row) => (row.userId === userId ? row.friendUserId : row.userId));
 
@@ -168,6 +229,23 @@ export class DrizzleFriendStore implements FriendStore {
       .where(inArray(users.id, friendIds))
       .orderBy(asc(users.usernameKey))
       .limit(FRIEND_LIST_QUERY_LIMIT);
+  }
+
+  private async findFriendship(
+    userId: string,
+    friendUserId: string,
+  ): Promise<FriendshipRecord | undefined> {
+    const [row] = await this.db
+      .select({
+        userId: friendships.userId,
+        friendUserId: friendships.friendUserId,
+        requestedByUserId: friendships.requestedByUserId,
+        status: friendships.status,
+      })
+      .from(friendships)
+      .where(and(eq(friendships.userId, userId), eq(friendships.friendUserId, friendUserId)))
+      .limit(1);
+    return row as FriendshipRecord | undefined;
   }
 }
 

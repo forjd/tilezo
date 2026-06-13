@@ -95,9 +95,9 @@ export function createApp(root: HTMLElement): void {
       }
 
       try {
-        await addFriend(username);
+        const result = await addFriend(username);
         await refreshFriends();
-        status.textContent = "friend added";
+        status.textContent = result.status === "accepted" ? "friend added" : "friend request sent";
       } catch (error) {
         const message = error instanceof Error ? error.message : "Friend add failed";
         status.textContent = message;

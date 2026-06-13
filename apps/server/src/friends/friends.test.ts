@@ -16,17 +16,41 @@ const kai = {
 } satisfies FriendUser;
 
 describe("FriendService", () => {
-  test("adds friends by username and includes presence", async () => {
+  test("creates pending friend requests without exposing presence", async () => {
     const store = createStore([kai]);
     const service = new FriendService(store, (userId) =>
       userId === "user_2" ? { online: true, roomId: "studio" } : { online: false },
     );
 
     await expect(service.add("user_1", "Kai")).resolves.toEqual({
-      ...kai,
-      online: true,
-      roomId: "studio",
-      canJoinRoom: true,
+      friend: {
+        ...kai,
+        online: false,
+        canJoinRoom: false,
+      },
+      status: "pending",
+    });
+    await expect(service.list("user_1")).resolves.toEqual([]);
+  });
+
+  test("accepts reciprocal friend requests and includes allowed presence", async () => {
+    const dan = { id: "user_1", username: "Dan", appearance: DEFAULT_AVATAR_APPEARANCE };
+    const store = createStore([dan, kai]);
+    const service = new FriendService(
+      store,
+      (userId) => (userId === "user_2" ? { online: true, roomId: "studio" } : { online: false }),
+      { canJoinRoom: (_userId, roomId) => roomId === "studio" },
+    );
+
+    await service.add("user_1", "Kai");
+
+    await expect(service.add("user_2", "Dan")).resolves.toEqual({
+      friend: {
+        ...dan,
+        online: false,
+        canJoinRoom: false,
+      },
+      status: "accepted",
     });
     await expect(service.list("user_1")).resolves.toEqual([
       {
@@ -34,6 +58,28 @@ describe("FriendService", () => {
         online: true,
         roomId: "studio",
         canJoinRoom: true,
+      },
+    ]);
+  });
+
+  test("does not mark inaccessible friend rooms as joinable", async () => {
+    const dan = { id: "user_1", username: "Dan", appearance: DEFAULT_AVATAR_APPEARANCE };
+    const store = createStore([dan, kai]);
+    const service = new FriendService(
+      store,
+      (userId) => (userId === "user_2" ? { online: true, roomId: "private" } : { online: false }),
+      { canJoinRoom: () => false },
+    );
+
+    await service.add("user_1", "Kai");
+    await service.add("user_2", "Dan");
+
+    await expect(service.list("user_1")).resolves.toEqual([
+      {
+        ...kai,
+        online: true,
+        roomId: "private",
+        canJoinRoom: false,
       },
     ]);
   });
@@ -57,11 +103,13 @@ describe("FriendService", () => {
   });
 
   test("rejects adding friends beyond the configured cap", async () => {
+    const dan = { id: "user_1", username: "Dan", appearance: DEFAULT_AVATAR_APPEARANCE };
     const rem = { id: "user_3", username: "Rem", appearance: DEFAULT_AVATAR_APPEARANCE };
-    const store = createStore([kai, rem]);
+    const store = createStore([dan, kai, rem]);
     const service = new FriendService(store, () => ({ online: false }), { maxFriends: 1 });
 
     await service.add("user_1", "Kai");
+    await service.add("user_2", "Dan");
     await expect(service.add("user_1", "Rem")).rejects.toThrow("at most 1 friends");
   });
 
@@ -71,6 +119,7 @@ describe("FriendService", () => {
     const service = new FriendService(store, () => ({ online: false }));
 
     await service.add("user_1", "Kai");
+    await service.add("user_2", "Dan");
 
     expect((await service.list("user_1")).map((friend) => friend.id)).toEqual(["user_2"]);
     expect((await service.list("user_2")).map((friend) => friend.id)).toEqual(["user_1"]);
@@ -94,7 +143,7 @@ describe("DrizzleFriendStore", () => {
     expect(await new DrizzleFriendStore(queryDouble([[{ value: 3 }]])).countFriends("user_1")).toBe(
       3,
     );
-    await new DrizzleFriendStore(queryDouble([[]])).addFriend("user_1", "user_2");
+    await new DrizzleFriendStore(queryDouble([[], []])).addFriend("user_1", "user_2");
     await new DrizzleFriendStore(queryDouble([[]])).removeFriend("user_1", "user_2");
 
     // First query returns the friendship rows, the second resolves the friend users.
@@ -150,18 +199,34 @@ function queryDouble(
 }
 
 function createStore(users: FriendUser[]): FriendStore {
-  const friendships = new Set<string>();
+  const friendships = new Map<
+    string,
+    { requestedByUserId: string; status: "pending" | "accepted" }
+  >();
 
   return {
     async addFriend(userId, friendUserId) {
-      friendships.add(friendshipKey(userId, friendUserId));
+      const key = friendshipKey(userId, friendUserId);
+      const existing = friendships.get(key);
+
+      if (!existing) {
+        friendships.set(key, { requestedByUserId: userId, status: "pending" });
+        return "pending";
+      }
+
+      if (existing.status === "pending" && existing.requestedByUserId !== userId) {
+        existing.status = "accepted";
+      }
+
+      return existing.status;
     },
     async areFriends(userId, friendUserId) {
-      return friendships.has(friendshipKey(userId, friendUserId));
+      return friendships.get(friendshipKey(userId, friendUserId))?.status === "accepted";
     },
     async countFriends(userId) {
       return [...friendships]
-        .map((key) => key.split(":"))
+        .filter(([, friendship]) => friendship.status === "accepted")
+        .map(([key]) => key.split(":"))
         .filter(([left, right]) => left === userId || right === userId).length;
     },
     async findUserByUsername(username) {
@@ -169,7 +234,8 @@ function createStore(users: FriendUser[]): FriendStore {
     },
     async listFriends(userId) {
       const friendIds = [...friendships]
-        .map((key) => key.split(":"))
+        .filter(([, friendship]) => friendship.status === "accepted")
+        .map(([key]) => key.split(":"))
         .filter(([left, right]) => left === userId || right === userId)
         .map(([left, right]) => (left === userId ? right : left));
       return users.filter((user) => friendIds.includes(user.id));
