@@ -72,10 +72,6 @@ export class Avatar {
   appearance: AvatarAppearance;
 
   private readonly body = new Graphics();
-  chatBubble: Container;
-  chatBubbleBackground: Graphics;
-  chatBubbleAvatar: Graphics;
-  chatBubbleText: Text;
   private readonly typingIndicator = new Container();
   private readonly typingIndicatorBackground = new Graphics();
   private readonly typingIndicatorText: Text;
@@ -123,12 +119,6 @@ export class Avatar {
 
     this.label.anchor.set(0.5, 1);
     this.label.y = -60;
-
-    const initialChatBubble = this.createChatBubbleView();
-    this.chatBubble = initialChatBubble.view;
-    this.chatBubbleBackground = initialChatBubble.background;
-    this.chatBubbleAvatar = initialChatBubble.avatar;
-    this.chatBubbleText = initialChatBubble.text;
 
     this.typingIndicatorBackground.roundPixels = true;
     this.typingIndicatorText = new Text({
@@ -180,10 +170,6 @@ export class Avatar {
     this.drawChatBubble(bubble, lines);
     this.chatBubbles.push(bubble);
     this.overlayView.addChild(bubble.view);
-    this.chatBubble = bubble.view;
-    this.chatBubbleBackground = bubble.background;
-    this.chatBubbleAvatar = bubble.avatar;
-    this.chatBubbleText = bubble.text;
 
     while (this.chatBubbles.length > this.maxChatBubbles) {
       const removed = this.chatBubbles.shift();
@@ -347,7 +333,6 @@ export class Avatar {
     this.positionChatBubbles(deltaSeconds);
 
     if (removedBubble) {
-      this.syncLatestChatBubbleReferences();
       this.syncTypingIndicatorVisibility();
     }
   }
@@ -590,14 +575,6 @@ export class Avatar {
 
   private syncTypingIndicatorVisibility(): void {
     this.typingIndicator.visible = this.isTyping && this.chatBubbles.length === 0;
-  }
-
-  private syncLatestChatBubbleReferences(): void {
-    const latest = this.chatBubbles.at(-1) ?? this.createChatBubbleView();
-    this.chatBubble = latest.view;
-    this.chatBubbleBackground = latest.background;
-    this.chatBubbleAvatar = latest.avatar;
-    this.chatBubbleText = latest.text;
   }
 
   private positionChatBubbles(deltaSeconds: number): void {

@@ -113,9 +113,9 @@ describe("RoomScene", () => {
     });
 
     const avatars = sceneState(scene).avatars;
-    expect(avatarState(avatars.get("user_1")).chatBubble.visible).toBe(false);
-    expect(avatarState(avatars.get("user_2")).chatBubble.visible).toBe(true);
-    expect(avatarState(avatars.get("user_2")).chatBubbleText.text).toBe("Ada: hi there");
+    expect(avatarState(avatars.get("user_1")).chatBubbles).toHaveLength(0);
+    expect(avatarState(avatars.get("user_2")).chatBubbles.at(-1)?.view.visible).toBe(true);
+    expect(avatarState(avatars.get("user_2")).chatBubbles.at(-1)?.text.text).toBe("Ada: hi there");
   });
 
   test("pushes nearby chat bubbles upward so they do not overlap", () => {
@@ -173,7 +173,7 @@ describe("RoomScene", () => {
     });
 
     expect(avatar.typingIndicator.visible).toBe(false);
-    expect(avatar.chatBubble.visible).toBe(true);
+    expect(avatar.chatBubbles.at(-1)?.view.visible).toBe(true);
   });
 
   test("requests movement only when clicking walkable tiles", () => {
@@ -375,13 +375,11 @@ function rectsOverlap(a: BubbleRect | undefined, b: BubbleRect | undefined): boo
 }
 
 function avatarState(avatar?: { view: Container }): {
-  chatBubble: { visible: boolean };
-  chatBubbleText: { text: string };
+  chatBubbles: { view: { visible: boolean }; text: { text: string } }[];
   typingIndicator: { visible: boolean };
 } {
   return avatar as unknown as {
-    chatBubble: { visible: boolean };
-    chatBubbleText: { text: string };
+    chatBubbles: { view: { visible: boolean }; text: { text: string } }[];
     typingIndicator: { visible: boolean };
   };
 }
