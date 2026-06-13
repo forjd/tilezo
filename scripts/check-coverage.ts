@@ -182,25 +182,16 @@ export function listSourceFiles(directories: string[]): string[] {
     .sort();
 }
 
-// Browser composition/entry roots that wire Pixi (WebGL/canvas) and the DOM together.
-// Their constituent units (RoomScene, NetClient, ChatPanel, the UI panels, the auth/room/
-// friend clients) are all independently unit-tested; exercising the roots themselves needs
-// a full browser + GPU harness, so — like the already-excluded entrypoints — they are not
-// part of the line-coverage gate. This is NOT used to hide server/product logic.
-const COMPOSITION_ROOTS = [
-  "apps/client/src/app/createApp.ts",
-  "apps/client/src/game/Game.ts",
-  "apps/client/src/preview-entry.ts",
-];
+// Preview-only browser wiring is excluded. Product entrypoints and composition roots still
+// count toward adjusted coverage; if they are absent from LCOV they are treated as uncovered.
+const EXCLUDED_PREVIEW_ENTRYPOINTS = ["apps/client/src/preview-entry.ts"];
 
 export function isCoverageTarget(file: string): boolean {
   if (
     file.endsWith(".config.ts") ||
-    file.endsWith("/main.ts") ||
-    file.endsWith("/index.ts") ||
     file.endsWith("/types.ts") ||
     file.endsWith("Types.ts") ||
-    COMPOSITION_ROOTS.some((root) => file === root || file.endsWith(`/${root}`))
+    EXCLUDED_PREVIEW_ENTRYPOINTS.some((root) => file === root || file.endsWith(`/${root}`))
   ) {
     return false;
   }
@@ -216,7 +207,7 @@ export function isCoverageTarget(file: string): boolean {
     (line) =>
       line.startsWith("import type ") ||
       line.startsWith("export type ") ||
-      /^export \{[^}]+} from /.test(line),
+      /^export (\*|\{[^}]+}) from /.test(line),
   );
 }
 
