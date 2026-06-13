@@ -196,8 +196,7 @@ function shutdown(code: number): never {
 }
 
 function withRuntimeConfig(clientUrl: string, apiUrl: string, wsUrl: string): string {
-  const url = new URL(clientUrl);
-  url.searchParams.set("tilezoApiUrl", apiUrl);
-  url.searchParams.set("tilezoWsUrl", wsUrl);
-  return url.toString();
+  void apiUrl;
+  void wsUrl;
+  return clientUrl;
 }
