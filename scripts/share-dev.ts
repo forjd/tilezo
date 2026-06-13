@@ -1,9 +1,11 @@
+import { rmSync, writeFileSync } from "node:fs";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { loadServerEnv, projectRoot } from "./server-env";
 
 const tunnelUrlPattern = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g;
 const children = new Set<ChildProcess>();
+const runtimeConfigPath = resolve(projectRoot, "apps/client/tilezo-runtime-config.json");
 
 const env = loadServerEnv();
 const serverPort = env.PORT ?? env.SERVER_PORT ?? "3000";
@@ -17,10 +19,17 @@ if (!commandExists("cloudflared")) {
 process.on("SIGINT", () => shutdown(130));
 process.on("SIGTERM", () => shutdown(143));
 process.on("exit", () => {
+  cleanupRuntimeConfig();
+
   for (const child of children) {
     child.kill();
   }
 });
+
+console.log(`Opening client tunnel for http://localhost:${clientPort}`);
+const clientTunnel = await startTunnel("client-tunnel", `http://localhost:${clientPort}`);
+const clientUrl = clientTunnel.url;
+const clientOrigin = new URL(clientUrl).origin;
 
 console.log(`Starting Tilezo server on http://localhost:${serverPort}`);
 const server = spawnManaged("server", "bun", ["--watch", "src/index.ts"], {
@@ -29,6 +38,10 @@ const server = spawnManaged("server", "bun", ["--watch", "src/index.ts"], {
     ...env,
     PORT: serverPort,
     HOST: env.HOST ?? "0.0.0.0",
+    CORS_ALLOWED_ORIGINS: appendOrigin(
+      env.CORS_ALLOWED_ORIGINS ?? `http://localhost:${clientPort},http://127.0.0.1:${clientPort}`,
+      clientOrigin,
+    ),
   },
 });
 
@@ -36,6 +49,7 @@ console.log(`Opening server tunnel for http://localhost:${serverPort}`);
 const serverTunnel = await startTunnel("server-tunnel", `http://localhost:${serverPort}`);
 const apiUrl = serverTunnel.url;
 const wsUrl = toWebSocketUrl(apiUrl, "/ws");
+writeRuntimeConfig(apiUrl, wsUrl);
 
 console.log(`Starting Tilezo client on http://localhost:${clientPort}`);
 const client = spawnManaged(
@@ -52,10 +66,6 @@ const client = spawnManaged(
     },
   },
 );
-
-console.log(`Opening client tunnel for http://localhost:${clientPort}`);
-const clientTunnel = await startTunnel("client-tunnel", `http://localhost:${clientPort}`);
-const clientUrl = withRuntimeConfig(clientTunnel.url, apiUrl, wsUrl);
 
 console.log("");
 console.log("Tilezo is available outside your network:");
@@ -195,6 +205,8 @@ function waitForExit(child: ChildProcess, label: string): Promise<void> {
 }
 
 function shutdown(code: number): never {
+  cleanupRuntimeConfig();
+
   for (const child of children) {
     child.kill();
   }
@@ -202,8 +214,19 @@ function shutdown(code: number): never {
   process.exit(code);
 }
 
-function withRuntimeConfig(clientUrl: string, apiUrl: string, wsUrl: string): string {
-  void apiUrl;
-  void wsUrl;
-  return clientUrl;
+function appendOrigin(existingOrigins: string, origin: string): string {
+  return [...new Set([...existingOrigins.split(","), origin].map((value) => value.trim()))]
+    .filter(Boolean)
+    .join(",");
+}
+
+function writeRuntimeConfig(apiUrl: string, wsUrl: string): void {
+  writeFileSync(
+    runtimeConfigPath,
+    `${JSON.stringify({ PUBLIC_API_URL: apiUrl, PUBLIC_WS_URL: wsUrl }, null, 2)}\n`,
+  );
+}
+
+function cleanupRuntimeConfig(): void {
+  rmSync(runtimeConfigPath, { force: true });
 }
