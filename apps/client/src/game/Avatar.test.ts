@@ -61,13 +61,15 @@ describe("Avatar", () => {
   test("renders username text cleanly while keeping bubble art pixel-snapped", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
-      chatBubbleAvatar: { roundPixels: boolean };
-      chatBubbleBackground: { roundPixels: boolean };
-      chatBubbleText: {
-        resolution: number;
-        roundPixels: boolean;
-        textureStyle: { scaleMode: string };
-      };
+      chatBubbles: {
+        avatar: { roundPixels: boolean };
+        background: { roundPixels: boolean };
+        text: {
+          resolution: number;
+          roundPixels: boolean;
+          textureStyle: { scaleMode: string };
+        };
+      }[];
       label: {
         resolution: number;
         roundPixels: boolean;
@@ -82,15 +84,18 @@ describe("Avatar", () => {
       };
     };
 
+    avatar.say("hi");
+    const bubble = state.chatBubbles.at(-1);
+
     expect(state.label.roundPixels).toBe(true);
     expect(state.label.resolution).toBe(2);
     expect(state.label.textureStyle.scaleMode).toBe("linear");
     expect(state.label.y).toBe(-60);
-    expect(state.chatBubbleAvatar.roundPixels).toBe(true);
-    expect(state.chatBubbleBackground.roundPixels).toBe(true);
-    expect(state.chatBubbleText.roundPixels).toBe(true);
-    expect(state.chatBubbleText.resolution).toBe(3);
-    expect(state.chatBubbleText.textureStyle.scaleMode).toBe("linear");
+    expect(bubble?.avatar.roundPixels).toBe(true);
+    expect(bubble?.background.roundPixels).toBe(true);
+    expect(bubble?.text.roundPixels).toBe(true);
+    expect(bubble?.text.resolution).toBe(3);
+    expect(bubble?.text.textureStyle.scaleMode).toBe("linear");
     expect(state.typingIndicatorBackground.roundPixels).toBe(true);
     expect(state.typingIndicatorText.roundPixels).toBe(true);
     expect(state.typingIndicatorText.resolution).toBe(1);
@@ -188,21 +193,22 @@ describe("Avatar", () => {
   test("shows chat bubbles briefly above the avatar", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
-      chatBubble: { visible: boolean };
-      chatBubbleText: { text: string; x: number };
+      chatBubbles: { view: { visible: boolean }; text: { text: string; x: number } }[];
       label: { visible: boolean };
     };
 
     avatar.say("hello room");
+    const bubble = state.chatBubbles.at(-1);
 
-    expect(state.chatBubble.visible).toBe(true);
-    expect(state.chatBubbleText.text).toBe("Dan: hello room");
-    expect(state.chatBubbleText.x).toBe(-47);
+    expect(bubble?.view.visible).toBe(true);
+    expect(bubble?.text.text).toBe("Dan: hello room");
+    expect(bubble?.text.x).toBe(-47);
     expect(state.label.visible).toBe(true);
 
     avatar.update(5);
 
-    expect(state.chatBubble.visible).toBe(false);
+    // The bubble expires and is removed entirely (no lingering reference object).
+    expect(state.chatBubbles).toHaveLength(0);
     expect(state.label.visible).toBe(true);
   });
 
@@ -227,7 +233,7 @@ describe("Avatar", () => {
   test("shows typing indicators when no chat bubble is visible", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
-      chatBubble: { visible: boolean };
+      chatBubbles: { view: { visible: boolean } }[];
       typingIndicator: { visible: boolean };
     };
 
@@ -237,12 +243,12 @@ describe("Avatar", () => {
 
     avatar.say("hello room");
 
-    expect(state.chatBubble.visible).toBe(true);
+    expect(state.chatBubbles.at(-1)?.view.visible).toBe(true);
     expect(state.typingIndicator.visible).toBe(false);
 
     avatar.update(5);
 
-    expect(state.chatBubble.visible).toBe(false);
+    expect(state.chatBubbles).toHaveLength(0);
     expect(state.typingIndicator.visible).toBe(true);
 
     avatar.setTyping(false);
@@ -253,26 +259,26 @@ describe("Avatar", () => {
   test("allows wider chat bubble lines before wrapping", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
-      chatBubbleText: { text: string };
-      chatBubbles: { width: number }[];
+      chatBubbles: { width: number; text: { text: string } }[];
     };
 
     avatar.say("this message can stay on a wider single line");
 
-    expect(state.chatBubbleText.text).toBe("Dan: this message can stay on a wider\nsingle line");
+    expect(state.chatBubbles.at(-1)?.text.text).toBe(
+      "Dan: this message can stay on a wider\nsingle line",
+    );
     expect(state.chatBubbles.at(-1)?.width).toBeGreaterThan(212);
   });
 
   test("keeps long unbroken chat messages inside the bubble line budget", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
-      chatBubbleText: { text: string };
-      chatBubbles: { width: number }[];
+      chatBubbles: { width: number; text: { text: string } }[];
     };
 
     avatar.say("123123123123123123123123123123123123123123123123123123123123123123");
 
-    const lines = state.chatBubbleText.text.split("\n");
+    const lines = (state.chatBubbles.at(-1)?.text.text ?? "").split("\n");
     expect(lines).toHaveLength(3);
     expect(state.chatBubbles.at(-1)?.width).toBeLessThanOrEqual(348);
     expect(lines.at(-1)?.endsWith("...")).toBe(false);
@@ -281,13 +287,12 @@ describe("Avatar", () => {
   test("wraps wide uppercase chat before it overflows the bubble", () => {
     const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
     const state = avatar as unknown as {
-      chatBubbleText: { text: string };
-      chatBubbles: { width: number }[];
+      chatBubbles: { width: number; text: { text: string } }[];
     };
 
     avatar.say("DFDSFSDGDSFGSDFSDFFGHJKLQWERTY");
 
-    expect(state.chatBubbleText.text.split("\n").length).toBeGreaterThan(1);
+    expect((state.chatBubbles.at(-1)?.text.text ?? "").split("\n").length).toBeGreaterThan(1);
     expect(state.chatBubbles.at(-1)?.width).toBeLessThanOrEqual(348);
   });
 });
