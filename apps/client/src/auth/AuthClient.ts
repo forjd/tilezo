@@ -1,6 +1,8 @@
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 import { DEFAULT_API_URL } from "../assets";
 
+const LOGOUT_TIMEOUT_MS = 5_000;
+
 export type AuthMode = "login" | "register";
 
 export type AuthUser = {
@@ -49,11 +51,24 @@ export async function fetchSession(): Promise<AuthUser | undefined> {
   }
 }
 
-export async function logout(): Promise<void> {
+export async function logout(options: { timeoutMs?: number } = {}): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? LOGOUT_TIMEOUT_MS);
+
+  if (typeof timeout === "object" && "unref" in timeout && typeof timeout.unref === "function") {
+    timeout.unref();
+  }
+
   try {
-    await fetch(`${getApiUrl()}/auth/logout`, { method: "POST", credentials: "include" });
+    await fetch(`${getApiUrl()}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      signal: controller.signal,
+    });
   } catch {
     // A failed logout call must not block the local sign-out.
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

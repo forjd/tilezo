@@ -272,6 +272,7 @@ export class RoomScene {
     });
 
     this.listen(canvas, "mousedown", (event) => {
+      canvas.focus({ preventScroll: true });
       event.preventDefault();
       this.dragStart = this.eventToCanvasPoint(event);
       this.dragWorldStart = { x: this.world.x, y: this.world.y };

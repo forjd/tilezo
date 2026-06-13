@@ -230,6 +230,17 @@ describe("RoomScene", () => {
     expect(app.canvas.getAttribute("role")).toBe("application");
   });
 
+  test("focuses the room canvas on pointer interaction", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.loadSnapshot(snapshot([]));
+    app.canvas.mousedown({ clientX: 384, clientY: 348 });
+
+    expect(app.canvas.focusCount).toBe(1);
+    expect(app.canvas.lastFocusOptions).toEqual({ preventScroll: true });
+  });
+
   test("updates and clears hover from pointer events", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});
@@ -458,6 +469,8 @@ function avatarState(avatar?: { view: Container }): {
 
 class FakeCanvas {
   defaultPrevented = false;
+  focusCount = 0;
+  lastFocusOptions?: FocusOptions;
   tabIndex = -1;
   private readonly attributeValues = new Map<string, string>();
 
@@ -483,6 +496,11 @@ class FakeCanvas {
 
   getBoundingClientRect() {
     return { left: 0, top: 0 };
+  }
+
+  focus(options?: FocusOptions): void {
+    this.focusCount += 1;
+    this.lastFocusOptions = options;
   }
 
   click(event: { clientX: number; clientY: number }): void {

@@ -151,15 +151,33 @@ describe("logout", () => {
     }) as unknown as typeof fetch;
 
     await expect(logout()).resolves.toBeUndefined();
-    expect(requests[0]).toEqual({
-      url: `${DEFAULT_API_URL}/auth/logout`,
-      init: { method: "POST", credentials: "include" },
-    });
+    expect(requests[0]?.url).toBe(`${DEFAULT_API_URL}/auth/logout`);
+    expect(requests[0]?.init?.method).toBe("POST");
+    expect(requests[0]?.init?.credentials).toBe("include");
+    expect(requests[0]?.init?.signal).toBeInstanceOf(AbortSignal);
 
     globalThis.fetch = (async () => {
       throw new Error("offline");
     }) as unknown as typeof fetch;
     await expect(logout()).resolves.toBeUndefined();
+  });
+
+  test("aborts a hung logout request", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    let aborted = false;
+    globalThis.fetch = (async (_url: FetchArgs[0], init?: FetchArgs[1]) => {
+      const signal = init?.signal;
+
+      return await new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    }) as unknown as typeof fetch;
+
+    await expect(logout({ timeoutMs: 1 })).resolves.toBeUndefined();
+    expect(aborted).toBe(true);
   });
 });
 

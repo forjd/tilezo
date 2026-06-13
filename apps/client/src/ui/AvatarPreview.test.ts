@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { AvatarPreview } from "./AvatarPreview";
 
+const originalCanvasElement = Object.getOwnPropertyDescriptor(globalThis, "HTMLCanvasElement");
+
 describe("AvatarPreview", () => {
   test("creates a wrapper element marked for the avatar preview", () => {
     const documentRef = new FakeDocument();
@@ -53,7 +55,81 @@ describe("AvatarPreview", () => {
 
     expect(state.renderedKey).not.toBe(initialKey);
   });
+
+  test("does not append a canvas when destroyed during async mount", async () => {
+    installCanvasElement();
+    const documentRef = new FakeDocument();
+    const previewApp = createPreviewApp();
+    const preview = new AvatarPreview(
+      documentRef as unknown as Document,
+      previewApp.app as unknown as ConstructorParameters<typeof AvatarPreview>[1],
+    );
+
+    try {
+      const mounted = preview.mount();
+      preview.destroy();
+      previewApp.resolveInit();
+      await mounted;
+
+      expect((preview.element as unknown as FakeElement).children).toHaveLength(0);
+      expect(previewApp.destroyed).toEqual([true]);
+    } finally {
+      restoreCanvasElement();
+    }
+  });
 });
+
+function installCanvasElement(): void {
+  Object.defineProperty(globalThis, "HTMLCanvasElement", {
+    configurable: true,
+    value: class FakeHTMLCanvasElement {},
+  });
+}
+
+function restoreCanvasElement(): void {
+  if (originalCanvasElement) {
+    Object.defineProperty(globalThis, "HTMLCanvasElement", originalCanvasElement);
+    return;
+  }
+
+  Reflect.deleteProperty(globalThis, "HTMLCanvasElement");
+}
+
+function createPreviewApp(): {
+  app: {
+    canvas: FakeCanvas;
+    destroy: (removeView?: boolean) => void;
+    init: () => Promise<void>;
+    stage: { addChild: (child: unknown) => void };
+  };
+  destroyed: (boolean | undefined)[];
+  resolveInit: () => void;
+} {
+  let resolveInit: (() => void) | undefined;
+  const destroyed: (boolean | undefined)[] = [];
+  const canvas = new FakeCanvas("canvas", new FakeDocument());
+
+  return {
+    app: {
+      canvas,
+      destroy(removeView) {
+        destroyed.push(removeView);
+      },
+      init() {
+        return new Promise<void>((resolve) => {
+          resolveInit = resolve;
+        });
+      },
+      stage: {
+        addChild() {},
+      },
+    },
+    destroyed,
+    resolveInit() {
+      resolveInit?.();
+    },
+  };
+}
 
 class FakeDocument {
   createElement(tagName: string): FakeElement {
@@ -97,6 +173,10 @@ class FakeElement {
 
     return undefined;
   }
+}
+
+class FakeCanvas extends FakeElement {
+  readonly style: Record<string, string> = {};
 }
 
 function dataName(name: string): string {
