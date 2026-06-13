@@ -7,7 +7,7 @@ import { getConfig, type ServerConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
 import { DrizzleFriendStore, FriendService } from "./friends/friends";
-import { corsHeaders, createHttpRouter } from "./http/router";
+import { corsHeaders, createHttpRouter, readSessionToken } from "./http/router";
 import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { createLogger, parseLogLevel } from "./observability/logger";
@@ -161,7 +161,11 @@ async function handleWebSocketUpgrade(
   bunServer: Server<SocketData>,
   url: URL,
 ): Promise<Response | undefined> {
-  const user = await auth?.verifyToken(url.searchParams.get("token") ?? "");
+  // Browsers send the HttpOnly session cookie on the WS handshake; fall back to the query
+  // token for non-browser clients. Either way the token stays out of page JavaScript.
+  const user = await auth?.verifyToken(
+    readSessionToken(request) ?? url.searchParams.get("token") ?? "",
+  );
 
   if (!user) {
     logger.warn("websocket.auth.rejected");

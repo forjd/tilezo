@@ -44,13 +44,11 @@ export async function listRoomTemplates(): Promise<RoomTemplateSummary[]> {
     : [];
 }
 
-export async function createRoom(token: string, room: CreateRoomRequest): Promise<CreatedRoom> {
+export async function createRoom(room: CreateRoomRequest): Promise<CreatedRoom> {
   const response = await fetch(`${getApiUrl()}/rooms`, {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-    },
+    credentials: "include",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(room),
   });
   const body = await readJson<CreatedRoom | { error?: { message?: string } }>(response);

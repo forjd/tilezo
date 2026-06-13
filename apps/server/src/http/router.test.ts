@@ -404,6 +404,56 @@ describe("createHttpRouter", () => {
     });
   });
 
+  describe("cookie sessions", () => {
+    test("delivers an HttpOnly session cookie on login and clears it on logout", async () => {
+      const route = createHttpRouter(makeDeps());
+
+      const loggedIn = await route(request("/auth/login", { body: credentials }), "ip");
+      const setCookie = loggedIn.headers.get("set-cookie") ?? "";
+      expect(setCookie).toContain("tilezo_session=");
+      expect(setCookie).toContain("HttpOnly");
+      expect(setCookie).toContain("SameSite=Lax");
+
+      const loggedOut = await route(request("/auth/logout", { token: "good-token" }), "ip");
+      expect(loggedOut.headers.get("set-cookie")).toContain("Max-Age=0");
+    });
+
+    test("authenticates GET /auth/session from the cookie", async () => {
+      const route = createHttpRouter(makeDeps());
+
+      const signedIn = await route(
+        request("/auth/session", {
+          method: "GET",
+          headers: { cookie: "tilezo_session=good-token" },
+        }),
+        "ip",
+      );
+      expect(signedIn.status).toBe(200);
+      expect(await signedIn.json()).toMatchObject({ user: { id: "user_1" } });
+
+      const anon = await route(request("/auth/session", { method: "GET" }), "ip");
+      expect(anon.status).toBe(401);
+    });
+
+    test("echoes an allowed origin with credentials but not a wildcard", async () => {
+      const route = createHttpRouter(makeDeps());
+
+      const allowed = await route(
+        request("/auth/login", { body: credentials, headers: { origin: "http://localhost:3001" } }),
+        "ip",
+      );
+      expect(allowed.headers.get("access-control-allow-origin")).toBe("http://localhost:3001");
+      expect(allowed.headers.get("access-control-allow-credentials")).toBe("true");
+
+      const disallowed = await route(
+        request("/auth/login", { body: credentials, headers: { origin: "http://evil.example" } }),
+        "ip",
+      );
+      expect(disallowed.headers.get("access-control-allow-origin")).toBe("*");
+      expect(disallowed.headers.get("access-control-allow-credentials")).toBeNull();
+    });
+  });
+
   describe("metrics", () => {
     test("serves metrics openly in development and resets", async () => {
       const route = createHttpRouter(makeDeps());

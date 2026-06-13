@@ -27,7 +27,7 @@ export class Game {
 
   constructor(private readonly options: GameOptions) {}
 
-  async start(token: string): Promise<void> {
+  async start(): Promise<void> {
     await this.app.init({
       antialias: false,
       autoDensity: true,
@@ -89,7 +89,7 @@ export class Game {
       }),
     );
 
-    await this.net.connect(token);
+    await this.net.connect();
     this.connected = true;
     this.refreshRooms();
 
@@ -126,12 +126,12 @@ export class Game {
     this.sendIfConnected({ type: "avatar.appearance.update", appearance });
   }
 
-  async reconnect(token: string): Promise<void> {
+  async reconnect(): Promise<void> {
     // Drop stale avatars before reconnecting so the player does not see a frozen copy of
     // the previous room while the server re-sends a snapshot (or, in edge cases where no
     // snapshot arrives, an honest empty scene instead of a misleading stale one).
     this.scene?.clear();
-    await this.net.connect(token);
+    await this.net.connect();
     this.connected = true;
     this.app.ticker.start();
     this.refreshRooms();

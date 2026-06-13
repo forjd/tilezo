@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { DEFAULT_API_URL } from "../assets";
-import { authenticate, updateAppearance } from "./AuthClient";
+import { authenticate, fetchSession, logout, updateAppearance } from "./AuthClient";
 
 const originalFetch = globalThis.fetch;
 const originalProcess = Object.getOwnPropertyDescriptor(globalThis, "process");
 const originalPublicApiUrl = Bun.env.PUBLIC_API_URL;
 type FetchArgs = Parameters<typeof fetch>;
+
+const user = { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE };
 
 describe("authenticate", () => {
   afterEach(() => {
@@ -15,51 +17,36 @@ describe("authenticate", () => {
     restorePublicApiUrl();
   });
 
-  test("posts credentials to the selected auth endpoint", async () => {
+  test("posts credentials with cookies included and returns the user", async () => {
     delete Bun.env.PUBLIC_API_URL;
-    const session = {
-      user: {
-        id: "user_1",
-        username: "dan",
-        appearance: DEFAULT_AVATAR_APPEARANCE,
-      },
-      token: "session-token",
-    };
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
       requests.push({ url: String(url), init });
-      return Response.json(session);
+      return Response.json({ user, token: "session-token" });
     }) as unknown as typeof fetch;
 
     await expect(
       authenticate({ mode: "register", username: "dan", password: "secret" }),
-    ).resolves.toEqual(session);
+    ).resolves.toEqual(user);
 
-    expect(requests).toHaveLength(1);
-    expect(requests[0]).toEqual({
-      url: `${DEFAULT_API_URL}/auth/register`,
-      init: {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+    expect(requests).toEqual([
+      {
+        url: `${DEFAULT_API_URL}/auth/register`,
+        init: {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username: "dan", password: "secret" }),
         },
-        body: JSON.stringify({
-          username: "dan",
-          password: "secret",
-        }),
       },
-    });
+    ]);
   });
 
   test("throws the server error message when authentication fails", async () => {
     delete Bun.env.PUBLIC_API_URL;
     globalThis.fetch = (async () =>
       Response.json(
-        {
-          error: {
-            message: "Invalid credentials",
-          },
-        },
+        { error: { message: "Invalid credentials" } },
         { status: 401 },
       )) as unknown as typeof fetch;
 
@@ -70,35 +57,15 @@ describe("authenticate", () => {
 
   test("uses public API URL overrides", async () => {
     Bun.env.PUBLIC_API_URL = "http://localhost:4567";
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
-    globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
-      requests.push({ url: String(url), init });
-      return Response.json({
-        user: { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE },
-        token: "session-token",
-      });
-    }) as unknown as typeof fetch;
-
-    await authenticate({ mode: "login", username: "dan", password: "secret" });
-
-    expect(requests[0]?.url).toBe("http://localhost:4567/auth/login");
-  });
-
-  test("falls back to the default API URL when process is unavailable", async () => {
-    delete Bun.env.PUBLIC_API_URL;
-    Reflect.deleteProperty(globalThis, "process");
     const requests: string[] = [];
     globalThis.fetch = (async (url: FetchArgs[0]) => {
       requests.push(String(url));
-      return Response.json({
-        user: { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE },
-        token: "session-token",
-      });
+      return Response.json({ user, token: "session-token" });
     }) as unknown as typeof fetch;
 
     await authenticate({ mode: "login", username: "dan", password: "secret" });
 
-    expect(requests).toEqual([`${DEFAULT_API_URL}/auth/login`]);
+    expect(requests[0]).toBe("http://localhost:4567/auth/login");
   });
 
   test("does not use the client page origin as the API fallback", async () => {
@@ -112,10 +79,7 @@ describe("authenticate", () => {
     const requests: string[] = [];
     globalThis.fetch = (async (url: FetchArgs[0]) => {
       requests.push(String(url));
-      return Response.json({
-        user: { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE },
-        token: "session-token",
-      });
+      return Response.json({ user, token: "session-token" });
     }) as unknown as typeof fetch;
 
     await authenticate({ mode: "register", username: "dan", password: "secret" });
@@ -139,13 +103,73 @@ describe("authenticate", () => {
   });
 });
 
+describe("fetchSession", () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    restorePublicApiUrl();
+  });
+
+  test("returns the user from the session cookie when signed in", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
+      requests.push({ url: String(url), init });
+      return Response.json({ user });
+    }) as unknown as typeof fetch;
+
+    await expect(fetchSession()).resolves.toEqual(user);
+    expect(requests[0]).toEqual({
+      url: `${DEFAULT_API_URL}/auth/session`,
+      init: { credentials: "include" },
+    });
+  });
+
+  test("returns undefined when not signed in or the request fails", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    globalThis.fetch = (async () => new Response(null, { status: 401 })) as unknown as typeof fetch;
+    await expect(fetchSession()).resolves.toBeUndefined();
+
+    globalThis.fetch = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    await expect(fetchSession()).resolves.toBeUndefined();
+  });
+});
+
+describe("logout", () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    restorePublicApiUrl();
+  });
+
+  test("posts to the logout endpoint with credentials and never throws", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
+      requests.push({ url: String(url), init });
+      return Response.json({ ok: true });
+    }) as unknown as typeof fetch;
+
+    await expect(logout()).resolves.toBeUndefined();
+    expect(requests[0]).toEqual({
+      url: `${DEFAULT_API_URL}/auth/logout`,
+      init: { method: "POST", credentials: "include" },
+    });
+
+    globalThis.fetch = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    await expect(logout()).resolves.toBeUndefined();
+  });
+});
+
 describe("updateAppearance", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     restorePublicApiUrl();
   });
 
-  test("puts the selected appearance with the session token", async () => {
+  test("puts the selected appearance using the session cookie", async () => {
     delete Bun.env.PUBLIC_API_URL;
     const appearance: AvatarAppearance = {
       ...DEFAULT_AVATAR_APPEARANCE,
@@ -158,17 +182,15 @@ describe("updateAppearance", () => {
       return Response.json({ appearance });
     }) as unknown as typeof fetch;
 
-    await expect(updateAppearance("session-token", appearance)).resolves.toEqual(appearance);
+    await expect(updateAppearance(appearance)).resolves.toEqual(appearance);
 
     expect(requests).toEqual([
       {
         url: `${DEFAULT_API_URL}/me/appearance`,
         init: {
           method: "PUT",
-          headers: {
-            authorization: "Bearer session-token",
-            "content-type": "application/json",
-          },
+          credentials: "include",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ appearance }),
         },
       },

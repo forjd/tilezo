@@ -21,6 +21,8 @@ export type ServerConfig = {
   maxAuthBodyBytes: number;
   trustProxy: boolean;
   metricsToken?: string;
+  corsAllowedOrigins: string[];
+  cookieSecure: boolean;
   nodeEnv: string;
 };
 
@@ -119,6 +121,16 @@ export function getConfig(env = Bun.env): ServerConfig {
   );
   const trustProxy = parseBoolean("TRUST_PROXY", env.TRUST_PROXY, false);
   const metricsToken = env.METRICS_TOKEN?.trim() || undefined;
+  // Origins permitted to make credentialed (cookie-bearing) cross-origin requests. The
+  // dev client runs on :3001 against the API on :3000, so those are the defaults.
+  const corsAllowedOrigins = (
+    env.CORS_ALLOWED_ORIGINS ?? "http://localhost:3001,http://127.0.0.1:3001"
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  // Session cookies are marked Secure in production (HTTPS); dev runs over plain HTTP.
+  const cookieSecure = parseBoolean("COOKIE_SECURE", env.COOKIE_SECURE, isProduction);
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("PORT must be an integer from 1 to 65535");
@@ -155,6 +167,8 @@ export function getConfig(env = Bun.env): ServerConfig {
     maxAuthBodyBytes,
     trustProxy,
     metricsToken,
+    corsAllowedOrigins,
+    cookieSecure,
     nodeEnv,
   };
 }

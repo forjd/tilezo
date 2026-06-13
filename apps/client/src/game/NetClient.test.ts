@@ -28,7 +28,7 @@ describe("NetClient", () => {
     const statuses: string[] = [];
     client.onStatus((status) => statuses.push(status));
 
-    const connected = client.connect("session-token");
+    const connected = client.connect();
     const socket = currentSocket();
     socket.open();
     await connected;
@@ -36,11 +36,8 @@ describe("NetClient", () => {
     const message: ClientMessage = { type: "ping", sentAt: "now" };
     client.send(message);
 
-    expect(socket.url).toBe("ws://localhost:3000/ws?token=session-token");
-    expect(statuses).toEqual([
-      "connecting to ws://localhost:3000/ws?token=session-token",
-      "connected",
-    ]);
+    expect(socket.url).toBe("ws://localhost:3000/ws");
+    expect(statuses).toEqual(["connecting to ws://localhost:3000/ws", "connected"]);
     expect(socket.sent).toEqual([JSON.stringify(message)]);
   });
 
@@ -48,12 +45,12 @@ describe("NetClient", () => {
     installBrowserFakes("https:");
     const client = new NetClient();
 
-    const connected = client.connect("session-token");
+    const connected = client.connect();
     const socket = currentSocket();
     socket.open();
     await connected;
 
-    expect(socket.url).toBe("wss://localhost:3000/ws?token=session-token");
+    expect(socket.url).toBe("wss://localhost:3000/ws");
   });
 
   test("uses public websocket URL overrides", async () => {
@@ -61,12 +58,12 @@ describe("NetClient", () => {
     Bun.env.PUBLIC_WS_URL = "ws://localhost:4567/ws";
     const client = new NetClient();
 
-    const connected = client.connect("session-token");
+    const connected = client.connect();
     const socket = currentSocket();
     socket.open();
     await connected;
 
-    expect(socket.url).toBe("ws://localhost:4567/ws?token=session-token");
+    expect(socket.url).toBe("ws://localhost:4567/ws");
   });
 
   test("does not use the client dev server origin as the websocket fallback", async () => {
@@ -74,12 +71,12 @@ describe("NetClient", () => {
     Reflect.deleteProperty(globalThis, "process");
     const client = new NetClient();
 
-    const connected = client.connect("session-token");
+    const connected = client.connect();
     const socket = currentSocket();
     socket.open();
     await connected;
 
-    expect(socket.url).toBe("ws://localhost:3000/ws?token=session-token");
+    expect(socket.url).toBe("ws://localhost:3000/ws");
   });
 
   test("falls back to the default websocket URL when process is unavailable", async () => {
@@ -87,12 +84,12 @@ describe("NetClient", () => {
     Reflect.deleteProperty(globalThis, "process");
     const client = new NetClient();
 
-    const connected = client.connect("session-token");
+    const connected = client.connect();
     const socket = currentSocket();
     socket.open();
     await connected;
 
-    expect(socket.url).toBe("ws://localhost:3000/ws?token=session-token");
+    expect(socket.url).toBe("ws://localhost:3000/ws");
   });
 
   test("emits parsed server messages and ignores unsubscribed handlers", () => {
@@ -101,7 +98,7 @@ describe("NetClient", () => {
     const received: unknown[] = [];
     const unsubscribe = client.onMessage((message) => received.push(message));
 
-    void client.connect("session-token");
+    void client.connect();
     const socket = currentSocket();
     socket.message(JSON.stringify({ type: "connected", userId: "user_1" }));
     unsubscribe();
@@ -120,7 +117,7 @@ describe("NetClient", () => {
       disconnects += 1;
     });
 
-    const connected = client.connect("session-token");
+    const connected = client.connect();
     const socket = currentSocket();
     socket.message("{");
     socket.error();
@@ -129,7 +126,7 @@ describe("NetClient", () => {
     socket.close();
 
     expect(statuses).toEqual([
-      "connecting to ws://localhost:3000/ws?token=session-token",
+      "connecting to ws://localhost:3000/ws",
       "received invalid server message",
       "connection error",
       "disconnected",
@@ -152,7 +149,7 @@ describe("NetClient", () => {
       disconnects += 1;
     });
 
-    const connected = client.connect("session-token");
+    const connected = client.connect();
     const socket = currentSocket();
     socket.open();
     await connected;

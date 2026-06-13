@@ -58,99 +58,109 @@ export function createHttpRouter(
       path: url.pathname,
     });
     const ctx: RouteContext = { ...deps, request, url, clientKey, requestLogger };
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
-    }
-
-    if (url.pathname === "/auth/register" && request.method === "POST") {
-      const limited = enforceRateLimit(
-        ctx,
-        ctx.registerRateLimiter,
-        clientKey,
-        "auth.register.rate_limited",
-        "Too many account registrations, try again shortly",
-      );
-      if (limited) {
-        return limited;
-      }
-      return handleAuthRequest(ctx, "register");
-    }
-
-    if (url.pathname === "/auth/login" && request.method === "POST") {
-      const limited = enforceRateLimit(
-        ctx,
-        ctx.loginRateLimiter,
-        `ip:${clientKey}`,
-        "auth.login.rate_limited",
-        "Too many login attempts, try again shortly",
-      );
-      if (limited) {
-        return limited;
-      }
-      return handleAuthRequest(ctx, "login");
-    }
-
-    if (url.pathname === "/auth/logout" && request.method === "POST") {
-      return handleLogoutRequest(ctx);
-    }
-
-    if (url.pathname === "/me/appearance") {
-      return handleAppearanceRequest(ctx);
-    }
-
-    if (url.pathname === "/client-events" && request.method === "POST") {
-      return handleClientEventRequest(ctx);
-    }
-
-    if (url.pathname === "/friends" || url.pathname.startsWith("/friends/")) {
-      return handleFriendsRequest(ctx);
-    }
-
-    if (url.pathname === "/room-templates" && request.method === "GET") {
-      requestLogger.info("room_templates.listed");
-      return authJson({ templates: listRoomCreationTemplates() }, 200);
-    }
-
-    if (url.pathname === "/rooms" && request.method === "POST") {
-      return handleCreateRoomRequest(ctx);
-    }
-
-    if (url.pathname === "/health") {
-      return Response.json({ ok: true }, { headers: corsHeaders() });
-    }
-
-    if (url.pathname === "/debug/metrics" && request.method === "GET") {
-      if (!metricsAccessAllowed(ctx)) {
-        return Response.json(
-          { error: { code: "NOT_FOUND", message: "Not found" } },
-          { status: 404 },
-        );
-      }
-      // Operational endpoint: no wildcard CORS so arbitrary web origins cannot scrape it.
-      return Response.json(ctx.metrics.snapshot(ctx.rooms.getMetrics()));
-    }
-
-    if (url.pathname === "/debug/metrics/reset" && request.method === "POST") {
-      if (ctx.config.nodeEnv === "production") {
-        return Response.json(
-          { error: { code: "NOT_FOUND", message: "Not found" } },
-          { status: 404, headers: corsHeaders() },
-        );
-      }
-
-      ctx.metrics.reset();
-      requestLogger.info("metrics.reset");
-      return Response.json({ ok: true }, { headers: corsHeaders() });
-    }
-
-    return new Response("Tilezo room server", {
-      headers: {
-        ...corsHeaders(),
-        "content-type": "text/plain;charset=utf-8",
-      },
-    });
+    const response = await dispatch(ctx);
+    // Set the final, origin-aware CORS headers (allowing credentialed cookie requests
+    // from configured origins) on whatever the handler returned.
+    applyCors(response, ctx);
+    return response;
   };
+}
+
+async function dispatch(ctx: RouteContext): Promise<Response> {
+  const { request, url, requestLogger, clientKey } = ctx;
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders() });
+  }
+
+  if (url.pathname === "/auth/session" && request.method === "GET") {
+    return handleSessionRequest(ctx);
+  }
+
+  if (url.pathname === "/auth/register" && request.method === "POST") {
+    const limited = enforceRateLimit(
+      ctx,
+      ctx.registerRateLimiter,
+      clientKey,
+      "auth.register.rate_limited",
+      "Too many account registrations, try again shortly",
+    );
+    if (limited) {
+      return limited;
+    }
+    return handleAuthRequest(ctx, "register");
+  }
+
+  if (url.pathname === "/auth/login" && request.method === "POST") {
+    const limited = enforceRateLimit(
+      ctx,
+      ctx.loginRateLimiter,
+      `ip:${clientKey}`,
+      "auth.login.rate_limited",
+      "Too many login attempts, try again shortly",
+    );
+    if (limited) {
+      return limited;
+    }
+    return handleAuthRequest(ctx, "login");
+  }
+
+  if (url.pathname === "/auth/logout" && request.method === "POST") {
+    return handleLogoutRequest(ctx);
+  }
+
+  if (url.pathname === "/me/appearance") {
+    return handleAppearanceRequest(ctx);
+  }
+
+  if (url.pathname === "/client-events" && request.method === "POST") {
+    return handleClientEventRequest(ctx);
+  }
+
+  if (url.pathname === "/friends" || url.pathname.startsWith("/friends/")) {
+    return handleFriendsRequest(ctx);
+  }
+
+  if (url.pathname === "/room-templates" && request.method === "GET") {
+    requestLogger.info("room_templates.listed");
+    return authJson({ templates: listRoomCreationTemplates() }, 200);
+  }
+
+  if (url.pathname === "/rooms" && request.method === "POST") {
+    return handleCreateRoomRequest(ctx);
+  }
+
+  if (url.pathname === "/health") {
+    return Response.json({ ok: true }, { headers: corsHeaders() });
+  }
+
+  if (url.pathname === "/debug/metrics" && request.method === "GET") {
+    if (!metricsAccessAllowed(ctx)) {
+      return Response.json({ error: { code: "NOT_FOUND", message: "Not found" } }, { status: 404 });
+    }
+    // Operational endpoint: no wildcard CORS so arbitrary web origins cannot scrape it.
+    return Response.json(ctx.metrics.snapshot(ctx.rooms.getMetrics()));
+  }
+
+  if (url.pathname === "/debug/metrics/reset" && request.method === "POST") {
+    if (ctx.config.nodeEnv === "production") {
+      return Response.json(
+        { error: { code: "NOT_FOUND", message: "Not found" } },
+        { status: 404, headers: corsHeaders() },
+      );
+    }
+
+    ctx.metrics.reset();
+    requestLogger.info("metrics.reset");
+    return Response.json({ ok: true }, { headers: corsHeaders() });
+  }
+
+  return new Response("Tilezo room server", {
+    headers: {
+      ...corsHeaders(),
+      "content-type": "text/plain;charset=utf-8",
+    },
+  });
 }
 
 async function handleAuthRequest(ctx: RouteContext, mode: AuthMode): Promise<Response> {
@@ -199,7 +209,11 @@ async function handleAuthRequest(ctx: RouteContext, mode: AuthMode): Promise<Res
         : await auth.login(username, password);
 
     requestLogger.info("auth.succeeded", { mode, userId: session.user.id });
-    return authJson(session, mode === "register" ? 201 : 200);
+    // Also deliver the token as an HttpOnly session cookie so the SPA never has to keep
+    // it in JS-readable storage; the JSON token stays for non-browser/back-compat clients.
+    return authJson(session, mode === "register" ? 201 : 200, {
+      "set-cookie": sessionCookie(session.token, ctx.config),
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       requestLogger.warn("auth.failed", { mode, code: error.code });
@@ -232,15 +246,34 @@ async function handleLogoutRequest(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  const user = await auth.verifyToken(readBearerToken(ctx.request) ?? "");
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
 
   if (user) {
     await auth.logout(user.id);
     requestLogger.info("auth.logout", { userId: user.id });
   }
 
-  // Idempotent: succeeds whether or not the token was still valid.
-  return authJson({ ok: true }, 200);
+  // Idempotent: succeeds whether or not the token was still valid. Always clear the cookie.
+  return authJson({ ok: true }, 200, { "set-cookie": clearedSessionCookie(ctx.config) });
+}
+
+async function handleSessionRequest(ctx: RouteContext): Promise<Response> {
+  const { auth } = ctx;
+
+  if (!auth) {
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for sessions" } },
+      503,
+    );
+  }
+
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
+
+  if (!user) {
+    return authJson({ error: { code: "UNAUTHENTICATED", message: "Not signed in" } }, 401);
+  }
+
+  return authJson({ user }, 200);
 }
 
 async function handleAppearanceRequest(ctx: RouteContext): Promise<Response> {
@@ -254,7 +287,7 @@ async function handleAppearanceRequest(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  const user = await auth.verifyToken(readBearerToken(ctx.request) ?? "");
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
 
   if (!user) {
     requestLogger.warn("appearance.unauthenticated");
@@ -316,7 +349,7 @@ async function handleClientEventRequest(ctx: RouteContext): Promise<Response> {
     return badBody(body.reason, "INVALID_CLIENT_EVENT", "Invalid client event");
   }
 
-  const user = await auth?.verifyToken(readBearerToken(ctx.request) ?? "");
+  const user = await auth?.verifyToken(readSessionToken(ctx.request) ?? "");
   const payload = body.value as { event?: unknown; fields?: unknown; level?: unknown };
   const eventName = sanitizeClientEventName(payload.event);
   const level = sanitizeClientLogLevel(payload.level);
@@ -350,7 +383,7 @@ async function handleFriendsRequest(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  const user = await auth.verifyToken(readBearerToken(ctx.request) ?? "");
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
 
   if (!user) {
     requestLogger.warn("friends.unauthenticated");
@@ -434,7 +467,7 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  const user = await auth.verifyToken(readBearerToken(ctx.request) ?? "");
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
 
   if (!user) {
     requestLogger.warn("room.create.unauthenticated");
@@ -670,10 +703,76 @@ function authHeaders(error: AuthError): Record<string, string> {
   return error.code === "AUTH_BUSY" ? { "retry-after": "1" } : {};
 }
 
+export const SESSION_COOKIE_NAME = "tilezo_session";
+const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+
 export function readBearerToken(request: Request): string | undefined {
   const authorization = request.headers.get("authorization");
   const [scheme, token] = authorization?.split(" ") ?? [];
   return scheme?.toLocaleLowerCase("en-US") === "bearer" ? token : undefined;
+}
+
+// Resolve the session token from the Authorization header (non-browser/API clients) or
+// the HttpOnly session cookie (the SPA, which never stores the token in JS).
+export function readSessionToken(request: Request): string | undefined {
+  return readBearerToken(request) ?? readCookie(request, SESSION_COOKIE_NAME);
+}
+
+export function readCookie(request: Request, name: string): string | undefined {
+  const header = request.headers.get("cookie");
+
+  if (!header) {
+    return undefined;
+  }
+
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+
+    if (separator === -1) {
+      continue;
+    }
+
+    if (part.slice(0, separator).trim() === name) {
+      return decodeURIComponent(part.slice(separator + 1).trim());
+    }
+  }
+
+  return undefined;
+}
+
+export function sessionCookie(token: string, config: { cookieSecure: boolean }): string {
+  return [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    "HttpOnly",
+    "SameSite=Lax",
+    "Path=/",
+    `Max-Age=${SESSION_COOKIE_MAX_AGE_SECONDS.toString()}`,
+    ...(config.cookieSecure ? ["Secure"] : []),
+  ].join("; ");
+}
+
+export function clearedSessionCookie(config: { cookieSecure: boolean }): string {
+  return [
+    `${SESSION_COOKIE_NAME}=`,
+    "HttpOnly",
+    "SameSite=Lax",
+    "Path=/",
+    "Max-Age=0",
+    ...(config.cookieSecure ? ["Secure"] : []),
+  ].join("; ");
+}
+
+// Sets the final CORS headers on a response. Requests from a configured allowed origin get
+// that exact origin echoed plus allow-credentials (required for cookie-bearing fetches);
+// everyone else keeps the wildcard from `corsHeaders()` (which forbids credentials).
+function applyCors(response: Response, ctx: RouteContext): void {
+  const origin = ctx.request.headers.get("origin");
+
+  if (origin && ctx.config.corsAllowedOrigins.includes(origin)) {
+    response.headers.set("access-control-allow-origin", origin);
+    response.headers.set("access-control-allow-credentials", "true");
+    response.headers.append("vary", "origin");
+  }
 }
 
 function authJson(body: unknown, status: number, headers: Record<string, string> = {}): Response {

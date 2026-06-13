@@ -10,12 +10,8 @@ export type FriendSummary = {
   canJoinRoom: boolean;
 };
 
-export async function listFriends(token: string): Promise<FriendSummary[]> {
-  const response = await fetch(`${getApiUrl()}/friends`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
-  });
+export async function listFriends(): Promise<FriendSummary[]> {
+  const response = await fetch(`${getApiUrl()}/friends`, { credentials: "include" });
   const body = await readJson<{ friends?: FriendSummary[] } | { error?: { message?: string } }>(
     response,
   );
@@ -29,13 +25,11 @@ export async function listFriends(token: string): Promise<FriendSummary[]> {
     : [];
 }
 
-export async function addFriend(token: string, username: string): Promise<FriendSummary> {
+export async function addFriend(username: string): Promise<FriendSummary> {
   const response = await fetch(`${getApiUrl()}/friends`, {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-    },
+    credentials: "include",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ username }),
   });
   const body = await readJson<{ friend?: FriendSummary } | { error?: { message?: string } }>(
@@ -49,12 +43,10 @@ export async function addFriend(token: string, username: string): Promise<Friend
   return (body as { friend: FriendSummary }).friend;
 }
 
-export async function removeFriend(token: string, friendId: string): Promise<void> {
+export async function removeFriend(friendId: string): Promise<void> {
   const response = await fetch(`${getApiUrl()}/friends/${encodeURIComponent(friendId)}`, {
     method: "DELETE",
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
+    credentials: "include",
   });
   const body = await readJson<{ ok?: boolean } | { error?: { message?: string } }>(response);
 
