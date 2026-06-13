@@ -659,16 +659,35 @@ async function readJsonWithLimit(request: Request, maxBytes: number): Promise<Js
     return { ok: false, reason: "too_large" };
   }
 
-  let text: string;
+  let text = "";
 
   try {
-    text = await request.text();
+    if (request.body) {
+      const reader = request.body.getReader();
+      const decoder = new TextDecoder();
+      let bytesRead = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        bytesRead += value.byteLength;
+
+        if (bytesRead > maxBytes) {
+          await reader.cancel().catch(() => {});
+          return { ok: false, reason: "too_large" };
+        }
+
+        text += decoder.decode(value, { stream: true });
+      }
+
+      text += decoder.decode();
+    }
   } catch {
     return { ok: false, reason: "invalid_json" };
-  }
-
-  if (Buffer.byteLength(text) > maxBytes) {
-    return { ok: false, reason: "too_large" };
   }
 
   try {
