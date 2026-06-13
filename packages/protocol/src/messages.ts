@@ -25,6 +25,12 @@ export type ChatTypingMessage = {
   isTyping: boolean;
 };
 
+export type DirectMessageSendMessage = {
+  type: "dm.send";
+  toUserId: string;
+  text: string;
+};
+
 export type AvatarAppearanceUpdateMessage = {
   type: "avatar.appearance.update";
   appearance: AvatarAppearance;
@@ -41,6 +47,7 @@ export type ClientMessage =
   | AvatarMoveRequestMessage
   | ChatSayMessage
   | ChatTypingMessage
+  | DirectMessageSendMessage
   | AvatarAppearanceUpdateMessage
   | PingMessage;
 
@@ -112,6 +119,15 @@ export type ChatTypingStatusMessage = {
   isTyping: boolean;
 };
 
+export type DirectMessage = {
+  type: "dm.message";
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  text: string;
+  sentAt: string;
+};
+
 export type PongMessage = {
   type: "pong";
   sentAt: string;
@@ -133,5 +149,6 @@ export type ServerMessage =
   | AvatarAppearanceUpdatedMessage
   | ChatMessage
   | ChatTypingStatusMessage
+  | DirectMessage
   | PongMessage
   | ErrorMessage;

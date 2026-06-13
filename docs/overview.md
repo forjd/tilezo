@@ -30,6 +30,7 @@ Implemented:
   token revocation, and rate limiting.
 - Avatar appearance customization persisted per account.
 - Multi-user presence and friends (add/remove, online status, join a friend's room).
+- Friend-gated direct messages: realtime delivery, persistence, and history.
 - Public room browser with live room population counts, plus per-user private rooms and
   player-created rooms persisted to PostgreSQL.
 - Scripted, server-authoritative room bots (movement and chat).
@@ -43,7 +44,6 @@ Not implemented yet:
 
 - Room editor UI.
 - Provider-backed (AI) bot conversations (see [FOLLOW_UPS.md](../FOLLOW_UPS.md)).
-- Direct messaging / whispers (see [FOLLOW_UPS.md](../FOLLOW_UPS.md)).
 - Furniture/items placement (the `room_items` table is reserved but unused).
 - Inventory, catalogue, economy, moderation dashboard, trading, pets, or quests.
 

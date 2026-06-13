@@ -18,6 +18,7 @@ describe("FriendsPanel", () => {
         added.push(username);
       },
       onJoinRoom() {},
+      onMessage() {},
       onRefresh() {
         refreshes += 1;
       },
@@ -36,14 +37,18 @@ describe("FriendsPanel", () => {
     expect(input.value).toBe("");
   });
 
-  test("renders friends and routes join/remove actions", () => {
+  test("renders friends and routes join/message/remove actions", () => {
     installDocument();
     const joined: string[] = [];
+    const messaged: string[] = [];
     const removed: string[] = [];
     const panel = new FriendsPanel({
       onAdd() {},
       onJoinRoom(roomId) {
         joined.push(roomId);
+      },
+      onMessage(friend) {
+        messaged.push(friend.id);
       },
       onRefresh() {},
       onRemove(friendId) {
@@ -72,8 +77,10 @@ describe("FriendsPanel", () => {
 
     (actions?.children[0] as FakeElement | undefined)?.dispatch("click", {});
     (actions?.children[1] as FakeElement | undefined)?.dispatch("click", {});
+    (actions?.children[2] as FakeElement | undefined)?.dispatch("click", {});
 
     expect(joined).toEqual(["studio"]);
+    expect(messaged).toEqual(["user_2"]);
     expect(removed).toEqual(["user_2"]);
   });
 });
@@ -166,6 +173,14 @@ class FakeElement {
       selector === "button[data-friend-id]" &&
       this.tagName === "button" &&
       this.dataset.friendId
+    ) {
+      return this;
+    }
+
+    if (
+      selector === "button[data-message-friend-id]" &&
+      this.tagName === "button" &&
+      this.dataset.messageFriendId
     ) {
       return this;
     }

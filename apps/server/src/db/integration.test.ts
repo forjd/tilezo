@@ -4,6 +4,7 @@ import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { sql } from "drizzle-orm";
 import { DrizzleAuthStore, UsernameTakenError } from "../auth/auth";
 import { DrizzleFriendStore } from "../friends/friends";
+import { DrizzleDirectMessageStore } from "../messaging/messaging";
 import { createDatabase } from "./db";
 import { DrizzlePersistenceStore } from "./persistence";
 
@@ -25,11 +26,12 @@ describe("database integration", () => {
 
   const authStore = new DrizzleAuthStore(database);
   const friendStore = new DrizzleFriendStore(database);
+  const directMessageStore = new DrizzleDirectMessageStore(database);
   const persistence = new DrizzlePersistenceStore(database);
 
   beforeEach(async () => {
     await database.execute(
-      sql`TRUNCATE TABLE users, rooms, friendships, user_room_sessions, room_items RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE users, rooms, friendships, user_room_sessions, room_items, direct_messages RESTART IDENTITY CASCADE`,
     );
   });
 
@@ -91,6 +93,44 @@ describe("database integration", () => {
   test("rejects self-friendship at the database level", async () => {
     const dan = await seedUser("Dan");
     await expect(friendStore.addFriend(dan.id, dan.id)).rejects.toThrow();
+  });
+
+  test("persists direct messages and lists a conversation in both directions", async () => {
+    const dan = await seedUser("Dan");
+    const kai = await seedUser("Kai");
+
+    const sent = await directMessageStore.save({
+      id: "dm_1",
+      senderUserId: dan.id,
+      recipientUserId: kai.id,
+      body: "hey Kai",
+    });
+    expect(sent).toMatchObject({ fromUserId: dan.id, toUserId: kai.id, text: "hey Kai" });
+
+    await directMessageStore.save({
+      id: "dm_2",
+      senderUserId: kai.id,
+      recipientUserId: dan.id,
+      body: "hi Dan",
+    });
+
+    // Both participants see the same conversation, oldest-first.
+    expect(
+      (await directMessageStore.listConversation(dan.id, kai.id, 50)).map((m) => m.text),
+    ).toEqual(["hey Kai", "hi Dan"]);
+    expect(
+      (await directMessageStore.listConversation(kai.id, dan.id, 50)).map((m) => m.text),
+    ).toEqual(["hey Kai", "hi Dan"]);
+
+    // The no-self CHECK constraint blocks a self-message.
+    await expect(
+      directMessageStore.save({
+        id: "dm_3",
+        senderUserId: dan.id,
+        recipientUserId: dan.id,
+        body: "note to self",
+      }),
+    ).rejects.toThrow();
   });
 
   test("seeds rooms, lists by visibility and owner, and tracks the last room", async () => {

@@ -61,6 +61,17 @@ describe("protocol parser", () => {
     expect(parseClientMessage({ type: "chat.say", text: "\u200B\u202E\t" }).ok).toBe(false);
   });
 
+  test("accepts and sanitizes direct messages", () => {
+    expect(
+      parseClientMessage({ type: "dm.send", toUserId: " user_2 ", text: "  hey there  " }),
+    ).toEqual({
+      ok: true,
+      value: { type: "dm.send", toUserId: "user_2", text: "hey there" },
+    });
+    expect(parseClientMessage({ type: "dm.send", toUserId: "user_2", text: "" }).ok).toBe(false);
+    expect(parseClientMessage({ type: "dm.send", toUserId: "", text: "hi" }).ok).toBe(false);
+  });
+
   test("rejects malformed raw messages", () => {
     expect(parseRawClientMessage("{bad json").ok).toBe(false);
   });

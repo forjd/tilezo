@@ -23,6 +23,7 @@ export type FriendSummary = FriendUser &
 
 export type FriendStore = {
   addFriend(userId: string, friendUserId: string): Promise<void>;
+  areFriends(userId: string, friendUserId: string): Promise<boolean>;
   countFriends(userId: string): Promise<number>;
   findUserByUsername(username: string): Promise<FriendUser | undefined>;
   listFriends(userId: string): Promise<FriendUser[]>;
@@ -75,6 +76,10 @@ export class FriendService {
     await this.store.removeFriend(userId, friendUserId);
   }
 
+  areFriends(userId: string, friendUserId: string): Promise<boolean> {
+    return this.store.areFriends(userId, friendUserId);
+  }
+
   private summarize(friend: FriendUser): FriendSummary {
     const presence = this.presence(friend.id);
     return {
@@ -118,6 +123,16 @@ export class DrizzleFriendStore implements FriendStore {
       .from(friendships)
       .where(or(eq(friendships.userId, userId), eq(friendships.friendUserId, userId)));
     return row?.value ?? 0;
+  }
+
+  async areFriends(userId: string, friendUserId: string): Promise<boolean> {
+    const [leftUserId, rightUserId] = friendshipPair(userId, friendUserId);
+    const [row] = await this.db
+      .select({ userId: friendships.userId })
+      .from(friendships)
+      .where(and(eq(friendships.userId, leftUserId), eq(friendships.friendUserId, rightUserId)))
+      .limit(1);
+    return Boolean(row);
   }
 
   async removeFriend(userId: string, friendUserId: string): Promise<void> {

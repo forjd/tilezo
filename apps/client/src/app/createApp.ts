@@ -7,13 +7,16 @@ import {
   logout as requestLogout,
   updateAppearance,
 } from "../auth/AuthClient";
+import type { FriendSummary } from "../friends/FriendClient";
 import { addFriend, listFriends, removeFriend } from "../friends/FriendClient";
 import type { Game } from "../game/Game";
+import { loadConversation } from "../messaging/DirectMessageClient";
 import { createRoom, listRoomTemplates } from "../rooms/RoomClient";
 import { ClientLogger } from "../telemetry/ClientLogger";
 import { CharacterEditor } from "../ui/CharacterEditor";
 import { ChatPanel } from "../ui/ChatPanel";
 import { CreateRoomDialog } from "../ui/CreateRoomDialog";
+import { DirectMessagePanel } from "../ui/DirectMessagePanel";
 import { DisconnectedDialog } from "../ui/DisconnectedDialog";
 import { FriendsPanel } from "../ui/FriendsPanel";
 import { LoginForm } from "../ui/LoginForm";
@@ -109,6 +112,9 @@ export function createApp(root: HTMLElement): void {
       status.textContent = "joining friend";
       game?.joinRoom(roomId);
     },
+    onMessage(friend) {
+      void openConversation(friend);
+    },
     onRefresh() {
       void refreshFriends();
     },
@@ -152,6 +158,11 @@ export function createApp(root: HTMLElement): void {
         roomBrowser.setCurrentRoom(snapshot.roomId);
         roomBrowser.hide();
       },
+      onDirectMessage(message) {
+        if (!directMessagePanel.append(message) && message.fromUserId !== user?.id) {
+          status.textContent = "new direct message";
+        }
+      },
       onDisconnected() {
         if (!user || !gameStarted) {
           return;
@@ -164,6 +175,12 @@ export function createApp(root: HTMLElement): void {
     });
     return game;
   }
+
+  const directMessagePanel = new DirectMessagePanel({
+    onSend(friendId, text) {
+      game?.sendDirectMessage(friendId, text);
+    },
+  });
 
   const disconnectedDialog = new DisconnectedDialog({
     onRetry() {
@@ -321,6 +338,7 @@ export function createApp(root: HTMLElement): void {
     createRoomDialog.element,
     roomBrowser.element,
     friendsPanel.element,
+    directMessagePanel.element,
     chat.element,
     disconnectedDialog.element,
   );
@@ -429,6 +447,23 @@ export function createApp(root: HTMLElement): void {
       status.textContent = "create room";
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "Room templates failed";
+    }
+  }
+
+  async function openConversation(friend: FriendSummary): Promise<void> {
+    if (!user) {
+      return;
+    }
+
+    status.textContent = "loading messages";
+
+    try {
+      const history = await loadConversation(friend.id);
+      directMessagePanel.open(friend, history, user.id);
+      friendsPanel.hide();
+      status.textContent = `messaging ${friend.username}`;
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "Could not open messages";
     }
   }
 

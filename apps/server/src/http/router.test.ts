@@ -5,6 +5,7 @@ import { FixedWindowRateLimiter } from "../auth/rateLimit";
 import { getConfig } from "../config";
 import type { PersistenceStore } from "../db/persistence";
 import { FriendError, type FriendService } from "../friends/friends";
+import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger } from "../observability/logger";
 import { Metrics } from "../observability/metrics";
 import type { RoomManager } from "../rooms/RoomManager";
@@ -41,6 +42,17 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
       add: async () => ({ ...authUser, online: false, canJoinRoom: false }),
       remove: async () => {},
     } as unknown as FriendService,
+    directMessages: {
+      history: async () => [
+        {
+          id: "dm_1",
+          fromUserId: "user_1",
+          toUserId: "user_2",
+          text: "hi",
+          sentAt: "2026-06-13T00:00:00.000Z",
+        },
+      ],
+    } as unknown as DirectMessageService,
     persistence: {
       listOwnedRooms: async () => [],
       seedRoom: async () => {},
@@ -332,6 +344,45 @@ describe("createHttpRouter", () => {
         (await route(request("/friends", { method: "POST", token: "good-token", body }), "ip"))
           .status,
       ).toBe(429);
+    });
+  });
+
+  describe("direct messages", () => {
+    test("returns conversation history for the authenticated user", async () => {
+      const route = createHttpRouter(makeDeps());
+
+      const response = await route(
+        request("/friends/user_2/messages", { method: "GET", token: "good-token" }),
+        "ip",
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ messages: [{ id: "dm_1", text: "hi" }] });
+    });
+
+    test("rejects unauthenticated history requests", async () => {
+      const route = createHttpRouter(makeDeps());
+      const response = await route(request("/friends/user_2/messages", { method: "GET" }), "ip");
+      expect(response.status).toBe(401);
+    });
+
+    test("surfaces a non-friend history rejection", async () => {
+      const route = createHttpRouter(
+        makeDeps({
+          directMessages: {
+            history: async () => {
+              throw new DirectMessageError("NOT_FRIENDS", "You can only message your friends");
+            },
+          } as unknown as DirectMessageService,
+        }),
+      );
+
+      const response = await route(
+        request("/friends/user_2/messages", { method: "GET", token: "good-token" }),
+        "ip",
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: "NOT_FRIENDS" } });
     });
   });
 

@@ -13,8 +13,10 @@ import {
 
 export const MAX_RAW_MESSAGE_BYTES = 8 * 1024;
 export const USERNAME_MAX_LENGTH = 24;
+export const USER_ID_MAX_LENGTH = 64;
 export const ROOM_ID_MAX_LENGTH = 64;
 export const CHAT_MAX_LENGTH = 240;
+export const DIRECT_MESSAGE_MAX_LENGTH = 600;
 // Tile coordinates are bounded at the trust boundary so untrusted clients cannot
 // send absurd integers (e.g. near MAX_SAFE_INTEGER). The bound is far larger than
 // any real room while keeping every value comfortably within safe-integer math.
@@ -32,6 +34,11 @@ const chatText = z
   .string()
   .transform((value) => sanitizeChatText(value).trim())
   .pipe(z.string().min(1).max(CHAT_MAX_LENGTH));
+
+const directMessageText = z
+  .string()
+  .transform((value) => sanitizeChatText(value).trim())
+  .pipe(z.string().min(1).max(DIRECT_MESSAGE_MAX_LENGTH));
 
 const tileCoordinate = z.number().int().min(-MAX_TILE_COORDINATE).max(MAX_TILE_COORDINATE);
 
@@ -64,6 +71,12 @@ export const chatTypingMessageSchema = z.object({
   isTyping: z.boolean(),
 });
 
+export const dmSendMessageSchema = z.object({
+  type: z.literal("dm.send"),
+  toUserId: trimmedString(USER_ID_MAX_LENGTH),
+  text: directMessageText,
+});
+
 export const avatarAppearanceSchema = z.object({
   hair: z.enum(AVATAR_HAIR_STYLES),
   hairColor: z.enum(AVATAR_HAIR_COLORS),
@@ -92,6 +105,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   avatarMoveRequestMessageSchema,
   chatSayMessageSchema,
   chatTypingMessageSchema,
+  dmSendMessageSchema,
   avatarAppearanceUpdateMessageSchema,
   pingMessageSchema,
 ]);
@@ -145,6 +159,14 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("chat.message"),
     userId: z.string(),
     username: z.string(),
+    text: z.string(),
+    sentAt: z.string(),
+  }),
+  z.object({
+    type: z.literal("dm.message"),
+    id: z.string(),
+    fromUserId: z.string(),
+    toUserId: z.string(),
     text: z.string(),
     sentAt: z.string(),
   }),
