@@ -4,11 +4,9 @@ import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protoc
 import { Container, Graphics, Text } from "pixi.js";
 import {
   AVATAR_BLUSH,
-  AVATAR_DETAIL_LIGHT,
   AVATAR_EYE_PUPIL,
   AVATAR_EYE_WHITE,
   AVATAR_FACE_LINE,
-  AVATAR_OUTLINE,
   AVATAR_SHADING_ALPHA,
   AVATAR_SHADING_STRENGTH,
   type AvatarAnimationState,

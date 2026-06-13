@@ -80,12 +80,8 @@
           "name": "room_items_room_id_rooms_id_fk",
           "tableFrom": "room_items",
           "tableTo": "rooms",
-          "columnsFrom": [
-            "room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -146,9 +142,7 @@
         "rooms_slug_unique": {
           "name": "rooms_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -212,9 +206,7 @@
         "users_username_key_unique": {
           "name": "users_username_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username_key"
-          ]
+          "columns": ["username_key"]
         }
       },
       "policies": {},

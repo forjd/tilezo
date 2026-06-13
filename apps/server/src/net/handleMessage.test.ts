@@ -648,7 +648,12 @@ describe("duplicate connections and movement guards", () => {
     });
 
     expect(rooms.get("lobby")).toBeUndefined();
-    expect(rooms.get("studio")?.getUsers().map((user) => user.id)).toEqual(["user_db_1"]);
+    expect(
+      rooms
+        .get("studio")
+        ?.getUsers()
+        .map((user) => user.id),
+    ).toEqual(["user_db_1"]);
     expect(published).toContainEqual({
       topic: "room:lobby",
       message: { type: "user.left", userId: "user_db_1" },

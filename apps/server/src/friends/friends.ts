@@ -88,7 +88,8 @@ export class FriendService {
 
     const status = await this.store.addFriend(userId, friend.id);
     return {
-      friend: status === "accepted" ? this.summarize(friend, userId) : this.summarizePending(friend),
+      friend:
+        status === "accepted" ? this.summarize(friend, userId) : this.summarizePending(friend),
       status,
     };
   }

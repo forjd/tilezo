@@ -37,9 +37,7 @@ export async function addFriend(username: string): Promise<FriendAddResult> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ username }),
   });
-  const body = await readJson<FriendAddResult | { error?: { message?: string } }>(
-    response,
-  );
+  const body = await readJson<FriendAddResult | { error?: { message?: string } }>(response);
 
   if (!response.ok) {
     throw new Error(body && "error" in body ? body.error?.message : "Friend add failed");

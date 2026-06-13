@@ -21,7 +21,7 @@ describe("DirectMessagePanel", () => {
 
   test("opens a conversation, renders history, and aligns own messages", () => {
     installDocument();
-    const panel = new DirectMessagePanel({ onSend() {} });
+    const panel = new DirectMessagePanel({ onSend: () => undefined });
 
     panel.open(
       { id: "user_2", username: "Kai" },
@@ -39,7 +39,7 @@ describe("DirectMessagePanel", () => {
 
   test("appends only messages that belong to the open conversation", () => {
     installDocument();
-    const panel = new DirectMessagePanel({ onSend() {} });
+    const panel = new DirectMessagePanel({ onSend: () => undefined });
     panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
     const list = panel.element.children[1] as unknown as FakeElement;
 
@@ -56,6 +56,7 @@ describe("DirectMessagePanel", () => {
     const panel = new DirectMessagePanel({
       onSend(friendId, text) {
         sent.push({ friendId, text });
+        return undefined;
       },
     });
     panel.open({ id: "user_2", username: "Kai" }, [], "user_1");

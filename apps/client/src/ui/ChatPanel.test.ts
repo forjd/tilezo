@@ -48,6 +48,7 @@ describe("ChatPanel", () => {
 
     panel.onSend((text) => {
       sent.push(text);
+      return undefined;
     });
     input.value = "  hello room  ";
     input.dispatch("keydown", { key: "Enter" });

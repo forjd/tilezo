@@ -1,7 +1,7 @@
 import type { DirectMessage } from "@tilezo/protocol/messages";
 
 type DirectMessagePanelOptions = {
-  onSend: (friendId: string, text: string) => boolean | void;
+  onSend: (friendId: string, text: string) => boolean | undefined;
 };
 
 type Conversation = {

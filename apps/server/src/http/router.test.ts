@@ -39,7 +39,10 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
     } as unknown as AuthService,
     friends: {
       list: async () => [],
-      add: async () => ({ friend: { ...authUser, online: false, canJoinRoom: false }, status: "pending" }),
+      add: async () => ({
+        friend: { ...authUser, online: false, canJoinRoom: false },
+        status: "pending",
+      }),
       remove: async () => {},
     } as unknown as FriendService,
     directMessages: {

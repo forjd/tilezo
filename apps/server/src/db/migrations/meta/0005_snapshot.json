@@ -129,12 +129,8 @@
           "name": "room_items_room_id_rooms_id_fk",
           "tableFrom": "room_items",
           "tableTo": "rooms",
-          "columnsFrom": [
-            "room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -250,12 +246,8 @@
           "name": "rooms_owner_user_id_users_id_fk",
           "tableFrom": "rooms",
           "tableTo": "users",
-          "columnsFrom": [
-            "owner_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["owner_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -265,9 +257,7 @@
         "rooms_slug_unique": {
           "name": "rooms_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -331,9 +321,7 @@
         "users_username_key_unique": {
           "name": "users_username_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username_key"
-          ]
+          "columns": ["username_key"]
         }
       },
       "policies": {},
@@ -386,12 +374,8 @@
           "name": "user_room_sessions_user_id_users_id_fk",
           "tableFrom": "user_room_sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -399,12 +383,8 @@
           "name": "user_room_sessions_room_id_rooms_id_fk",
           "tableFrom": "user_room_sessions",
           "tableTo": "rooms",
-          "columnsFrom": [
-            "room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

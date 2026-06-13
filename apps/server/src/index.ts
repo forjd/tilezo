@@ -9,7 +9,12 @@ import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence
 import { DrizzleFriendStore, FriendService } from "./friends/friends";
 import { corsHeaders, createHttpRouter } from "./http/router";
 import { DirectMessageService, DrizzleDirectMessageStore } from "./messaging/messaging";
-import { handleClose, handleMessage, handleOpen, type UserRateLimitStore } from "./net/handleMessage";
+import {
+  handleClose,
+  handleMessage,
+  handleOpen,
+  type UserRateLimitStore,
+} from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { isAllowedWebSocketOrigin, readWebSocketSessionToken } from "./net/webSocketSecurity";
 import { createLogger, parseLogLevel } from "./observability/logger";
@@ -67,14 +72,10 @@ const persistence = database ? new DrizzlePersistenceStore(database) : undefined
 const presence = new PresenceTracker();
 const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
 const friends = database
-  ? new FriendService(
-      new DrizzleFriendStore(database),
-      (userId) => presence.get(userId),
-      {
-        canJoinRoom: (userId, roomId) => rooms.canJoinRoom(roomId, userId).ok,
-        maxFriends: config.maxFriendsPerUser,
-      },
-    )
+  ? new FriendService(new DrizzleFriendStore(database), (userId) => presence.get(userId), {
+      canJoinRoom: (userId, roomId) => rooms.canJoinRoom(roomId, userId).ok,
+      maxFriends: config.maxFriendsPerUser,
+    })
   : undefined;
 const directMessages =
   database && friends
@@ -120,7 +121,7 @@ const server = Bun.serve<SocketData>({
     const url = new URL(request.url);
 
     if (url.pathname === "/ws") {
-      return handleWebSocketUpgrade(request, server, url);
+      return handleWebSocketUpgrade(request, server);
     }
 
     return router(request, resolveClientKey(request, server, config));
@@ -187,7 +188,6 @@ botTimer.unref?.();
 async function handleWebSocketUpgrade(
   request: Request,
   bunServer: Server<SocketData>,
-  url: URL,
 ): Promise<Response | undefined> {
   if (!isAllowedWebSocketOrigin(request, config)) {
     logger.warn("websocket.origin.rejected", { origin: request.headers.get("origin") });
