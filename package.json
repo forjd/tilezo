@@ -7,7 +7,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter '@tilezo/client' build",
+    "build": "bun run build:client && bun run build:server",
+    "build:client": "bun run --filter '@tilezo/client' build",
+    "build:server": "bun build apps/server/src/index.ts --target bun --outfile dist/server.js",
     "benchmark": "bun run scripts/benchmark.ts",
     "db:down": "docker compose -f compose.db.yml down",
     "db:generate": "bun run scripts/run-server-db.ts generate",
