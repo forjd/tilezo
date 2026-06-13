@@ -18,6 +18,8 @@ const MAX_CAMERA_SCALE = 2.25;
 const DEFAULT_CAMERA_SCALE = 1;
 const ZOOM_STEP = 0.0015;
 const PAN_THRESHOLD_PIXELS = 4;
+const KEYBOARD_PAN_PIXELS = 32;
+const KEYBOARD_ZOOM_DELTA = 120;
 const DOOR_LAYER_SWITCH_PROGRESS = 0.55;
 const DOOR_LAYER_DISTANCE_TOLERANCE = 18;
 const CHAT_BUBBLE_COLLISION_GAP = 6;
@@ -253,6 +255,9 @@ export class RoomScene {
 
   private bindPointer(): void {
     const canvas = this.app.canvas;
+    canvas.tabIndex = 0;
+    canvas.setAttribute("aria-label", "Tilezo room");
+    canvas.setAttribute("role", "application");
 
     this.listen(canvas, "mousemove", (event) => {
       this.updatePan(event);
@@ -297,6 +302,10 @@ export class RoomScene {
     this.listen(canvas, "wheel", (event) => {
       event.preventDefault();
       this.zoomAt(event);
+    });
+
+    this.listen(canvas, "keydown", (event) => {
+      this.handleKeyboard(event);
     });
   }
 
@@ -363,8 +372,26 @@ export class RoomScene {
   private zoomAt(event: WheelEvent): void {
     const point = this.eventToCanvasPoint(event);
     const worldPoint = this.eventToWorldPoint(event);
+    this.applyZoom(point, worldPoint, event.deltaY);
+  }
+
+  private zoomAtScreenCenter(deltaY: number): void {
+    const point = {
+      x: this.app.screen.width / 2,
+      y: this.app.screen.height / 2,
+    };
+    const scale = this.world.scale.x;
+    const worldPoint = {
+      x: (point.x - this.world.x) / scale,
+      y: (point.y - this.world.y) / scale,
+    };
+
+    this.applyZoom(point, worldPoint, deltaY);
+  }
+
+  private applyZoom(point: Point, worldPoint: Point, deltaY: number): void {
     const nextScale = clamp(
-      this.world.scale.x * (1 - event.deltaY * ZOOM_STEP),
+      this.world.scale.x * (1 - deltaY * ZOOM_STEP),
       MIN_CAMERA_SCALE,
       MAX_CAMERA_SCALE,
     );
@@ -373,6 +400,38 @@ export class RoomScene {
     this.world.x = point.x - worldPoint.x * nextScale;
     this.world.y = point.y - worldPoint.y * nextScale;
     writeStoredCameraScale(nextScale);
+  }
+
+  private handleKeyboard(event: KeyboardEvent): void {
+    if (event.key === "Enter" || event.key === " ") {
+      if (this.hover && this.tiles.isWalkable(this.hover)) {
+        event.preventDefault();
+        this.onMoveRequest(this.hover);
+        this.onCanvasInteraction?.();
+      }
+
+      return;
+    }
+
+    const pan = keyboardPanDelta(event.key);
+
+    if (pan) {
+      event.preventDefault();
+      this.world.x += pan.x;
+      this.world.y += pan.y;
+      return;
+    }
+
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      this.zoomAtScreenCenter(-KEYBOARD_ZOOM_DELTA);
+      return;
+    }
+
+    if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      this.zoomAtScreenCenter(KEYBOARD_ZOOM_DELTA);
+    }
   }
 
   destroy(): void {
@@ -423,6 +482,26 @@ function calculateRoomBounds(tiles: RoomTile[]): RoomBounds | undefined {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function keyboardPanDelta(key: string): Point | undefined {
+  if (key === "ArrowLeft") {
+    return { x: KEYBOARD_PAN_PIXELS, y: 0 };
+  }
+
+  if (key === "ArrowRight") {
+    return { x: -KEYBOARD_PAN_PIXELS, y: 0 };
+  }
+
+  if (key === "ArrowUp") {
+    return { x: 0, y: KEYBOARD_PAN_PIXELS };
+  }
+
+  if (key === "ArrowDown") {
+    return { x: 0, y: -KEYBOARD_PAN_PIXELS };
+  }
+
+  return undefined;
 }
 
 function readStoredCameraScale(): number {

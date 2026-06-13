@@ -220,6 +220,16 @@ describe("RoomScene", () => {
     expect(interactions).toBe(3);
   });
 
+  test("makes the room canvas keyboard-focusable", () => {
+    const app = createApp();
+
+    new RoomScene(app, () => {});
+
+    expect(app.canvas.tabIndex).toBe(0);
+    expect(app.canvas.getAttribute("aria-label")).toBe("Tilezo room");
+    expect(app.canvas.getAttribute("role")).toBe("application");
+  });
+
   test("updates and clears hover from pointer events", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});
@@ -230,6 +240,29 @@ describe("RoomScene", () => {
 
     app.canvas.mouseleave({});
     expect(sceneState(scene).hover).toBeUndefined();
+  });
+
+  test("requests movement from keyboard activation on the hovered tile", () => {
+    const app = createApp();
+    const moves: unknown[] = [];
+    let interactions = 0;
+    const scene = new RoomScene(
+      app,
+      (target) => moves.push(target),
+      () => {
+        interactions += 1;
+      },
+    );
+
+    scene.loadSnapshot(snapshot([]));
+    app.canvas.mousemove({ clientX: 384, clientY: 348 });
+    app.canvas.keydown({ key: "Enter" });
+    app.canvas.mousemove({ clientX: 416, clientY: 364 });
+    app.canvas.keydown({ key: " " });
+
+    expect(moves).toEqual([{ x: 0, y: 0 }]);
+    expect(app.canvas.defaultPrevented).toBe(true);
+    expect(interactions).toBe(1);
   });
 
   test("pans the room without sending a movement click", () => {
@@ -247,6 +280,23 @@ describe("RoomScene", () => {
     expect(world?.x).toBe(420);
     expect(world?.y).toBe(368);
     expect(moves).toEqual([]);
+  });
+
+  test("supports keyboard camera pan and zoom controls", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.loadSnapshot(snapshot([]));
+    app.canvas.keydown({ key: "ArrowLeft" });
+    app.canvas.keydown({ key: "ArrowUp" });
+    app.canvas.keydown({ key: "+" });
+
+    const world = app.stage.children[0];
+    expect(world?.x).toBe(418.88);
+    expect(world?.y).toBe(394.4);
+    expect(world?.scale.x).toBe(1.18);
+    expect(world?.scale.y).toBe(1.18);
+    expect(app.canvas.defaultPrevented).toBe(true);
   });
 
   test("zooms around the pointer and keeps tile picking aligned", () => {
@@ -408,6 +458,8 @@ function avatarState(avatar?: { view: Container }): {
 
 class FakeCanvas {
   defaultPrevented = false;
+  tabIndex = -1;
+  private readonly attributeValues = new Map<string, string>();
 
   private readonly listeners = new Map<string, Set<(event: FakePointerEvent) => void>>();
 
@@ -415,6 +467,18 @@ class FakeCanvas {
     const listeners = this.listeners.get(type) ?? new Set();
     listeners.add(listener);
     this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: (event: FakePointerEvent) => void): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributeValues.set(name, value);
+  }
+
+  getAttribute(name: string): string | undefined {
+    return this.attributeValues.get(name);
   }
 
   getBoundingClientRect() {
@@ -445,6 +509,10 @@ class FakeCanvas {
     this.dispatch("wheel", this.withPreventDefault(event));
   }
 
+  keydown(event: { key: string }): void {
+    this.dispatch("keydown", this.withPreventDefault(event));
+  }
+
   private dispatch(type: string, event: FakePointerEvent): void {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event);
@@ -465,6 +533,7 @@ type FakePointerEvent = {
   clientX?: number;
   clientY?: number;
   deltaY?: number;
+  key?: string;
   preventDefault?: () => void;
 };
 
