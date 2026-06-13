@@ -14,6 +14,7 @@ import {
   handleMessage,
   handleOpen,
   type UserRateLimitStore,
+  type UserSocketStore,
 } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { isAllowedWebSocketOrigin, readWebSocketSessionToken } from "./net/webSocketSecurity";
@@ -95,6 +96,7 @@ const auth = database
     })
   : undefined;
 const websocketRateLimits: UserRateLimitStore = new Map();
+const userSockets: UserSocketStore = new Map();
 const joinVersions = new Map<string, number>();
 const joinTargets = new Map<string, string>();
 
@@ -139,6 +141,7 @@ const server = Bun.serve<SocketData>({
         logger,
         metrics,
         presence,
+        userSockets,
       });
     },
     message(ws, message) {
@@ -152,6 +155,7 @@ const server = Bun.serve<SocketData>({
           metrics,
           presence,
           userRateLimits: websocketRateLimits,
+          userSockets,
           joinVersions,
           joinTargets,
         });
@@ -173,7 +177,7 @@ const server = Bun.serve<SocketData>({
       );
     },
     close(ws) {
-      handleClose(ws, rooms, publish, logger, metrics, presence);
+      handleClose(ws, rooms, publish, logger, metrics, presence, userSockets);
     },
   },
 });

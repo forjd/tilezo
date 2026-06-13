@@ -38,7 +38,7 @@ type FriendshipRecord = {
 export type FriendStore = {
   addFriend(userId: string, friendUserId: string): Promise<FriendshipStatus>;
   areFriends(userId: string, friendUserId: string): Promise<boolean>;
-  countFriends(userId: string): Promise<number>;
+  countFriendSlots(userId: string): Promise<number>;
   findUserByUsername(username: string): Promise<FriendUser | undefined>;
   listFriends(userId: string): Promise<FriendUser[]>;
   removeFriend(userId: string, friendUserId: string): Promise<void>;
@@ -77,7 +77,7 @@ export class FriendService {
       throw new FriendError("INVALID_FRIEND", "You cannot add yourself");
     }
 
-    const friendCount = await this.store.countFriends(userId);
+    const friendCount = await this.store.countFriendSlots(userId);
 
     if (friendCount >= this.maxFriends) {
       throw new FriendError(
@@ -163,14 +163,17 @@ export class DrizzleFriendStore implements FriendStore {
     return "accepted";
   }
 
-  async countFriends(userId: string): Promise<number> {
+  async countFriendSlots(userId: string): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })
       .from(friendships)
       .where(
-        and(
-          eq(friendships.status, "accepted"),
-          or(eq(friendships.userId, userId), eq(friendships.friendUserId, userId)),
+        or(
+          and(
+            eq(friendships.status, "accepted"),
+            or(eq(friendships.userId, userId), eq(friendships.friendUserId, userId)),
+          ),
+          and(eq(friendships.status, "pending"), eq(friendships.requestedByUserId, userId)),
         ),
       );
     return row?.value ?? 0;

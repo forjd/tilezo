@@ -113,6 +113,27 @@ describe("FriendService", () => {
     await expect(service.add("user_1", "Rem")).rejects.toThrow("at most 1 friends");
   });
 
+  test("counts outgoing pending requests toward the configured cap", async () => {
+    const rem = { id: "user_3", username: "Rem", appearance: DEFAULT_AVATAR_APPEARANCE };
+    const store = createStore([kai, rem]);
+    const service = new FriendService(store, () => ({ online: false }), { maxFriends: 1 });
+
+    await service.add("user_1", "Kai");
+
+    await expect(service.add("user_1", "Rem")).rejects.toThrow("at most 1 friends");
+  });
+
+  test("does not count incoming pending requests against the recipient cap", async () => {
+    const dan = { id: "user_1", username: "Dan", appearance: DEFAULT_AVATAR_APPEARANCE };
+    const rem = { id: "user_3", username: "Rem", appearance: DEFAULT_AVATAR_APPEARANCE };
+    const store = createStore([dan, kai, rem]);
+    const service = new FriendService(store, () => ({ online: false }), { maxFriends: 1 });
+
+    await service.add("user_2", "Dan");
+
+    await expect(service.add("user_1", "Rem")).resolves.toMatchObject({ status: "pending" });
+  });
+
   test("lists each friendship once regardless of direction", async () => {
     const dan = { id: "user_1", username: "Dan", appearance: DEFAULT_AVATAR_APPEARANCE };
     const store = createStore([dan, kai]);
@@ -140,9 +161,9 @@ describe("DrizzleFriendStore", () => {
     expect(await new DrizzleFriendStore(queryDouble([[friend]])).findUserByUsername("Kai")).toEqual(
       friend,
     );
-    expect(await new DrizzleFriendStore(queryDouble([[{ value: 3 }]])).countFriends("user_1")).toBe(
-      3,
-    );
+    expect(
+      await new DrizzleFriendStore(queryDouble([[{ value: 3 }]])).countFriendSlots("user_1"),
+    ).toBe(3);
     await new DrizzleFriendStore(queryDouble([[], []])).addFriend("user_1", "user_2");
     await new DrizzleFriendStore(queryDouble([[]])).removeFriend("user_1", "user_2");
 
@@ -155,7 +176,7 @@ describe("DrizzleFriendStore", () => {
 
   test("returns no friends when there are no friendship rows and zero on a missing count", async () => {
     expect(await new DrizzleFriendStore(queryDouble([[]])).listFriends("user_1")).toEqual([]);
-    expect(await new DrizzleFriendStore(queryDouble([[]])).countFriends("user_1")).toBe(0);
+    expect(await new DrizzleFriendStore(queryDouble([[]])).countFriendSlots("user_1")).toBe(0);
   });
 });
 
@@ -223,11 +244,15 @@ function createStore(users: FriendUser[]): FriendStore {
     async areFriends(userId, friendUserId) {
       return friendships.get(friendshipKey(userId, friendUserId))?.status === "accepted";
     },
-    async countFriends(userId) {
-      return [...friendships]
-        .filter(([, friendship]) => friendship.status === "accepted")
-        .map(([key]) => key.split(":"))
-        .filter(([left, right]) => left === userId || right === userId).length;
+    async countFriendSlots(userId) {
+      return [...friendships].filter(([key, friendship]) => {
+        const [left, right] = key.split(":");
+        const involvesUser = left === userId || right === userId;
+        return (
+          (friendship.status === "accepted" && involvesUser) ||
+          (friendship.status === "pending" && friendship.requestedByUserId === userId)
+        );
+      }).length;
     },
     async findUserByUsername(username) {
       return users.find((user) => user.username.toLowerCase() === username.trim().toLowerCase());

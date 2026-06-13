@@ -25,12 +25,14 @@ type Context = {
   userRateLimits?: UserRateLimitStore;
   joinVersions?: Map<string, number>;
   joinTargets?: Map<string, string>;
+  userSockets?: UserSocketStore;
 };
 
 type RateLimitKind = keyof typeof RATE_LIMITS;
 type RateLimitBucket = { tokens: number; updatedAt: number };
 type RateLimitState = Partial<Record<RateLimitKind, RateLimitBucket>>;
 export type UserRateLimitStore = Map<string, RateLimitState>;
+export type UserSocketStore = Map<string, Set<ServerWebSocket<SocketData>>>;
 
 export function handleMessage(
   ws: ServerWebSocket<SocketData>,
@@ -282,6 +284,7 @@ export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): v
   if (ws.data.connectionId) {
     context.presence?.connect(ws.data.userId, ws.data.connectionId);
   }
+  registerUserSocket(ws, context.userSockets);
   context.metrics?.socketOpened();
   context.logger?.info("websocket.opened", socketFields(ws));
   // Subscribe to a per-user topic so direct messages can be delivered to this user's
@@ -306,9 +309,11 @@ export function handleClose(
   logger?: Logger,
   metrics?: Metrics,
   presence?: PresenceTracker,
+  userSockets?: UserSocketStore,
 ) {
   metrics?.socketClosed();
   const { roomId, userId } = ws.data;
+  unregisterUserSocket(ws, userSockets);
   if (ws.data.connectionId) {
     presence?.disconnect(userId, ws.data.connectionId);
   }
@@ -435,6 +440,7 @@ async function joinRoom(
         type: "user.left",
         userId: ws.data.userId,
       });
+      disconnectSupersededRoomSockets(context, ws, removedRoomId);
       context.rooms.removeIfEmpty(removedRoomId);
       context.metrics?.increment("room.left");
       context.logger?.info("room.left.superseded", {
@@ -593,6 +599,10 @@ function getJoinedRoom(ws: ServerWebSocket<SocketData>, rooms: RoomManager) {
     return undefined;
   }
 
+  if (!room.hasUser(ws.data.userId)) {
+    return undefined;
+  }
+
   // A socket that has been superseded by a newer connection for the same user must no
   // longer drive that user's avatar (movement, chat, appearance, typing).
   const currentConnectionId = room.getConnectionId(ws.data.userId);
@@ -606,6 +616,64 @@ function getJoinedRoom(ws: ServerWebSocket<SocketData>, rooms: RoomManager) {
   }
 
   return room;
+}
+
+function registerUserSocket(
+  ws: ServerWebSocket<SocketData>,
+  userSockets: UserSocketStore | undefined,
+): void {
+  if (!userSockets) {
+    return;
+  }
+
+  let sockets = userSockets.get(ws.data.userId);
+
+  if (!sockets) {
+    sockets = new Set();
+    userSockets.set(ws.data.userId, sockets);
+  }
+
+  sockets.add(ws);
+}
+
+function unregisterUserSocket(
+  ws: ServerWebSocket<SocketData>,
+  userSockets: UserSocketStore | undefined,
+): void {
+  const sockets = userSockets?.get(ws.data.userId);
+
+  if (!sockets) {
+    return;
+  }
+
+  sockets.delete(ws);
+
+  if (sockets.size === 0) {
+    userSockets?.delete(ws.data.userId);
+  }
+}
+
+function disconnectSupersededRoomSockets(
+  context: Context,
+  currentSocket: ServerWebSocket<SocketData>,
+  removedRoomId: string,
+): void {
+  const sockets = context.userSockets?.get(currentSocket.data.userId);
+
+  if (!sockets) {
+    return;
+  }
+
+  for (const socket of sockets) {
+    if (socket === currentSocket || socket.data.roomId !== removedRoomId) {
+      continue;
+    }
+
+    socket.unsubscribe(roomTopic(removedRoomId));
+    socket.data.roomId = undefined;
+    socket.data.lastTypingState = undefined;
+    context.metrics?.increment("room.socket_superseded");
+  }
 }
 
 async function sendDirectMessage(

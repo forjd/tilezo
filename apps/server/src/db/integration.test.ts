@@ -82,12 +82,12 @@ describe("database integration", () => {
     // Adding the reverse pair is idempotent (canonical ordering + onConflictDoNothing).
     await friendStore.addFriend(kai.id, dan.id);
 
-    expect(await friendStore.countFriends(dan.id)).toBe(1);
+    expect(await friendStore.countFriendSlots(dan.id)).toBe(1);
     expect((await friendStore.listFriends(dan.id)).map((friend) => friend.id)).toEqual([kai.id]);
     expect((await friendStore.listFriends(kai.id)).map((friend) => friend.id)).toEqual([dan.id]);
 
     await friendStore.removeFriend(kai.id, dan.id);
-    expect(await friendStore.countFriends(dan.id)).toBe(0);
+    expect(await friendStore.countFriendSlots(dan.id)).toBe(0);
   });
 
   test("rejects self-friendship at the database level", async () => {

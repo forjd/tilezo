@@ -660,6 +660,44 @@ describe("duplicate connections and movement guards", () => {
     });
   });
 
+  test("disconnects stale room sockets after another socket moves rooms", async () => {
+    const rooms = await RoomManager.create();
+    const socketA = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_a",
+    });
+    const socketB = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_b",
+    });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const context = {
+      rooms,
+      publish(topic: string, message: ServerMessage) {
+        published.push({ topic, message });
+      },
+      userSockets: new Map([["user_db_1", new Set([socketA, socketB])]]),
+    };
+
+    handleMessage(socketA, JSON.stringify({ type: "room.join", roomId: "lobby" }), context);
+    handleMessage(socketB, JSON.stringify({ type: "room.join", roomId: "studio" }), context);
+    socketA.sent.length = 0;
+
+    handleMessage(socketA, JSON.stringify({ type: "chat.say", text: "stale room" }), context);
+
+    expect(socketA.unsubscribed).toEqual(["room:lobby"]);
+    expect(socketA.data.roomId).toBeUndefined();
+    expect(socketA.sent).toEqual([
+      { type: "error", code: "NOT_IN_ROOM", message: "Join a room before chatting" },
+    ]);
+    expect(published).not.toContainEqual({
+      topic: "room:lobby",
+      message: expect.objectContaining({ type: "chat.message", text: "stale room" }),
+    });
+  });
+
   test("ignores movement from a socket superseded by a newer connection", async () => {
     const rooms = await RoomManager.create();
     const socketA = createSocket({
