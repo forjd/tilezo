@@ -1,5 +1,5 @@
-import { rmSync, writeFileSync } from "node:fs";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadServerEnv, projectRoot } from "./server-env";
 
