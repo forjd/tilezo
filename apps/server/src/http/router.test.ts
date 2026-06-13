@@ -486,6 +486,20 @@ describe("createHttpRouter", () => {
       expect(anon.status).toBe(401);
     });
 
+    test("treats malformed session cookies as unauthenticated", async () => {
+      const route = createHttpRouter(makeDeps());
+
+      const response = await route(
+        request("/auth/session", {
+          method: "GET",
+          headers: { cookie: "tilezo_session=%" },
+        }),
+        "ip",
+      );
+
+      expect(response.status).toBe(401);
+    });
+
     test("echoes an allowed origin with credentials but not a wildcard", async () => {
       const route = createHttpRouter(makeDeps());
 

@@ -786,7 +786,11 @@ export function readCookie(request: Request, name: string): string | undefined {
     }
 
     if (part.slice(0, separator).trim() === name) {
-      return decodeURIComponent(part.slice(separator + 1).trim());
+      try {
+        return decodeURIComponent(part.slice(separator + 1).trim());
+      } catch {
+        return undefined;
+      }
     }
   }
 
