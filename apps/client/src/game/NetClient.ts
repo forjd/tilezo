@@ -1,3 +1,4 @@
+import { parseServerMessage } from "@tilezo/protocol";
 import type { ClientMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { DEFAULT_WS_URL } from "../assets";
 
@@ -87,14 +88,27 @@ export class NetClient {
       return;
     }
 
-    try {
-      const message = JSON.parse(raw) as ServerMessage;
+    let parsedJson: unknown;
 
-      for (const handler of this.messageHandlers) {
-        handler(message);
-      }
+    try {
+      parsedJson = JSON.parse(raw);
     } catch {
       this.emitStatus("received invalid server message");
+      return;
+    }
+
+    // Validate the server message against the shared schema instead of blindly casting,
+    // so a malformed or skewed payload is reported cleanly rather than throwing deep in
+    // the scene/avatar code and silently dropping a state update.
+    const parsed = parseServerMessage(parsedJson);
+
+    if (!parsed.ok) {
+      this.emitStatus("received invalid server message");
+      return;
+    }
+
+    for (const handler of this.messageHandlers) {
+      handler(parsed.value);
     }
   }
 

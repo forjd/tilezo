@@ -5,6 +5,7 @@ import {
   DEFAULT_AVATAR_APPEARANCE,
   parseClientMessage,
   parseRawClientMessage,
+  parseServerMessage,
 } from ".";
 
 describe("protocol parser", () => {
@@ -38,12 +39,26 @@ describe("protocol parser", () => {
     expect(parseClientMessage({ type: "chat.typing", isTyping: "yes" }).ok).toBe(false);
   });
 
-  test("filters room chat to printable ASCII text", () => {
+  test("preserves international chat text while collapsing whitespace", () => {
     expect(parseClientMessage({ type: "chat.say", text: " hi 👋 café 世界\tok\n " })).toEqual({
       ok: true,
-      value: { type: "chat.say", text: "hi caf ok" },
+      value: { type: "chat.say", text: "hi 👋 café 世界 ok" },
     });
-    expect(parseClientMessage({ type: "chat.say", text: "😀✨" }).ok).toBe(false);
+    expect(parseClientMessage({ type: "chat.say", text: "😀✨" })).toEqual({
+      ok: true,
+      value: { type: "chat.say", text: "😀✨" },
+    });
+  });
+
+  test("strips control, zero-width, and bidi-override characters from chat", () => {
+    // Right-to-left override (U+202E) and zero-width space (U+200B) are removed; the
+    // surrounding visible characters and a normal space survive.
+    expect(parseClientMessage({ type: "chat.say", text: "ab\u202Ecd\u200B ef" })).toEqual({
+      ok: true,
+      value: { type: "chat.say", text: "abcd ef" },
+    });
+    // A message that is only zero-width/control characters collapses to empty and is rejected.
+    expect(parseClientMessage({ type: "chat.say", text: "\u200B\u202E\t" }).ok).toBe(false);
   });
 
   test("rejects malformed raw messages", () => {
@@ -57,6 +72,21 @@ describe("protocol parser", () => {
         target: { x: 1.5, y: 2 },
       }).ok,
     ).toBe(false);
+  });
+
+  test("rejects move targets with out-of-range coordinates", () => {
+    expect(
+      parseClientMessage({
+        type: "avatar.move.request",
+        target: { x: Number.MAX_SAFE_INTEGER, y: 0 },
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseClientMessage({
+        type: "avatar.move.request",
+        target: { x: 5, y: 12 },
+      }).ok,
+    ).toBe(true);
   });
 
   test("accepts avatar appearance updates with only supported parts and colors", () => {
@@ -156,6 +186,45 @@ describe("protocol parser", () => {
   test("keeps the expanded avatar catalog available to consumers", () => {
     expect(AVATAR_HAIR_STYLES).toContain("afro");
     expect(AVATAR_HAIR_STYLES).toContain("locs");
+  });
+});
+
+describe("parseServerMessage", () => {
+  test("accepts well-formed server messages", () => {
+    expect(parseServerMessage({ type: "connected", userId: "user_1" })).toEqual({
+      ok: true,
+      value: { type: "connected", userId: "user_1" },
+    });
+    expect(
+      parseServerMessage({
+        type: "avatar.moved",
+        userId: "user_1",
+        path: [
+          { x: 1, y: 1 },
+          { x: 2, y: 1 },
+        ],
+      }).ok,
+    ).toBe(true);
+    expect(
+      parseServerMessage({
+        type: "user.joined",
+        user: {
+          id: "user_1",
+          username: "Dan",
+          position: { x: 0, y: 0 },
+          appearance: DEFAULT_AVATAR_APPEARANCE,
+        },
+      }).ok,
+    ).toBe(true);
+  });
+
+  test("rejects malformed or skewed server messages", () => {
+    // path must be an array of tile positions, not a string.
+    expect(parseServerMessage({ type: "avatar.moved", userId: "user_1", path: "nope" }).ok).toBe(
+      false,
+    );
+    expect(parseServerMessage({ type: "unknown.kind" }).ok).toBe(false);
+    expect(parseServerMessage(null).ok).toBe(false);
   });
 });
 

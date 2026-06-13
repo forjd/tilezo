@@ -29,6 +29,9 @@ export class RoomManager {
   private readonly rooms = new Map<string, Room>();
   private readonly publicLayouts: Map<string, RoomLayout>;
   private readonly privateLayouts = new Map<string, OwnedRoomLayout>();
+  // Secondary index of private layouts by owner so listing a user's accessible rooms is
+  // O(rooms they own) rather than O(every private room in the directory).
+  private readonly privateLayoutsByOwner = new Map<string, Map<string, OwnedRoomLayout>>();
   private readonly roomRules = new Map<string, RoomAccessRule>();
   private readonly bots: readonly RoomBotDefinition[];
 
@@ -45,7 +48,7 @@ export class RoomManager {
     }
 
     for (const room of roomDirectory.privateLayouts) {
-      this.privateLayouts.set(room.layout.id, room);
+      this.indexPrivateLayout(room);
       this.roomRules.set(room.layout.id, {
         roomId: room.layout.id,
         ownerUserId: room.ownerUserId,
@@ -122,7 +125,7 @@ export class RoomManager {
   }
 
   addPrivateRoom(layout: RoomLayout, ownerUserId: string): void {
-    this.privateLayouts.set(layout.id, { layout, ownerUserId });
+    this.indexPrivateLayout({ layout, ownerUserId });
     this.roomRules.set(layout.id, { roomId: layout.id, ownerUserId, access: "open" });
   }
 
@@ -142,7 +145,7 @@ export class RoomManager {
     });
 
     if (options.visibility === "private" && options.ownerUserId) {
-      this.privateLayouts.set(layout.id, {
+      this.indexPrivateLayout({
         layout,
         ownerUserId: options.ownerUserId,
         access,
@@ -151,6 +154,25 @@ export class RoomManager {
     }
 
     this.publicLayouts.set(layout.id, layout);
+  }
+
+  private indexPrivateLayout(room: OwnedRoomLayout): void {
+    const previous = this.privateLayouts.get(room.layout.id);
+
+    if (previous && previous.ownerUserId !== room.ownerUserId) {
+      this.privateLayoutsByOwner.get(previous.ownerUserId)?.delete(room.layout.id);
+    }
+
+    this.privateLayouts.set(room.layout.id, room);
+
+    let ownedByUser = this.privateLayoutsByOwner.get(room.ownerUserId);
+
+    if (!ownedByUser) {
+      ownedByUser = new Map();
+      this.privateLayoutsByOwner.set(room.ownerUserId, ownedByUser);
+    }
+
+    ownedByUser.set(room.layout.id, room);
   }
 
   removeIfEmpty(roomId: string): void {
@@ -197,11 +219,11 @@ export class RoomManager {
   }
 
   private listAccessibleLayouts(userId: string | undefined): RoomLayout[] {
+    const ownedByUser = userId ? this.privateLayoutsByOwner.get(userId) : undefined;
+
     return [
       ...this.publicLayouts.values(),
-      ...[...this.privateLayouts.values()]
-        .filter((room) => room.ownerUserId === userId)
-        .map((room) => room.layout),
+      ...(ownedByUser ? [...ownedByUser.values()].map((room) => room.layout) : []),
     ];
   }
 

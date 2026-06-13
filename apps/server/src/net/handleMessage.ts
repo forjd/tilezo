@@ -43,10 +43,22 @@ export function handleMessage(
   try {
     switch (parsed.value.type) {
       case "room.list.request":
+        if (!consumeRateLimit(ws, "default")) {
+          context.metrics?.increment("rate_limited.room_list");
+          sendError(ws, "RATE_LIMITED", "Slow down before refreshing rooms again");
+          return;
+        }
+
         void sendRoomList(ws, context);
         break;
 
       case "room.join": {
+        if (!consumeRateLimit(ws, "default")) {
+          context.metrics?.increment("rate_limited.room_join");
+          sendError(ws, "RATE_LIMITED", "Slow down before changing rooms again");
+          return;
+        }
+
         if (!ws.data.username) {
           context.metrics?.increment("room.join.unauthenticated");
           context.logger?.warn("room.join.unauthenticated", socketFields(ws));
@@ -91,6 +103,13 @@ export function handleMessage(
           return;
         }
 
+        if (path.length < 2) {
+          // Target is the avatar's current tile: nothing to move, so do not broadcast an
+          // empty path to the whole room (matches the bot mover's guard).
+          context.metrics?.increment("movement.noop");
+          break;
+        }
+
         context.publish(roomTopic(room.id), {
           type: "avatar.moved",
           userId: ws.data.userId,
@@ -125,14 +144,16 @@ export function handleMessage(
           return;
         }
 
-        ws.data.appearance = parsed.value.appearance;
-
         if (!room.updateAppearance(ws.data.userId, parsed.value.appearance)) {
           context.metrics?.increment("appearance.rejected.not_in_room");
           context.logger?.warn("room.appearance.rejected", socketFields(ws));
           sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
           return;
         }
+
+        // Only mirror the appearance onto the socket after the authoritative room update
+        // succeeds, so a rejected update cannot leave the local copy out of sync.
+        ws.data.appearance = parsed.value.appearance;
 
         context.publish(roomTopic(room.id), {
           type: "avatar.appearance.updated",
@@ -312,7 +333,10 @@ async function joinRoom(
       if (options.sendUnavailableError) {
         sendError(ws, access.code, access.message);
       }
-      if (access.code === "ROOM_NOT_FOUND") {
+      // Clear the persisted last room when a resume is rejected for any reason (including
+      // a now knock-gated room), otherwise the user is silently dropped to no room on
+      // every reconnect. On the interactive path only clear when the room is truly gone.
+      if (access.code === "ROOM_NOT_FOUND" || !options.sendUnavailableError) {
         await clearLastRoomId(context, ws.data.userId);
       }
       return;
@@ -336,6 +360,9 @@ async function joinRoom(
     const previousRoomId = ws.data.roomId;
 
     if (previousRoomId === room.id) {
+      // Same socket re-joining its current room: just resend the snapshot. The last-room
+      // session row is already persisted from the original join, so skip the DB write to
+      // avoid an upsert per frame when a client spams room.join for its current room.
       send(ws, {
         type: "room.snapshot",
         roomId: room.id,
@@ -346,7 +373,6 @@ async function joinRoom(
         type: "room.list",
         rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
       });
-      await saveLastRoomId(context, ws.data.userId, room.id);
       context.metrics?.increment("room.join.snapshot_resent");
       context.logger?.info("room.join.snapshot_resent", {
         ...socketFields(ws),
@@ -373,12 +399,17 @@ async function joinRoom(
       }
     }
 
-    const user = room.join({
+    // If this user already has an avatar in the room, a newer socket is replacing an
+    // earlier connection (duplicate connection / reconnect). Re-point the existing avatar
+    // at this socket instead of overwriting it and broadcasting a second user.joined.
+    const isReconnect = room.hasUser(ws.data.userId);
+    const joinPayload = {
       id: ws.data.userId,
       username: ws.data.username ?? ws.data.userId,
       connectionId: ws.data.connectionId,
       appearance: ws.data.appearance ?? DEFAULT_AVATAR_APPEARANCE,
-    });
+    };
+    const user = isReconnect ? room.reattach(joinPayload) : room.join(joinPayload);
     const userSnapshot = {
       id: user.id,
       username: user.username,
@@ -397,10 +428,20 @@ async function joinRoom(
       users: room.getUsers(),
       tiles: room.getSnapshot().tiles,
     });
-    context.publish(roomTopic(room.id), {
-      type: "user.joined",
-      user: userSnapshot,
-    });
+
+    if (isReconnect) {
+      context.metrics?.increment("room.reconnected");
+      context.logger?.info("room.reconnected", {
+        ...socketFields(ws),
+        roomId: room.id,
+      });
+    } else {
+      context.publish(roomTopic(room.id), {
+        type: "user.joined",
+        user: userSnapshot,
+      });
+    }
+
     send(ws, {
       type: "room.list",
       rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
@@ -466,7 +507,29 @@ async function clearLastRoomId(context: Context, userId: string): Promise<void> 
 }
 
 function getJoinedRoom(ws: ServerWebSocket<SocketData>, rooms: RoomManager) {
-  return ws.data.roomId ? rooms.get(ws.data.roomId) : undefined;
+  if (!ws.data.roomId) {
+    return undefined;
+  }
+
+  const room = rooms.get(ws.data.roomId);
+
+  if (!room) {
+    return undefined;
+  }
+
+  // A socket that has been superseded by a newer connection for the same user must no
+  // longer drive that user's avatar (movement, chat, appearance, typing).
+  const currentConnectionId = room.getConnectionId(ws.data.userId);
+
+  if (
+    currentConnectionId !== undefined &&
+    ws.data.connectionId !== undefined &&
+    currentConnectionId !== ws.data.connectionId
+  ) {
+    return undefined;
+  }
+
+  return room;
 }
 
 function roomTopic(roomId: string): string {
@@ -498,14 +561,14 @@ function socketFields(ws: ServerWebSocket<SocketData>): Record<string, unknown> 
   };
 }
 
-const RATE_LIMITS = {
+export const RATE_LIMITS = {
   movement: { burst: 12, refillPerSecond: 8 },
   chat: { burst: 5, refillPerSecond: 2 },
   typing: { burst: 8, refillPerSecond: 4 },
   default: { burst: 20, refillPerSecond: 10 },
 } satisfies Record<string, { burst: number; refillPerSecond: number }>;
 
-function consumeRateLimit(
+export function consumeRateLimit(
   ws: ServerWebSocket<SocketData>,
   kind: keyof typeof RATE_LIMITS,
   now = Date.now(),

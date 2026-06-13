@@ -12,11 +12,10 @@ describe("ClientLogger", () => {
     restorePublicApiUrl();
   });
 
-  test("posts telemetry events with the current session token", async () => {
+  test("posts telemetry events anonymously without the session token", async () => {
     delete Bun.env.PUBLIC_API_URL;
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const logger = new ClientLogger({
-      getToken: () => "session-token",
       fetcher: (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
         requests.push({ url: String(url), init });
         return Response.json({ ok: true });
@@ -31,7 +30,6 @@ describe("ClientLogger", () => {
         init: {
           method: "POST",
           headers: {
-            authorization: "Bearer session-token",
             "content-type": "application/json",
           },
           body: JSON.stringify({

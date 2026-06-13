@@ -28,7 +28,7 @@ export function createApp(root: HTMLElement): void {
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
   const chat = new ChatPanel();
-  const clientLogger = new ClientLogger({ getToken: () => session?.token });
+  const clientLogger = new ClientLogger();
   let session: AuthSession | undefined;
   let game: Game | undefined;
   let gameStarted = false;

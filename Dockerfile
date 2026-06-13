@@ -34,6 +34,8 @@ RUN bun build apps/server/src/index.ts --target bun --outfile dist/server.js
 
 FROM base AS server-migrate
 ENV NODE_ENV=production
+# Drop root: the oven/bun image ships a non-root `bun` user.
+USER bun
 CMD ["bun", "run", "--cwd", "apps/server", "db:migrate"]
 
 FROM oven/bun:1.3.13 AS server
@@ -44,4 +46,7 @@ ENV PORT=3000
 COPY --from=server-build /app/dist/server.js ./server.js
 COPY --from=server-build /app/assets ./assets
 EXPOSE 3000
+# Run the internet-facing WebSocket server as the non-root `bun` user so a process
+# compromise does not start out with root inside the container.
+USER bun
 CMD ["bun", "server.js"]
