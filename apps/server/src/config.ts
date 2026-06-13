@@ -16,6 +16,8 @@ export type ServerConfig = {
   roomCreateRateLimitWindowMs: number;
   friendRateLimitMax: number;
   friendRateLimitWindowMs: number;
+  clientEventRateLimitMax: number;
+  clientEventRateLimitWindowMs: number;
   maxRoomsPerUser: number;
   maxFriendsPerUser: number;
   maxAuthBodyBytes: number;
@@ -36,6 +38,7 @@ export const DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_AUTH_LOGIN_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_ROOM_CREATE_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_FRIEND_RATE_LIMIT_WINDOW_MS = 60_000;
+export const DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_MAX_ROOMS_PER_USER = 50;
 export const DEFAULT_MAX_FRIENDS_PER_USER = 500;
 export const DEFAULT_MAX_AUTH_BODY_BYTES = 4 * 1024;
@@ -104,6 +107,16 @@ export function getConfig(env = Bun.env): ServerConfig {
     env.FRIEND_RATE_LIMIT_MAX,
     isProduction ? 60 : 1000,
   );
+  const clientEventRateLimitWindowMs = parsePositiveInteger(
+    "CLIENT_EVENT_RATE_LIMIT_WINDOW_MS",
+    env.CLIENT_EVENT_RATE_LIMIT_WINDOW_MS,
+    DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS,
+  );
+  const clientEventRateLimitMax = parsePositiveInteger(
+    "CLIENT_EVENT_RATE_LIMIT_MAX",
+    env.CLIENT_EVENT_RATE_LIMIT_MAX,
+    isProduction ? 120 : 1000,
+  );
   const maxRoomsPerUser = parsePositiveInteger(
     "MAX_ROOMS_PER_USER",
     env.MAX_ROOMS_PER_USER,
@@ -162,6 +175,8 @@ export function getConfig(env = Bun.env): ServerConfig {
     roomCreateRateLimitWindowMs,
     friendRateLimitMax,
     friendRateLimitWindowMs,
+    clientEventRateLimitMax,
+    clientEventRateLimitWindowMs,
     maxRoomsPerUser,
     maxFriendsPerUser,
     maxAuthBodyBytes,

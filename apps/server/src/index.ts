@@ -43,11 +43,16 @@ const friendRateLimiter = new FixedWindowRateLimiter({
   limit: config.friendRateLimitMax,
   windowMs: config.friendRateLimitWindowMs,
 });
+const clientEventRateLimiter = new FixedWindowRateLimiter({
+  limit: config.clientEventRateLimitMax,
+  windowMs: config.clientEventRateLimitWindowMs,
+});
 const rateLimiters = [
   registerRateLimiter,
   loginRateLimiter,
   roomCreateRateLimiter,
   friendRateLimiter,
+  clientEventRateLimiter,
 ];
 const rateLimiterPruneTimer = setInterval(() => {
   for (const limiter of rateLimiters) {
@@ -96,6 +101,7 @@ const router = createHttpRouter({
   loginRateLimiter,
   roomCreateRateLimiter,
   friendRateLimiter,
+  clientEventRateLimiter,
 });
 
 const server = Bun.serve<SocketData>({

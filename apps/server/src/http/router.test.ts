@@ -65,6 +65,7 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
     loginRateLimiter: limiter(),
     roomCreateRateLimiter: limiter(),
     friendRateLimiter: limiter(),
+    clientEventRateLimiter: limiter(),
     ...overrides,
   };
 }
@@ -287,6 +288,27 @@ describe("createHttpRouter", () => {
         "ip",
       );
       expect(huge.status).toBe(413);
+    });
+
+    test("rate limits telemetry per client", async () => {
+      const route = createHttpRouter(makeDeps({ clientEventRateLimiter: limiter(1) }));
+
+      expect(
+        (
+          await route(
+            request("/client-events", { body: { event: "test", level: "error" } }),
+            "client-1",
+          )
+        ).status,
+      ).toBe(202);
+      expect(
+        (
+          await route(
+            request("/client-events", { body: { event: "test", level: "error" } }),
+            "client-1",
+          )
+        ).status,
+      ).toBe(429);
     });
   });
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_AUTH_PASSWORD_QUEUE_LIMIT,
   DEFAULT_AUTH_PASSWORD_WAIT_TIMEOUT_MS,
   DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW_MS,
+  DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS,
   getConfig,
 } from "./config";
 
@@ -25,6 +26,8 @@ describe("getConfig", () => {
       roomCreateRateLimitWindowMs: 60000,
       friendRateLimitMax: 1000,
       friendRateLimitWindowMs: 60000,
+      clientEventRateLimitMax: 1000,
+      clientEventRateLimitWindowMs: DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS,
       maxRoomsPerUser: 50,
       maxFriendsPerUser: 500,
       maxAuthBodyBytes: 4096,
@@ -51,6 +54,7 @@ describe("getConfig", () => {
         AUTH_LOGIN_RATE_LIMIT_MAX: "8",
         ROOM_CREATE_RATE_LIMIT_MAX: "5",
         FRIEND_RATE_LIMIT_MAX: "40",
+        CLIENT_EVENT_RATE_LIMIT_MAX: "30",
         MAX_ROOMS_PER_USER: "25",
         MAX_FRIENDS_PER_USER: "200",
         MAX_AUTH_BODY_BYTES: "2048",
@@ -75,6 +79,8 @@ describe("getConfig", () => {
       roomCreateRateLimitWindowMs: 60000,
       friendRateLimitMax: 40,
       friendRateLimitWindowMs: 60000,
+      clientEventRateLimitMax: 30,
+      clientEventRateLimitWindowMs: DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS,
       maxRoomsPerUser: 25,
       maxFriendsPerUser: 200,
       maxAuthBodyBytes: 2048,

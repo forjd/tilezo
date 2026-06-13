@@ -28,6 +28,7 @@ export type RouterDeps = {
   loginRateLimiter: FixedWindowRateLimiter;
   roomCreateRateLimiter: FixedWindowRateLimiter;
   friendRateLimiter: FixedWindowRateLimiter;
+  clientEventRateLimiter: FixedWindowRateLimiter;
 };
 
 type RouteContext = RouterDeps & {
@@ -116,6 +117,17 @@ async function dispatch(ctx: RouteContext): Promise<Response> {
   }
 
   if (url.pathname === "/client-events" && request.method === "POST") {
+    const limited = enforceRateLimit(
+      ctx,
+      ctx.clientEventRateLimiter,
+      clientKey,
+      "client_events.rate_limited",
+      "Too many client events, try again shortly",
+    );
+    if (limited) {
+      return limited;
+    }
+
     return handleClientEventRequest(ctx);
   }
 
@@ -362,7 +374,7 @@ async function handleClientEventRequest(ctx: RouteContext): Promise<Response> {
   const user = await auth?.verifyToken(readSessionToken(ctx.request) ?? "");
   const payload = body.value as { event?: unknown; fields?: unknown; level?: unknown };
   const eventName = sanitizeClientEventName(payload.event);
-  const level = sanitizeClientLogLevel(payload.level);
+  const level = user ? sanitizeClientLogLevel(payload.level) : "info";
   const fields = sanitizeClientFields(payload.fields);
   const logFields = {
     ...fields,
