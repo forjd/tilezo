@@ -335,15 +335,24 @@ export function createApp(root: HTMLElement): void {
   });
 
   logOut.addEventListener("click", () => {
+    void signOut();
+  });
+
+  async function signOut(): Promise<void> {
+    if (logOut.disabled) {
+      return;
+    }
+
+    logOut.disabled = true;
     clearReconnectSchedule();
-    void requestLogout();
 
     if (gameStarted) {
       game?.stop();
     }
 
+    await requestLogout();
     createApp(root);
-  });
+  }
 
   shell.append(
     stage,
