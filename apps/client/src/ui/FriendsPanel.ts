@@ -2,12 +2,15 @@ import type { FriendSummary } from "../friends/FriendClient";
 import { AvatarPreview } from "./AvatarPreview";
 
 type FriendsPanelOptions = {
+  createAvatarPreview?: () => AvatarPreviewLike;
   onAdd: (username: string) => void;
   onJoinRoom: (roomId: string) => void;
   onMessage: (friend: FriendSummary) => void;
   onRefresh: () => void;
   onRemove: (friendId: string) => void;
 };
+
+type AvatarPreviewLike = Pick<AvatarPreview, "destroy" | "element" | "mount" | "update">;
 
 export class FriendsPanel {
   readonly element = document.createElement("section");
@@ -18,6 +21,7 @@ export class FriendsPanel {
   private readonly message = document.createElement("p");
   private readonly refreshButton = document.createElement("button");
   private readonly closeButton = document.createElement("button");
+  private readonly previewDestroyers: (() => void)[] = [];
   private friends: FriendSummary[] = [];
 
   constructor(private readonly options: FriendsPanelOptions) {
@@ -119,6 +123,7 @@ export class FriendsPanel {
   }
 
   private render(): void {
+    this.destroyPreviews();
     this.list.replaceChildren();
 
     if (this.friends.length === 0) {
@@ -136,7 +141,7 @@ export class FriendsPanel {
 
   private createFriendItem(friend: FriendSummary): HTMLElement {
     const item = document.createElement("article");
-    const preview = new AvatarPreview(document);
+    const preview = this.options.createAvatarPreview?.() ?? new AvatarPreview(document);
     const details = document.createElement("div");
     const name = document.createElement("strong");
     const meta = document.createElement("span");
@@ -149,6 +154,7 @@ export class FriendsPanel {
     preview.element.classList.add("friend-avatar");
     preview.update(friend.appearance);
     void preview.mount();
+    this.previewDestroyers.push(() => preview.destroy());
     details.className = "friend-details";
     actions.className = "friend-actions";
     joinButton.type = "button";
@@ -176,5 +182,11 @@ export class FriendsPanel {
     actions.append(joinButton, messageButton, removeButton);
     item.append(preview.element, details, actions);
     return item;
+  }
+
+  private destroyPreviews(): void {
+    for (const destroy of this.previewDestroyers.splice(0)) {
+      destroy();
+    }
   }
 }

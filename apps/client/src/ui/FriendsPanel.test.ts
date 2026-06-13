@@ -83,6 +83,52 @@ describe("FriendsPanel", () => {
     expect(messaged).toEqual(["user_2"]);
     expect(removed).toEqual(["user_2"]);
   });
+
+  test("destroys avatar previews before rerendering friends", () => {
+    installDocument();
+    const destroyed: string[] = [];
+    let created = 0;
+    const panel = new FriendsPanel({
+      createAvatarPreview() {
+        created += 1;
+        const id = `preview_${created.toString()}`;
+        return {
+          element: new FakeElement("div") as unknown as HTMLDivElement,
+          update() {},
+          async mount() {},
+          destroy() {
+            destroyed.push(id);
+          },
+        };
+      },
+      onAdd() {},
+      onJoinRoom() {},
+      onMessage() {},
+      onRefresh() {},
+      onRemove() {},
+    });
+
+    panel.setFriends([
+      {
+        id: "user_2",
+        username: "Kai",
+        appearance: DEFAULT_AVATAR_APPEARANCE,
+        online: false,
+        canJoinRoom: false,
+      },
+    ]);
+    panel.setFriends([
+      {
+        id: "user_3",
+        username: "Rem",
+        appearance: DEFAULT_AVATAR_APPEARANCE,
+        online: false,
+        canJoinRoom: false,
+      },
+    ]);
+
+    expect(destroyed).toEqual(["preview_1"]);
+  });
 });
 
 function getList(panel: FriendsPanel): FakeElement {
