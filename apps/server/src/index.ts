@@ -7,10 +7,11 @@ import { getConfig, type ServerConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
 import { DrizzleFriendStore, FriendService } from "./friends/friends";
-import { corsHeaders, createHttpRouter, readSessionToken } from "./http/router";
+import { corsHeaders, createHttpRouter } from "./http/router";
 import { DirectMessageService, DrizzleDirectMessageStore } from "./messaging/messaging";
-import { handleClose, handleMessage, handleOpen } from "./net/handleMessage";
+import { handleClose, handleMessage, handleOpen, type UserRateLimitStore } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
+import { isAllowedWebSocketOrigin, readWebSocketSessionToken } from "./net/webSocketSecurity";
 import { createLogger, parseLogLevel } from "./observability/logger";
 import { Metrics } from "./observability/metrics";
 import { PresenceTracker } from "./presence/presence";
@@ -87,6 +88,7 @@ const auth = database
     })
   : undefined;
 const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
+const websocketRateLimits: UserRateLimitStore = new Map();
 
 const router = createHttpRouter({
   config,
@@ -141,6 +143,7 @@ const server = Bun.serve<SocketData>({
           logger,
           metrics,
           presence,
+          userRateLimits: websocketRateLimits,
         });
         return;
       }
@@ -177,11 +180,17 @@ async function handleWebSocketUpgrade(
   bunServer: Server<SocketData>,
   url: URL,
 ): Promise<Response | undefined> {
-  // Browsers send the HttpOnly session cookie on the WS handshake; fall back to the query
-  // token for non-browser clients. Either way the token stays out of page JavaScript.
-  const user = await auth?.verifyToken(
-    readSessionToken(request) ?? url.searchParams.get("token") ?? "",
-  );
+  if (!isAllowedWebSocketOrigin(request, config)) {
+    logger.warn("websocket.origin.rejected", { origin: request.headers.get("origin") });
+    return Response.json(
+      { error: { code: "FORBIDDEN_ORIGIN", message: "WebSocket origin is not allowed" } },
+      { status: 403, headers: corsHeaders() },
+    );
+  }
+
+  // Browsers send the HttpOnly session cookie on the WS handshake; API clients can use the
+  // Authorization header. Do not accept query tokens because they leak through URLs/logs.
+  const user = await auth?.verifyToken(readWebSocketSessionToken(request) ?? "");
 
   if (!user) {
     logger.warn("websocket.auth.rejected");

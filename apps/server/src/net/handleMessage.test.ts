@@ -772,6 +772,21 @@ describe("consumeRateLimit", () => {
     // The chat bucket is independent and still full.
     expect(consumeRateLimit(ws, "chat", now)).toBe(true);
   });
+
+  test("can share buckets across sockets for the same user", () => {
+    const socketA = { data: { userId: "user_1" } } as unknown as ServerWebSocket<SocketData>;
+    const socketB = { data: { userId: "user_1" } } as unknown as ServerWebSocket<SocketData>;
+    const otherUser = { data: { userId: "user_2" } } as unknown as ServerWebSocket<SocketData>;
+    const store = new Map();
+    const now = 0;
+
+    for (let index = 0; index < RATE_LIMITS.dm.burst; index += 1) {
+      expect(consumeRateLimit(socketA, "dm", now, store)).toBe(true);
+    }
+
+    expect(consumeRateLimit(socketB, "dm", now, store)).toBe(false);
+    expect(consumeRateLimit(otherUser, "dm", now, store)).toBe(true);
+  });
 });
 
 function createSocket(data: SocketData = { userId: "user_1" }) {

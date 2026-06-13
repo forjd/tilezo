@@ -22,7 +22,13 @@ type Context = {
   logger?: Logger;
   metrics?: Metrics;
   presence?: PresenceTracker;
+  userRateLimits?: UserRateLimitStore;
 };
+
+type RateLimitKind = keyof typeof RATE_LIMITS;
+type RateLimitBucket = { tokens: number; updatedAt: number };
+type RateLimitState = Partial<Record<RateLimitKind, RateLimitBucket>>;
+export type UserRateLimitStore = Map<string, RateLimitState>;
 
 export function handleMessage(
   ws: ServerWebSocket<SocketData>,
@@ -45,7 +51,7 @@ export function handleMessage(
   try {
     switch (parsed.value.type) {
       case "room.list.request":
-        if (!consumeRateLimit(ws, "default")) {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.room_list");
           sendError(ws, "RATE_LIMITED", "Slow down before refreshing rooms again");
           return;
@@ -55,7 +61,7 @@ export function handleMessage(
         break;
 
       case "room.join": {
-        if (!consumeRateLimit(ws, "default")) {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.room_join");
           sendError(ws, "RATE_LIMITED", "Slow down before changing rooms again");
           return;
@@ -73,7 +79,7 @@ export function handleMessage(
       }
 
       case "avatar.move.request": {
-        if (!consumeRateLimit(ws, "movement")) {
+        if (!consumeRateLimit(ws, "movement", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.movement");
           context.logger?.warn("websocket.rate_limited", {
             ...socketFields(ws),
@@ -127,7 +133,7 @@ export function handleMessage(
       }
 
       case "avatar.appearance.update": {
-        if (!consumeRateLimit(ws, "default")) {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.appearance");
           context.logger?.warn("websocket.rate_limited", {
             ...socketFields(ws),
@@ -167,7 +173,7 @@ export function handleMessage(
       }
 
       case "chat.say": {
-        if (!consumeRateLimit(ws, "chat")) {
+        if (!consumeRateLimit(ws, "chat", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.chat");
           context.logger?.warn("websocket.rate_limited", {
             ...socketFields(ws),
@@ -203,7 +209,7 @@ export function handleMessage(
       }
 
       case "chat.typing": {
-        if (!consumeRateLimit(ws, "typing")) {
+        if (!consumeRateLimit(ws, "typing", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.typing");
           return;
         }
@@ -234,7 +240,7 @@ export function handleMessage(
       }
 
       case "dm.send": {
-        if (!consumeRateLimit(ws, "dm")) {
+        if (!consumeRateLimit(ws, "dm", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.dm");
           sendError(ws, "RATE_LIMITED", "Slow down before sending another message");
           return;
@@ -250,7 +256,7 @@ export function handleMessage(
       }
 
       case "ping":
-        if (!consumeRateLimit(ws, "default")) {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.ping");
           sendError(ws, "RATE_LIMITED", "Slow down before pinging again");
           return;
@@ -636,18 +642,39 @@ export function consumeRateLimit(
   ws: ServerWebSocket<SocketData>,
   kind: keyof typeof RATE_LIMITS,
   now = Date.now(),
+  userRateLimits?: UserRateLimitStore,
 ): boolean {
-  ws.data.rateLimits ??= {};
+  const state = getRateLimitState(ws, userRateLimits);
   const limit = RATE_LIMITS[kind];
-  const current = ws.data.rateLimits[kind] ?? { tokens: limit.burst, updatedAt: now };
+  const current = state[kind] ?? { tokens: limit.burst, updatedAt: now };
   const elapsedSeconds = Math.max(0, (now - current.updatedAt) / 1000);
   const tokens = Math.min(limit.burst, current.tokens + elapsedSeconds * limit.refillPerSecond);
 
   if (tokens < 1) {
-    ws.data.rateLimits[kind] = { tokens, updatedAt: now };
+    state[kind] = { tokens, updatedAt: now };
     return false;
   }
 
-  ws.data.rateLimits[kind] = { tokens: tokens - 1, updatedAt: now };
+  state[kind] = { tokens: tokens - 1, updatedAt: now };
   return true;
+}
+
+function getRateLimitState(
+  ws: ServerWebSocket<SocketData>,
+  userRateLimits?: UserRateLimitStore,
+): RateLimitState {
+  if (!userRateLimits) {
+    ws.data.rateLimits ??= {};
+    return ws.data.rateLimits;
+  }
+
+  const existing = userRateLimits.get(ws.data.userId);
+
+  if (existing) {
+    return existing;
+  }
+
+  const created: RateLimitState = {};
+  userRateLimits.set(ws.data.userId, created);
+  return created;
 }
