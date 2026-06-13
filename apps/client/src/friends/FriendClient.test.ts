@@ -11,7 +11,7 @@ describe("FriendClient", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test("lists friends with the bearer token", async () => {
+  test("lists friends using the session cookie", async () => {
     const friends = [
       {
         id: "user_2",
@@ -28,11 +28,11 @@ describe("FriendClient", () => {
       return Response.json({ friends });
     }) as unknown as typeof fetch;
 
-    await expect(listFriends("token")).resolves.toEqual(friends);
+    await expect(listFriends()).resolves.toEqual(friends);
     expect(requests).toEqual([
       {
         url: `${DEFAULT_API_URL}/friends`,
-        init: { headers: { authorization: "Bearer token" } },
+        init: { credentials: "include" },
       },
     ]);
   });
@@ -51,18 +51,16 @@ describe("FriendClient", () => {
       return Response.json(String(url).endsWith("/friends") ? { friend } : { ok: true });
     }) as unknown as typeof fetch;
 
-    await expect(addFriend("token", "Kai")).resolves.toEqual(friend);
-    await expect(removeFriend("token", "user_2")).resolves.toBeUndefined();
+    await expect(addFriend("Kai")).resolves.toEqual(friend);
+    await expect(removeFriend("user_2")).resolves.toBeUndefined();
 
     expect(requests).toEqual([
       {
         url: `${DEFAULT_API_URL}/friends`,
         init: {
           method: "POST",
-          headers: {
-            authorization: "Bearer token",
-            "content-type": "application/json",
-          },
+          credentials: "include",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ username: "Kai" }),
         },
       },
@@ -70,7 +68,7 @@ describe("FriendClient", () => {
         url: `${DEFAULT_API_URL}/friends/user_2`,
         init: {
           method: "DELETE",
-          headers: { authorization: "Bearer token" },
+          credentials: "include",
         },
       },
     ]);

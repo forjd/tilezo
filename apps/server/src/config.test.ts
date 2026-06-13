@@ -30,6 +30,8 @@ describe("getConfig", () => {
       maxAuthBodyBytes: 4096,
       trustProxy: false,
       metricsToken: undefined,
+      corsAllowedOrigins: ["http://localhost:3001", "http://127.0.0.1:3001"],
+      cookieSecure: false,
       nodeEnv: "development",
     });
   });
@@ -54,6 +56,7 @@ describe("getConfig", () => {
         MAX_AUTH_BODY_BYTES: "2048",
         TRUST_PROXY: "true",
         METRICS_TOKEN: "metrics-secret",
+        CORS_ALLOWED_ORIGINS: "https://play.tilezo.example",
         NODE_ENV: "production",
       }),
     ).toEqual({
@@ -77,6 +80,8 @@ describe("getConfig", () => {
       maxAuthBodyBytes: 2048,
       trustProxy: true,
       metricsToken: "metrics-secret",
+      corsAllowedOrigins: ["https://play.tilezo.example"],
+      cookieSecure: true,
       nodeEnv: "production",
     });
   });

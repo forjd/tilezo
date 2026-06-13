@@ -12,8 +12,8 @@ export class NetClient {
   private readonly statusHandlers = new Set<StatusHandler>();
   private readonly disconnectHandlers = new Set<DisconnectHandler>();
 
-  async connect(token: string): Promise<void> {
-    const wsUrl = getWebSocketUrl(token);
+  async connect(): Promise<void> {
+    const wsUrl = getWebSocketUrl();
     this.emitStatus(`connecting to ${wsUrl}`);
 
     await new Promise<void>((resolve, reject) => {
@@ -125,16 +125,16 @@ export class NetClient {
   }
 }
 
-function getWebSocketUrl(token: string): string {
+function getWebSocketUrl(): string {
+  // No token in the URL: the browser sends the HttpOnly session cookie on the WebSocket
+  // handshake, so the server authenticates the upgrade from the cookie instead.
   const runtimeConfigured =
     typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_WS_URL;
   const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_WS_URL;
   const browserDefault = getBrowserWebSocketUrl();
   const baseUrl = runtimeConfigured ?? buildConfigured ?? browserDefault ?? DEFAULT_WS_URL;
-  const url = new URL(baseUrl);
-  url.searchParams.set("token", token);
 
-  return url.toString();
+  return new URL(baseUrl).toString();
 }
 
 function getBrowserWebSocketUrl(): string | undefined {

@@ -57,17 +57,15 @@ describe("RoomClient", () => {
       return Response.json(created, { status: 201 });
     }) as unknown as typeof fetch;
 
-    await expect(createRoom("session-token", request)).resolves.toEqual(created);
+    await expect(createRoom(request)).resolves.toEqual(created);
 
     expect(requests).toEqual([
       {
         url: `${DEFAULT_API_URL}/rooms`,
         init: {
           method: "POST",
-          headers: {
-            authorization: "Bearer session-token",
-            "content-type": "application/json",
-          },
+          credentials: "include",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify(request),
         },
       },

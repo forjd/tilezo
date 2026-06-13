@@ -1,6 +1,12 @@
 import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { DEFAULT_ROOM_ID } from "../assets";
-import { type AuthSession, authenticate, updateAppearance } from "../auth/AuthClient";
+import {
+  type AuthUser,
+  authenticate,
+  fetchSession,
+  logout as requestLogout,
+  updateAppearance,
+} from "../auth/AuthClient";
 import { addFriend, listFriends, removeFriend } from "../friends/FriendClient";
 import type { Game } from "../game/Game";
 import { createRoom, listRoomTemplates } from "../rooms/RoomClient";
@@ -29,7 +35,8 @@ export function createApp(root: HTMLElement): void {
   const logOut = document.createElement("button");
   const chat = new ChatPanel();
   const clientLogger = new ClientLogger();
-  let session: AuthSession | undefined;
+  // The auth token lives only in an HttpOnly cookie; the page keeps just the user profile.
+  let user: AuthUser | undefined;
   let game: Game | undefined;
   let gameStarted = false;
   let joinedRoom = false;
@@ -80,12 +87,12 @@ export function createApp(root: HTMLElement): void {
 
   const friendsPanel = new FriendsPanel({
     async onAdd(username) {
-      if (!session) {
+      if (!user) {
         return;
       }
 
       try {
-        await addFriend(session.token, username);
+        await addFriend(username);
         await refreshFriends();
         status.textContent = "friend added";
       } catch (error) {
@@ -106,12 +113,12 @@ export function createApp(root: HTMLElement): void {
       void refreshFriends();
     },
     async onRemove(friendId) {
-      if (!session) {
+      if (!user) {
         return;
       }
 
       try {
-        await removeFriend(session.token, friendId);
+        await removeFriend(friendId);
         await refreshFriends();
         status.textContent = "friend removed";
       } catch (error) {
@@ -141,15 +148,12 @@ export function createApp(root: HTMLElement): void {
         joinedRoom = true;
         chat.clear();
         chat.show();
-        browseRooms.classList.remove("hidden");
-        friendsButton.classList.remove("hidden");
-        createRoomButton.classList.remove("hidden");
-        editCharacter.classList.remove("hidden");
+        revealSignedInChrome({ editCharacter: true });
         roomBrowser.setCurrentRoom(snapshot.roomId);
         roomBrowser.hide();
       },
       onDisconnected() {
-        if (!session || !gameStarted) {
+        if (!user || !gameStarted) {
           return;
         }
 
@@ -173,16 +177,15 @@ export function createApp(root: HTMLElement): void {
   const characterEditor = new CharacterEditor({
     initialAppearance: DEFAULT_AVATAR_APPEARANCE,
     async onSubmit(appearance) {
-      if (!session) {
+      if (!user) {
         return;
       }
 
       status.textContent = "saving character";
 
       try {
-        const savedAppearance = await updateAppearance(session.token, appearance);
-        session.user.appearance = savedAppearance;
-        writeStoredSession(session);
+        const savedAppearance = await updateAppearance(appearance);
+        user.appearance = savedAppearance;
         characterEditor.hide();
 
         if (joinedRoom) {
@@ -193,11 +196,9 @@ export function createApp(root: HTMLElement): void {
         }
 
         status.textContent = "connecting";
-        await (await ensureGame()).start(session.token);
+        await (await ensureGame()).start();
         gameStarted = true;
-        browseRooms.classList.remove("hidden");
-        friendsButton.classList.remove("hidden");
-        createRoomButton.classList.remove("hidden");
+        revealSignedInChrome();
         roomBrowser.show();
         status.textContent = "choose room";
       } catch (error) {
@@ -220,13 +221,12 @@ export function createApp(root: HTMLElement): void {
     status.textContent = mode === "register" ? "creating account" : "logging in";
 
     try {
-      session = await authenticate({ mode, username, password });
-      void clientLogger.event(`auth.${mode}.succeeded`, { userId: session.user.id });
-      writeStoredSession(session);
+      user = await authenticate({ mode, username, password });
+      void clientLogger.event(`auth.${mode}.succeeded`, { userId: user.id });
       logOut.classList.remove("hidden");
       friendsButton.classList.remove("hidden");
       characterEditor.setSubmitLabel("Enter room");
-      characterEditor.show(session.user.appearance);
+      characterEditor.show(user.appearance);
       status.textContent = "choose character";
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "connection failed";
@@ -240,26 +240,23 @@ export function createApp(root: HTMLElement): void {
 
   const createRoomDialog = new CreateRoomDialog({
     async onSubmit(room) {
-      if (!session) {
+      if (!user) {
         return;
       }
 
       status.textContent = "creating room";
 
       try {
-        const created = await createRoom(session.token, room);
+        const created = await createRoom(room);
         createRoomDialog.hide();
         roomBrowser.hide();
 
         if (!gameStarted) {
-          await (await ensureGame()).start(session.token);
+          await (await ensureGame()).start();
           gameStarted = true;
         }
 
-        browseRooms.classList.remove("hidden");
-        friendsButton.classList.remove("hidden");
-        createRoomButton.classList.remove("hidden");
-        editCharacter.classList.remove("hidden");
+        revealSignedInChrome({ editCharacter: true });
         game?.joinRoom(created.roomId);
         status.textContent = "joining new room";
         void clientLogger.event("room.created", {
@@ -280,13 +277,13 @@ export function createApp(root: HTMLElement): void {
   });
 
   editCharacter.addEventListener("click", () => {
-    if (!session) {
+    if (!user) {
       return;
     }
 
     editCharacter.classList.add("hidden");
     characterEditor.setSubmitLabel("Save character");
-    characterEditor.show(session.user.appearance);
+    characterEditor.show(user.appearance);
   });
 
   browseRooms.addEventListener("click", () => {
@@ -298,7 +295,7 @@ export function createApp(root: HTMLElement): void {
   });
 
   createRoomButton.addEventListener("click", () => {
-    if (!session) {
+    if (!user) {
       return;
     }
 
@@ -307,7 +304,7 @@ export function createApp(root: HTMLElement): void {
 
   logOut.addEventListener("click", () => {
     clearReconnectSchedule();
-    clearStoredSession();
+    void requestLogout();
 
     if (gameStarted) {
       game?.stop();
@@ -329,30 +326,42 @@ export function createApp(root: HTMLElement): void {
   );
   root.replaceChildren(shell);
 
-  const storedSession = readStoredSession();
+  void restoreExistingSession();
 
-  if (storedSession) {
-    void restoreSession(storedSession);
+  // Reveals the signed-in top-bar controls. `editCharacter` only appears once the player is
+  // in a room (it is hidden while choosing a character), so callers opt into it explicitly.
+  function revealSignedInChrome(options: { editCharacter?: boolean } = {}): void {
+    browseRooms.classList.remove("hidden");
+    friendsButton.classList.remove("hidden");
+    createRoomButton.classList.remove("hidden");
+    logOut.classList.remove("hidden");
+
+    if (options.editCharacter) {
+      editCharacter.classList.remove("hidden");
+    }
   }
 
-  async function restoreSession(stored: AuthSession): Promise<void> {
-    session = stored;
+  async function restoreExistingSession(): Promise<void> {
+    const existing = await fetchSession();
+
+    if (!existing) {
+      return;
+    }
+
+    user = existing;
     login.hide();
     logOut.classList.remove("hidden");
     friendsButton.classList.remove("hidden");
     status.textContent = "connecting";
 
     try {
-      await (await ensureGame()).start(stored.token);
+      await (await ensureGame()).start();
       gameStarted = true;
-      browseRooms.classList.remove("hidden");
-      friendsButton.classList.remove("hidden");
-      createRoomButton.classList.remove("hidden");
+      revealSignedInChrome();
       roomBrowser.show();
       status.textContent = "choose room";
     } catch (error) {
-      session = undefined;
-      clearStoredSession();
+      user = undefined;
       login.element.classList.remove("hidden");
       logOut.classList.add("hidden");
       chat.hide();
@@ -375,7 +384,7 @@ export function createApp(root: HTMLElement): void {
   }
 
   async function reconnectAfterDisconnect(mode: "resume" | "lobby"): Promise<void> {
-    if (!session || reconnecting) {
+    if (!user || reconnecting) {
       return;
     }
 
@@ -390,12 +399,9 @@ export function createApp(root: HTMLElement): void {
     try {
       const activeGame = await ensureGame();
       void clientLogger.event("room.connection.retry", { mode });
-      await activeGame.reconnect(session.token);
+      await activeGame.reconnect();
       gameStarted = true;
-      browseRooms.classList.remove("hidden");
-      friendsButton.classList.remove("hidden");
-      createRoomButton.classList.remove("hidden");
-      editCharacter.classList.remove("hidden");
+      revealSignedInChrome({ editCharacter: true });
 
       if (mode === "lobby") {
         activeGame.joinRoom(DEFAULT_ROOM_ID);
@@ -427,12 +433,12 @@ export function createApp(root: HTMLElement): void {
   }
 
   async function refreshFriends(): Promise<void> {
-    if (!session) {
+    if (!user) {
       return;
     }
 
     try {
-      friendsPanel.setFriends(await listFriends(session.token));
+      friendsPanel.setFriends(await listFriends());
     } catch (error) {
       const message = error instanceof Error ? error.message : "Friends failed";
       status.textContent = message;
@@ -450,49 +456,5 @@ export function createApp(root: HTMLElement): void {
       clearInterval(countdownInterval);
       countdownInterval = undefined;
     }
-  }
-}
-
-const SESSION_STORAGE_KEY = "tilezo.authSession";
-
-function readStoredSession(): AuthSession | undefined {
-  try {
-    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-
-    if (!raw) {
-      return undefined;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<AuthSession>;
-
-    if (
-      typeof parsed.token !== "string" ||
-      !parsed.user ||
-      typeof parsed.user.id !== "string" ||
-      typeof parsed.user.username !== "string"
-    ) {
-      return undefined;
-    }
-
-    return parsed as AuthSession;
-  } catch {
-    clearStoredSession();
-    return undefined;
-  }
-}
-
-function writeStoredSession(session: AuthSession): void {
-  try {
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-  } catch {
-    // Private browsing or storage quota errors should not block play.
-  }
-}
-
-function clearStoredSession(): void {
-  try {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-  } catch {
-    // Ignore unavailable browser storage.
   }
 }
