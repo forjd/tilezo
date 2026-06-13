@@ -14,6 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       COVERAGE_THRESHOLD: "80"
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/tilezo
+      RUN_DB_TESTS: "1"
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tilezo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
@@ -32,6 +49,9 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      - name: Run database migrations
+        run: bun run db:migrate
 
       - name: Test with coverage
         run: bun run test:coverage

@@ -26,6 +26,7 @@
     "stress:auth": "bun run scripts/stress-test.ts --scenario auth",
     "stress:room": "bun run scripts/stress-test.ts --scenario full --preseed-users",
     "test": "bun test",
+    "test:integration": "RUN_DB_TESTS=1 bun test apps/server/src/db/integration.test.ts",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",
     "coverage:check": "bun run scripts/check-coverage.ts",
     "typecheck": "bun run --filter '*' typecheck",

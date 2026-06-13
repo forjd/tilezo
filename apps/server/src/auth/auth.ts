@@ -443,17 +443,36 @@ export class DrizzleAuthStore implements AuthStore {
   }
 }
 
+// Detects a Postgres unique-violation (SQLSTATE 23505) across driver shapes. Drizzle wraps
+// the driver error in `.cause`, and Bun's SQL driver exposes the SQLSTATE as `errno` while
+// `code` is the generic "ERR_POSTGRES_SERVER_ERROR" — so we walk the cause chain and check
+// code, errno, and the message at each level.
 function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
+  let current: unknown = error;
+
+  for (let depth = 0; current && typeof current === "object" && depth < 5; depth += 1) {
+    const candidate = current as {
+      code?: unknown;
+      errno?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+
+    if (candidate.code === "23505" || candidate.errno === "23505") {
+      return true;
+    }
+
+    if (
+      typeof candidate.message === "string" &&
+      /unique constraint|duplicate key/i.test(candidate.message)
+    ) {
+      return true;
+    }
+
+    current = candidate.cause;
   }
 
-  if ((error as { code?: unknown }).code === "23505") {
-    return true;
-  }
-
-  const message = (error as { message?: unknown }).message;
-  return typeof message === "string" && /unique|duplicate key/i.test(message);
+  return false;
 }
 
 export class AuthError extends Error {
