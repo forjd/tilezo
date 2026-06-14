@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import {
+  type AuthUser,
   type AvatarAppearance,
   avatarAppearanceSchema,
   createRandomAvatarAppearance,
@@ -9,17 +10,13 @@ import type { TilezoDatabase } from "../db/db";
 import { users } from "../db/schema";
 import { createId } from "../util/ids";
 
-export type AuthUser = {
-  id: string;
-  username: string;
-  appearance: AvatarAppearance;
-};
-
 export type StoredAuthUser = AuthUser & {
   usernameKey: string;
   passwordHash: string;
   tokenVersion: number;
 };
+
+export const DEFAULT_STARTING_DOLLARS = 500;
 
 export type AuthSession = {
   user: AuthUser;
@@ -371,6 +368,7 @@ const STORED_USER_COLUMNS = {
   passwordHash: users.passwordHash,
   appearance: users.appearance,
   tokenVersion: users.tokenVersion,
+  dollars: users.dollars,
 } as const;
 
 export class DrizzleAuthStore implements AuthStore {
@@ -390,6 +388,7 @@ export class DrizzleAuthStore implements AuthStore {
         .values({
           id: createId("user"),
           ...user,
+          dollars: DEFAULT_STARTING_DOLLARS,
         })
         .returning(STORED_USER_COLUMNS);
     } catch (error) {
@@ -501,6 +500,7 @@ function toAuthUser(user: AuthUser): AuthUser {
     id: user.id,
     username: user.username,
     appearance: { ...user.appearance },
+    dollars: user.dollars,
   };
 }
 

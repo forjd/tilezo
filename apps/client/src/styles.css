@@ -110,6 +110,39 @@ select {
   white-space: nowrap;
 }
 
+.balance {
+  min-width: 74px;
+  padding: 6px 10px;
+  border: 2px solid #1d2324;
+  border-radius: 18px;
+  background: #f4d35e;
+  color: #1d2324;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.62),
+    2px 2px 0 rgba(0, 0, 0, 0.24);
+  pointer-events: auto;
+}
+
+.balance-updated {
+  animation: balance-cue 900ms ease-out;
+}
+
+@keyframes balance-cue {
+  0% {
+    background: #8fd694;
+    transform: translateY(-1px) scale(1.05);
+  }
+
+  100% {
+    background: #f4d35e;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .top-actions {
   display: flex;
   flex: 0 0 auto;

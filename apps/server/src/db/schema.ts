@@ -18,6 +18,7 @@ export const users = pgTable("users", {
   usernameKey: text("username_key").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   tokenVersion: integer("token_version").notNull().default(0),
+  dollars: integer("dollars").notNull().default(500),
   appearance: jsonb("appearance")
     .$type<AvatarAppearance>()
     .notNull()
@@ -69,6 +70,24 @@ export const roomItems = pgTable(
   (table) => [
     index("room_items_room_id_idx").on(table.roomId),
     index("room_items_room_id_position_idx").on(table.roomId, table.x, table.y, table.z),
+  ],
+);
+
+export const userInventory = pgTable(
+  "user_inventory",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemType: text("item_type").notNull(),
+    quantity: integer("quantity").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.itemType] }),
+    index("user_inventory_user_id_idx").on(table.userId),
+    check("user_inventory_quantity_check", sql`${table.quantity} >= 0`),
   ],
 );
 

@@ -13,11 +13,12 @@ The current server has:
 
 Persist:
 
-- Users.
+- Users, including account balance in `dollars`.
 - Rooms.
 - Room layouts.
 - Room items.
 - Private room ownership.
+- User inventory (`user_inventory`) keyed by user and item type, with per-item quantities.
 
 Do not persist:
 
@@ -27,6 +28,28 @@ Do not persist:
 - Transient WebSocket connection state.
 
 Live avatar position should remain server-authoritative in memory for now.
+
+## Economy Tables
+
+### `users.dollars`
+
+- Type: `integer`.
+- Default: `500`.
+- Not nullable.
+- Represents the account's cash balance in whole dollars.
+- Updated atomically by the economy store with row-level locking (`for("update")`).
+
+### `user_inventory`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `user_id` | `uuid` | FK to `users.id`, `onDelete: cascade`. Part of the composite primary key. |
+| `item_type` | `text` | References a furniture definition key. Part of the composite primary key. |
+| `quantity` | `integer` | Number of this item owned. Updated by UPSERT/atomic decrement/increment. |
+
+- Primary key: `(user_id, item_type)`.
+- Foreign key: `user_id` → `users.id` with cascade delete.
+- Used for the catalogue/Inventory-first model: buying a furniture item increments quantity; placing an item decrements it; picking an item up refunds it.
 
 ## Scripts
 

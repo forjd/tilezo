@@ -12,8 +12,11 @@ The current product loop is:
 6. See connected users as avatars.
 7. Click tiles to request server-authoritative movement.
 8. Send and receive room chat messages.
-9. If you own the room, place, move, rotate, and pick up room furniture.
-10. See users leave the room when they disconnect or switch rooms.
+9. If you own the room, place, move, rotate, and pick up room furniture bought from the catalogue.
+10. Earn a starting balance of $500 and spend it on room creation and furniture.
+11. Buy furniture once, keep it in a persistent inventory, and place or pick it up freely in owned rooms.
+12. See live balance and inventory updates across sessions.
+13. See users leave the room when they disconnect or switch rooms.
 
 The project is inspired by the social-room interaction pattern of classic browser hotels, but it is not a clone. The goal is to establish reusable foundations for a custom social room game.
 
@@ -34,6 +37,8 @@ Implemented:
 - Friend-gated direct messages: realtime delivery, persistence, and history.
 - Public room browser with live room population counts, plus per-user private rooms and
   player-created rooms persisted to PostgreSQL.
+- Server-authoritative economy: starting balance, room creation fees, furniture catalogue,
+  persistent inventory, and live balance/inventory updates.
 - Owner-only room furniture placement, movement, rotation, pickup, persistence, and
   snapshot delivery.
 - Scripted, server-authoritative room bots (movement and chat).
@@ -47,7 +52,7 @@ Not implemented yet:
 
 - Room editor UI.
 - Provider-backed (AI) bot conversations (see [FOLLOW_UPS.md](../FOLLOW_UPS.md)).
-- Inventory, catalogue, economy, moderation dashboard, trading, pets, or quests.
+- Moderation dashboard, trading, pets, or quests.
 
 ## Scope Discipline
 

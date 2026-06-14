@@ -5,6 +5,7 @@ import { FixedWindowRateLimiter } from "../auth/rateLimit";
 import { BlockError, type BlockService } from "../blocks/blocks";
 import { getConfig } from "../config";
 import type { PersistenceStore } from "../db/persistence";
+import { EconomyError, type EconomyStore } from "../economy/economy";
 import { FriendError, type FriendService } from "../friends/friends";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import { createLogger, type LogEntry, type Logger } from "../observability/logger";
@@ -27,7 +28,12 @@ function captureLogger(entries: LogEntry[]): Logger {
   });
 }
 
-const authUser = { id: "user_1", username: "Dan", appearance: DEFAULT_AVATAR_APPEARANCE };
+const authUser = {
+  id: "user_1",
+  username: "Dan",
+  appearance: DEFAULT_AVATAR_APPEARANCE,
+  dollars: 500,
+};
 const authSession = { user: authUser, token: "good-token" };
 
 function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
@@ -74,6 +80,25 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
       listOwnedRooms: async () => [],
       seedRoom: async () => {},
     } as unknown as PersistenceStore,
+    economy: {
+      async getBalance() {
+        return authUser.dollars;
+      },
+      async getInventory() {
+        return [];
+      },
+      async purchase() {
+        return { balance: authUser.dollars, inventory: [] };
+      },
+      async spend() {
+        return { balance: authUser.dollars - 100 };
+      },
+      async reserveItem() {
+        return true;
+      },
+      async refundItem() {},
+    } as unknown as EconomyStore,
+    publishUserMessage() {},
     rooms: {
       getMetrics: () => ({ activeRooms: 0, rooms: [], layouts: { public: 0, private: 0 } }),
       addRoom: () => {},
@@ -1078,6 +1103,141 @@ describe("createHttpRouter", () => {
       );
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({ error: { code: "INVALID_ROOM" } });
+    });
+  });
+
+  describe("inventory", () => {
+    test("lists inventory and purchases items for authenticated users", async () => {
+      const published: unknown[] = [];
+      const route = createHttpRouter(
+        makeDeps({
+          economy: {
+            async getInventory(userId: string) {
+              expect(userId).toBe("user_1");
+              return [{ itemType: "woven_rug", quantity: 2 }];
+            },
+            async purchase(userId: string, itemType: string) {
+              expect(userId).toBe("user_1");
+              expect(itemType).toBe("crate_table");
+              return {
+                balance: 450,
+                inventory: [{ itemType: "crate_table", quantity: 1 }],
+              };
+            },
+            async getBalance() {
+              return 500;
+            },
+            async spend() {
+              return { balance: 400 };
+            },
+            async reserveItem() {
+              return true;
+            },
+            async refundItem() {},
+          } as unknown as EconomyStore,
+          publishUserMessage(userId, message) {
+            published.push({ userId, message });
+          },
+        }),
+      );
+
+      const inventory = await route(
+        request("/inventory", { method: "GET", token: "good-token" }),
+        "ip",
+      );
+      expect(inventory.status).toBe(200);
+      expect(await inventory.json()).toEqual({ items: [{ itemType: "woven_rug", quantity: 2 }] });
+
+      const purchased = await route(
+        request("/inventory/purchase", {
+          token: "good-token",
+          body: { itemType: " crate_table " },
+        }),
+        "ip",
+      );
+      expect(purchased.status).toBe(200);
+      expect(await purchased.json()).toEqual({
+        balance: 450,
+        items: [{ itemType: "crate_table", quantity: 1 }],
+      });
+      expect(published).toEqual([
+        { userId: "user_1", message: { type: "balance.updated", dollars: 450 } },
+        {
+          userId: "user_1",
+          message: { type: "inventory.updated", items: [{ itemType: "crate_table", quantity: 1 }] },
+        },
+      ]);
+    });
+
+    test("validates inventory access, request bodies, and economy errors", async () => {
+      const missing = createHttpRouter(makeDeps({ economy: undefined }));
+      expect(
+        (await missing(request("/inventory", { method: "GET", token: "good-token" }), "ip")).status,
+      ).toBe(503);
+      expect(
+        (await missing(request("/inventory/purchase", { token: "good-token", body: {} }), "ip"))
+          .status,
+      ).toBe(503);
+
+      const route = createHttpRouter(makeDeps());
+      expect((await route(request("/inventory", { method: "GET" }), "ip")).status).toBe(401);
+      expect((await route(request("/inventory/purchase", { body: {} }), "ip")).status).toBe(401);
+      expect(
+        (await route(request("/inventory/purchase", { token: "good-token", body: "{" }), "ip"))
+          .status,
+      ).toBe(400);
+      expect(
+        (
+          await route(
+            request("/inventory/purchase", { token: "good-token", body: { itemType: " " } }),
+            "ip",
+          )
+        ).status,
+      ).toBe(400);
+
+      const insufficientFunds = createHttpRouter(
+        makeDeps({
+          economy: {
+            async getInventory() {
+              return [];
+            },
+            async purchase() {
+              throw new EconomyError("INSUFFICIENT_FUNDS", "You need $50 to buy this item");
+            },
+          } as unknown as EconomyStore,
+        }),
+      );
+      const failed = await insufficientFunds(
+        request("/inventory/purchase", {
+          token: "good-token",
+          body: { itemType: "crate_table" },
+        }),
+        "ip",
+      );
+      expect(failed.status).toBe(402);
+      expect(await failed.json()).toMatchObject({ error: { code: "INSUFFICIENT_FUNDS" } });
+
+      const unknownItem = createHttpRouter(
+        makeDeps({
+          economy: {
+            async getInventory() {
+              return [];
+            },
+            async purchase() {
+              throw new EconomyError("UNKNOWN_ITEM_TYPE", "This item is not for sale");
+            },
+          } as unknown as EconomyStore,
+        }),
+      );
+      const unknown = await unknownItem(
+        request("/inventory/purchase", {
+          token: "good-token",
+          body: { itemType: "no_such_item" },
+        }),
+        "ip",
+      );
+      expect(unknown.status).toBe(400);
+      expect(await unknown.json()).toMatchObject({ error: { code: "UNKNOWN_ITEM_TYPE" } });
     });
   });
 

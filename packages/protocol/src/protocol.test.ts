@@ -299,9 +299,9 @@ describe("protocol parser", () => {
 
 describe("parseServerMessage", () => {
   test("accepts well-formed server messages", () => {
-    expect(parseServerMessage({ type: "connected", userId: "user_1" })).toEqual({
+    expect(parseServerMessage({ type: "connected", userId: "user_1", dollars: 500 })).toEqual({
       ok: true,
-      value: { type: "connected", userId: "user_1" },
+      value: { type: "connected", userId: "user_1", dollars: 500 },
     });
     expect(
       parseServerMessage({

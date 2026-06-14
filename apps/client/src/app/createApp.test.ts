@@ -312,6 +312,62 @@ describe("createApp", () => {
     expect(harness.games[0]?.started).toBe(1);
     expect(harness.roomBrowsers[0]?.shown).toBe(1);
   });
+
+  test("disables the create room button when balance is below the room cost", async () => {
+    const harness = createAppHarness();
+    await flushAsyncMessages();
+
+    await harness.loginForms[0]?.submit({
+      mode: "login",
+      username: "Dan",
+      password: "secret phrase",
+    });
+    await harness.characterEditors[0]?.submit(DEFAULT_AVATAR_APPEARANCE);
+    await flushAsyncMessages();
+
+    const createButton = findByClass(harness.root, "create-room-button");
+    expect(createButton.disabled).toBe(false);
+    expect(createButton.title).toBe("");
+
+    findByClass(harness.root, "create-room-button").dispatch("click");
+    await flushAsyncMessages();
+    expect(harness.createRoomDialogs[0]?.shownBalances.at(-1)).toBe(500);
+
+    harness.requireGame().options.onBalanceUpdated?.(50);
+    expect(createButton.disabled).toBe(true);
+    expect(createButton.title).toContain("$100");
+
+    const balance = findByClass(harness.root, "balance");
+    expect(balance.classList.contains("balance-updated")).toBe(true);
+    harness.timeouts.at(-1)?.callback();
+    expect(balance.classList.contains("balance-updated")).toBe(false);
+  });
+
+  test("updates inventory after purchases and propagates purchase failures to the panel", async () => {
+    const harness = createAppHarness();
+    await flushAsyncMessages();
+
+    await harness.loginForms[0]?.submit({
+      mode: "login",
+      username: "Dan",
+      password: "secret phrase",
+    });
+    await flushAsyncMessages();
+
+    const furniturePanel = harness.requireFurniturePanel();
+    await furniturePanel.buy("woven_rug");
+    await flushAsyncMessages();
+
+    expect(findByClass(harness.root, "balance").textContent).toBe("$475");
+    expect(findByClass(harness.root, "balance").classList.contains("balance-updated")).toBe(true);
+    expect(furniturePanel.inventorySets.at(-1)).toEqual([{ itemType: "woven_rug", quantity: 1 }]);
+
+    harness.services.purchaseItem = async () => {
+      throw new Error("not enough cash");
+    };
+    await expect(furniturePanel.buy("crate_table")).rejects.toThrow("not enough cash");
+    expect(findByClass(harness.root, "status").textContent).toBe("not enough cash");
+  });
 });
 
 function createAppHarness(
@@ -349,6 +405,8 @@ function createAppHarness(
     | "listRoomTemplates"
     | "loadConversation"
     | "loadUnreadCounts"
+    | "getInventory"
+    | "purchaseItem"
     | "removeFriend"
     | "requestLogout"
     | "updateAppearance"
@@ -363,6 +421,11 @@ function createAppHarness(
     removeFriend: async () => {},
     blockUser: async () => {},
     listRoomTemplates: async () => [roomTemplate],
+    getInventory: async () => [],
+    purchaseItem: async (itemType) => ({
+      balance: 475,
+      items: [{ itemType, quantity: 1 }],
+    }),
     createRoom: async () => ({
       roomId: "created_room",
       room: { id: "created_room", name: "Created", userCount: 1, joined: true },
@@ -390,6 +453,8 @@ function createAppHarness(
     removeFriend: (friendId) => services.removeFriend(friendId),
     blockUser: (friendId) => services.blockUser(friendId),
     listRoomTemplates: () => services.listRoomTemplates(),
+    getInventory: () => services.getInventory(),
+    purchaseItem: (itemType) => services.purchaseItem(itemType),
     createRoom: (room) => services.createRoom(room),
     requestLogout: () => services.requestLogout(),
     createChatPanel: () => new FakeChatPanel() as never,
@@ -492,6 +557,13 @@ function createAppHarness(
       }
       return panel;
     },
+    requireFurniturePanel() {
+      const panel = furniturePanels[0];
+      if (!panel) {
+        throw new Error("Missing furniture panel");
+      }
+      return panel;
+    },
   };
 }
 
@@ -499,6 +571,7 @@ const user: AuthUser = {
   id: "user_1",
   username: "Dan",
   appearance: DEFAULT_AVATAR_APPEARANCE,
+  dollars: 500,
 };
 
 const friend: FriendSummary = {
@@ -615,10 +688,21 @@ class FakeFurniturePanel {
   readonly element = new FakeElement("section");
   readonly canEditValues: boolean[] = [];
   readonly itemSets: unknown[] = [];
+  readonly inventorySets: unknown[] = [];
   hidden = 0;
   shown = 0;
 
-  constructor(readonly options: unknown) {}
+  constructor(
+    private readonly options: AppDependenciesForTest["createFurniturePanel"] extends (
+      options: infer T,
+    ) => unknown
+      ? T
+      : never,
+  ) {}
+
+  buy(itemType: string): unknown {
+    return this.options.onBuy(itemType);
+  }
 
   hide(): void {
     this.hidden += 1;
@@ -630,6 +714,10 @@ class FakeFurniturePanel {
 
   setItems(items: unknown): void {
     this.itemSets.push(items);
+  }
+
+  setInventory(items: unknown): void {
+    this.inventorySets.push(items);
   }
 
   show(): void {
@@ -829,6 +917,7 @@ class FakeCharacterEditor {
 class FakeCreateRoomDialog {
   readonly element = new FakeElement("section");
   readonly shownTemplates: RoomTemplateSummary[][] = [];
+  readonly shownBalances: number[] = [];
   readonly errors: string[] = [];
   hidden = 0;
 
@@ -848,8 +937,9 @@ class FakeCreateRoomDialog {
     this.options.onCancel();
   }
 
-  show(templates: RoomTemplateSummary[]): void {
+  show(templates: RoomTemplateSummary[], balance: number): void {
     this.shownTemplates.push(templates);
+    this.shownBalances.push(balance);
   }
 
   hide(): void {
@@ -986,6 +1076,7 @@ class FakeElement {
   disabled = false;
   parentElement?: FakeElement;
   textContent = "";
+  title = "";
   type = "";
   value = "";
 

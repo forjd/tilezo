@@ -7,6 +7,7 @@ import { BlockService, DrizzleBlockStore } from "./blocks/blocks";
 import { getConfig, type ServerConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
+import { DrizzleEconomyStore, type EconomyStore } from "./economy/economy";
 import { DrizzleFriendStore, FriendService } from "./friends/friends";
 import { corsHeaders, createHttpRouter } from "./http/router";
 import { DirectMessageService, DrizzleDirectMessageStore } from "./messaging/messaging";
@@ -16,6 +17,7 @@ import {
   handleOpen,
   type UserRateLimitStore,
   type UserSocketStore,
+  userTopic,
 } from "./net/handleMessage";
 import type { SocketData } from "./net/socketTypes";
 import { isAllowedWebSocketOrigin, readWebSocketSessionToken } from "./net/webSocketSecurity";
@@ -133,6 +135,9 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
   const database = deps.database ?? createDatabase(config.databaseUrl);
   const persistence =
     deps.persistence ?? (database ? new DrizzlePersistenceStore(database) : undefined);
+  const economy: EconomyStore | undefined = database
+    ? new DrizzleEconomyStore(database)
+    : undefined;
   const presence = new PresenceTracker();
   const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
   const blocks = database ? new BlockService(new DrizzleBlockStore(database)) : undefined;
@@ -178,6 +183,10 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
     directMessages,
     persistence,
     rooms,
+    economy,
+    publishUserMessage(userId, message) {
+      publish(userTopic(userId), message);
+    },
     registerRateLimiter,
     loginRateLimiter,
     roomCreateRateLimiter,
@@ -211,6 +220,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
           metrics,
           presence,
           userSockets,
+          economy,
         });
       },
       message(ws, message) {
@@ -227,6 +237,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
             userSockets,
             joinVersions,
             joinTargets,
+            economy,
           });
           return;
         }
@@ -289,6 +300,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
         connectionId: createSocketId("socket"),
         resumeRoomId: await readResumeRoomId(user.id, persistence),
         appearance: user.appearance,
+        dollars: user.dollars,
       },
     });
 

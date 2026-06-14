@@ -7,6 +7,7 @@ export type SocketData = {
   roomId?: string;
   resumeRoomId?: string;
   appearance?: AvatarAppearance;
+  dollars?: number;
   rateLimits?: Partial<Record<RateLimitedMessageKind, RateLimitState>>;
   lastTypingState?: boolean;
   lastDirectTypingStates?: Map<string, boolean>;

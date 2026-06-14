@@ -32,7 +32,7 @@ describe("CreateRoomDialog", () => {
       },
     ];
 
-    dialog.show(templates);
+    dialog.show(templates, 500);
     const fields = getFields(dialog);
     fields.name.value = "  Tile Lab  ";
     fields.description.value = " Build space ";
@@ -68,16 +68,19 @@ describe("CreateRoomDialog", () => {
       },
     });
 
-    dialog.show([
-      {
-        id: "compact-studio",
-        name: "Compact Studio",
-        width: 7,
-        height: 7,
-        defaultCapacity: 20,
-        doorOptions: [{ label: "Middle entrance", y: 3 }],
-      },
-    ]);
+    dialog.show(
+      [
+        {
+          id: "compact-studio",
+          name: "Compact Studio",
+          width: 7,
+          height: 7,
+          defaultCapacity: 20,
+          doorOptions: [{ label: "Middle entrance", y: 3 }],
+        },
+      ],
+      500,
+    );
     const fields = getFields(dialog);
     fields.form.dispatch("submit", new FakeSubmitEvent());
 
@@ -89,11 +92,43 @@ describe("CreateRoomDialog", () => {
     expect(cancelled).toBe(true);
     expect(dialog.element.classList.contains("hidden")).toBe(true);
   });
+
+  test("displays cost and balance and disables submit when funds are insufficient", () => {
+    installDocument();
+    const submissions: CreateRoomRequest[] = [];
+    const dialog = new CreateRoomDialog({
+      onSubmit(room) {
+        submissions.push(room);
+      },
+      onCancel() {},
+    });
+    const templates: RoomTemplateSummary[] = [
+      {
+        id: "compact-studio",
+        name: "Compact Studio",
+        width: 7,
+        height: 7,
+        defaultCapacity: 20,
+        doorOptions: [{ label: "Middle entrance", y: 3 }],
+      },
+    ];
+
+    dialog.show(templates, 500);
+    const fields = getFields(dialog);
+    expect(fields.cost.textContent).toContain("Room cost: $100");
+    expect(fields.cost.textContent).toContain("Your balance: $500");
+    expect(fields.submit.disabled).toBe(false);
+
+    dialog.show(templates, 50);
+    expect(fields.cost.textContent).toContain("Your balance: $50");
+    expect(fields.submit.disabled).toBe(true);
+  });
 });
 
 function getFields(dialog: CreateRoomDialog): {
   form: FakeElement;
   message: FakeElement;
+  cost: FakeElement;
   name: FakeElement;
   description: FakeElement;
   template: FakeElement;
@@ -101,14 +136,17 @@ function getFields(dialog: CreateRoomDialog): {
   access: FakeElement;
   capacity: FakeElement;
   door: FakeElement;
+  submit: FakeElement;
   cancel: FakeElement;
 } {
+  const header = dialog.element.children[0] as unknown as FakeElement;
   const message = dialog.element.children[1] as unknown as FakeElement;
   const form = dialog.element.children[2] as unknown as FakeElement;
 
   return {
     form,
     message,
+    cost: header.children[2] as FakeElement,
     name: form.children[0]?.children[1] as FakeElement,
     description: form.children[1]?.children[1] as FakeElement,
     template: form.children[2]?.children[1] as FakeElement,
@@ -116,6 +154,7 @@ function getFields(dialog: CreateRoomDialog): {
     access: form.children[4]?.children[1] as FakeElement,
     capacity: form.children[5]?.children[1] as FakeElement,
     door: form.children[6]?.children[1] as FakeElement,
+    submit: form.children[7]?.children[0] as FakeElement,
     cancel: form.children[7]?.children[1] as FakeElement,
   };
 }
@@ -157,6 +196,7 @@ class FakeElement {
   readonly listeners = new Map<string, Set<(event: FakeEvent) => void>>();
   readonly classList = new FakeClassList(this);
   className = "";
+  disabled = false;
   max = "";
   maxLength = 0;
   min = "";
@@ -164,6 +204,7 @@ class FakeElement {
   required = false;
   step = "";
   textContent = "";
+  title = "";
   type = "";
   value = "";
 

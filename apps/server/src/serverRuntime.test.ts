@@ -99,6 +99,7 @@ describe("startServerRuntime", () => {
       userId: "user_1",
       username: "Dan",
       connectionId: "socket_1",
+      dollars: 0,
     });
     harness.serveOptions.websocket.open(socket);
     harness.serveOptions.websocket.message(socket, new Uint8Array([1, 2, 3]));
@@ -109,7 +110,7 @@ describe("startServerRuntime", () => {
     await flushAsyncMessages();
     harness.serveOptions.websocket.close(socket);
 
-    expect(socket.sent[0]).toEqual({ type: "connected", userId: "user_1" });
+    expect(socket.sent[0]).toEqual({ type: "connected", userId: "user_1", dollars: 0 });
     expect(socket.sent).toContainEqual({
       type: "error",
       code: "INVALID_MESSAGE",
@@ -145,6 +146,7 @@ describe("startServerRuntime", () => {
                 id: "user_1",
                 username: "Dan",
                 appearance: DEFAULT_AVATAR_APPEARANCE,
+                dollars: 500,
               }
             : undefined,
       } as unknown as AuthService,
@@ -177,6 +179,7 @@ describe("startServerRuntime", () => {
       connectionId: "socket_runtime",
       resumeRoomId: "studio",
       appearance: DEFAULT_AVATAR_APPEARANCE,
+      dollars: 500,
     });
 
     resumeShouldThrow = true;
@@ -190,6 +193,7 @@ describe("startServerRuntime", () => {
       connectionId: "socket_runtime",
       resumeRoomId: undefined,
       appearance: DEFAULT_AVATAR_APPEARANCE,
+      dollars: 500,
     });
 
     await stopRuntime(runtime);

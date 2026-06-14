@@ -4,6 +4,7 @@ import {
   AuthBackpressureError,
   AuthPasswordLimiter,
   AuthService,
+  DEFAULT_STARTING_DOLLARS,
   DrizzleAuthStore,
   isValidUsername,
   normalizeUsername,
@@ -44,6 +45,7 @@ describe("AuthService", () => {
       id: "user_1",
       username: "Dan",
       appearance: RANDOM_APPEARANCE,
+      dollars: DEFAULT_STARTING_DOLLARS,
     });
     expect(store.users[0]?.usernameKey).toBe("dan");
     expect(store.users[0]?.passwordHash).not.toBe("correct horse battery staple");
@@ -98,6 +100,7 @@ describe("AuthService", () => {
       passwordHash: "legacy-user-without-password",
       tokenVersion: 0,
       appearance: DEFAULT_AVATAR_APPEARANCE,
+      dollars: 0,
     });
 
     await expect(auth.login("dan", "anything")).rejects.toThrow("Invalid username or password");
@@ -402,6 +405,7 @@ describe("DrizzleAuthStore", () => {
     passwordHash: "hash",
     tokenVersion: 2,
     appearance: DEFAULT_AVATAR_APPEARANCE,
+    dollars: DEFAULT_STARTING_DOLLARS,
   };
   const input = {
     appearance: DEFAULT_AVATAR_APPEARANCE,
@@ -464,6 +468,7 @@ type StoredTestUser = {
   usernameKey: string;
   passwordHash: string;
   tokenVersion: number;
+  dollars: number;
 };
 
 function createAuthStore() {
@@ -482,6 +487,7 @@ function createAuthStore() {
       const persisted: StoredTestUser = {
         id: `user_${this.users.length + 1}`,
         tokenVersion: 0,
+        dollars: DEFAULT_STARTING_DOLLARS,
         ...user,
       };
       this.users.push(persisted);

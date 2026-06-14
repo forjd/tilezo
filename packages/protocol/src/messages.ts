@@ -110,6 +110,22 @@ export type ClientMessage =
 export type ConnectedMessage = {
   type: "connected";
   userId: string;
+  dollars: number;
+};
+
+export type InventoryItem = {
+  itemType: string;
+  quantity: number;
+};
+
+export type BalanceUpdatedMessage = {
+  type: "balance.updated";
+  dollars: number;
+};
+
+export type InventoryUpdatedMessage = {
+  type: "inventory.updated";
+  items: InventoryItem[];
 };
 
 export type RoomUserSnapshot = {
@@ -272,5 +288,7 @@ export type ServerMessage =
   | DirectMessageReadReceiptMessage
   | DirectMessageEditedMessage
   | DirectMessageDeletedMessage
+  | BalanceUpdatedMessage
+  | InventoryUpdatedMessage
   | PongMessage
   | ErrorMessage;
