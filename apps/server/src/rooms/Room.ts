@@ -45,6 +45,7 @@ export class Room {
   join(
     user: Omit<RoomUser, "position" | "appearance"> & Partial<Pick<RoomUser, "appearance">>,
   ): RoomUser {
+    this.sweepCompletedMovements();
     const roomUser = {
       ...user,
       appearance: user.appearance ?? DEFAULT_AVATAR_APPEARANCE,
@@ -115,6 +116,10 @@ export class Room {
 
     if (activeMovement && sameTile(activeMovement.path.at(-1), target)) {
       return this.getRemainingPath(userId) ?? [currentPosition];
+    }
+
+    if (this.isOccupiedByOtherUser(target, userId)) {
+      return null;
     }
 
     const path = findPath(this.grid, currentPosition, target);
@@ -275,12 +280,26 @@ export class Room {
   }
 
   private getSpawnPosition(): TilePosition {
-    if (this.isWalkable(this.layout.spawn)) {
-      return { ...this.layout.spawn };
+    const preferred = this.firstUnoccupiedWalkableTile([this.layout.spawn]);
+
+    if (preferred) {
+      return preferred;
     }
 
-    const fallback = this.layout.tiles.find((tile) => tile.walkable);
-    return fallback ? { x: fallback.x, y: fallback.y } : { x: 0, y: 0 };
+    const fallback = this.firstUnoccupiedWalkableTile(this.layout.tiles);
+    return fallback ?? { x: 0, y: 0 };
+  }
+
+  private firstUnoccupiedWalkableTile(tiles: readonly TilePosition[]): TilePosition | undefined {
+    for (const tile of tiles) {
+      const position = { x: tile.x, y: tile.y };
+
+      if (this.isWalkable(position) && !this.hasUserAt(position)) {
+        return position;
+      }
+    }
+
+    return undefined;
   }
 
   private validateItemPlacement(
@@ -333,6 +352,25 @@ export class Room {
 
     for (const user of this.users.values()) {
       if (sameTile(user.position, position)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private isOccupiedByOtherUser(position: TilePosition, userId: string): boolean {
+    this.sweepCompletedMovements();
+
+    for (const [otherUserId, otherUser] of this.users) {
+      if (otherUserId === userId) {
+        continue;
+      }
+
+      const movement = this.movements.get(otherUserId);
+      const destination = movement?.path.at(-1);
+
+      if (sameTile(otherUser.position, position) || sameTile(destination, position)) {
         return true;
       }
     }

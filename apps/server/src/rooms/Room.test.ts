@@ -19,6 +19,17 @@ describe("Room", () => {
     ]);
   });
 
+  test("join chooses an unoccupied walkable spawn tile", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
+
+    const first = room.join({ id: "user_1", username: "Dan" });
+    const second = room.join({ id: "user_2", username: "Lily" });
+
+    expect(first.position).toEqual({ x: 1, y: 1 });
+    expect(second.position).not.toEqual(first.position);
+    expect(room.isWalkable(second.position)).toBe(true);
+  });
+
   test("leave removes a user", () => {
     const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
 
@@ -123,6 +134,25 @@ describe("Room", () => {
     expect(item).toBeDefined();
     expect(room.pickupItem("item_2")).toEqual(item);
     expect(room.getSnapshot().items).toEqual([]);
+  });
+
+  test("movement rejects occupied avatar destinations", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 0, y: 0 }));
+
+    room.join({ id: "user_1", username: "Dan" });
+    const second = room.join({ id: "user_2", username: "Lily" });
+
+    expect(room.moveUser("user_1", second.position)).toBeNull();
+  });
+
+  test("movement rejects destinations reserved by another active movement", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 4, 3, { x: 0, y: 0 }));
+
+    room.join({ id: "user_1", username: "Dan" });
+    room.join({ id: "user_2", username: "Lily" });
+    expect(room.moveUser("user_2", { x: 3, y: 0 })).toBeDefined();
+
+    expect(room.moveUser("user_1", { x: 3, y: 0 })).toBeNull();
   });
 
   test("movement updates authoritative user position after the path completes", () => {
