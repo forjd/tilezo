@@ -590,6 +590,11 @@ export function createApp(
     void signOut();
   });
 
+  function disposePanels(): void {
+    chat.dispose?.();
+    directMessagePanel.dispose?.();
+  }
+
   async function signOut(): Promise<void> {
     if (logOut.disabled) {
       return;
@@ -605,6 +610,7 @@ export function createApp(
     }
 
     await deps.requestLogout();
+    disposePanels();
     createApp(root, deps);
   }
 

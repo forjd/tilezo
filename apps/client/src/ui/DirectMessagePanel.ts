@@ -126,6 +126,11 @@ export class DirectMessagePanel {
     this.typingStatus.classList.remove("visible");
   }
 
+  dispose(): void {
+    this.setOwnTyping(false);
+    this.conversation = undefined;
+  }
+
   isOpenFor(friendId: string): boolean {
     return !this.isHidden() && this.conversation?.friendId === friendId;
   }

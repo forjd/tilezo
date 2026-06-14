@@ -51,6 +51,12 @@ export class ChatPanel {
     this.element.classList.add("hidden");
   }
 
+  dispose(): void {
+    this.setTyping(false);
+    this.sendHandler = undefined;
+    this.typingHandler = undefined;
+  }
+
   clear(): void {
     this.list.replaceChildren();
     this.input.value = "";
