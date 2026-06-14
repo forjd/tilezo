@@ -2,6 +2,8 @@ import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 import type {
   ClientMessage,
   DirectMessage,
+  DirectMessageDeletedMessage,
+  DirectMessageEditedMessage,
   DirectMessageReadReceiptMessage,
   DirectMessageTypingStatusMessage,
   PublicRoomSummary,
@@ -21,6 +23,8 @@ type GameOptions = {
   onDirectMessage: (message: DirectMessage) => void;
   onDirectTyping: (message: DirectMessageTypingStatusMessage) => void;
   onDirectRead: (message: DirectMessageReadReceiptMessage) => void;
+  onDirectEdited: (message: DirectMessageEditedMessage) => void;
+  onDirectDeleted: (message: DirectMessageDeletedMessage) => void;
   onDisconnected: () => void;
 };
 
@@ -95,6 +99,14 @@ export class Game {
             this.options.onDirectRead(message);
           }
 
+          if (message.type === "dm.edited") {
+            this.options.onDirectEdited(message);
+          }
+
+          if (message.type === "dm.deleted") {
+            this.options.onDirectDeleted(message);
+          }
+
           if (message.type === "error") {
             this.options.setStatus(`${message.code}: ${message.message}`);
           }
@@ -161,6 +173,14 @@ export class Game {
 
   markDirectMessagesRead(friendId: string): boolean {
     return this.sendIfConnected({ type: "dm.read", friendId });
+  }
+
+  editDirectMessage(messageId: string, text: string): boolean {
+    return this.sendIfConnected({ type: "dm.edit", messageId, text });
+  }
+
+  deleteDirectMessage(messageId: string): boolean {
+    return this.sendIfConnected({ type: "dm.delete", messageId });
   }
 
   async reconnect(): Promise<void> {

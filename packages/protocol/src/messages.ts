@@ -42,6 +42,17 @@ export type DirectMessageReadMessage = {
   friendId: string;
 };
 
+export type DirectMessageEditMessage = {
+  type: "dm.edit";
+  messageId: string;
+  text: string;
+};
+
+export type DirectMessageDeleteMessage = {
+  type: "dm.delete";
+  messageId: string;
+};
+
 export type AvatarAppearanceUpdateMessage = {
   type: "avatar.appearance.update";
   appearance: AvatarAppearance;
@@ -61,6 +72,8 @@ export type ClientMessage =
   | DirectMessageSendMessage
   | DirectMessageTypingMessage
   | DirectMessageReadMessage
+  | DirectMessageEditMessage
+  | DirectMessageDeleteMessage
   | AvatarAppearanceUpdateMessage
   | PingMessage;
 
@@ -141,6 +154,8 @@ export type DirectMessage = {
   text: string;
   sentAt: string;
   readAt?: string;
+  editedAt?: string;
+  deletedAt?: string;
 };
 
 export type DirectMessageTypingStatusMessage = {
@@ -156,6 +171,23 @@ export type DirectMessageReadReceiptMessage = {
   otherUserId: string;
   messageIds: string[];
   readAt: string;
+};
+
+export type DirectMessageEditedMessage = {
+  type: "dm.edited";
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  text: string;
+  editedAt: string;
+};
+
+export type DirectMessageDeletedMessage = {
+  type: "dm.deleted";
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  deletedAt: string;
 };
 
 export type PongMessage = {
@@ -182,5 +214,7 @@ export type ServerMessage =
   | DirectMessage
   | DirectMessageTypingStatusMessage
   | DirectMessageReadReceiptMessage
+  | DirectMessageEditedMessage
+  | DirectMessageDeletedMessage
   | PongMessage
   | ErrorMessage;

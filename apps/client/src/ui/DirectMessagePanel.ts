@@ -4,6 +4,8 @@ type DirectMessagePanelOptions = {
   onSend: (friendId: string, text: string) => boolean | undefined;
   onTypingChange?: (friendId: string, isTyping: boolean) => void;
   onRead?: (friendId: string) => void;
+  onEdit?: (messageId: string, text: string) => boolean | undefined;
+  onDelete?: (messageId: string) => boolean | undefined;
 };
 
 type Conversation = {
@@ -43,6 +45,7 @@ export class DirectMessagePanel {
 
     this.messageList.className = "dm-list";
     this.typingStatus.className = "dm-typing";
+    this.messageList.addEventListener("click", (event) => this.handleMessageAction(event));
 
     this.form.className = "dm-form";
     this.input.type = "text";
@@ -156,6 +159,34 @@ export class DirectMessagePanel {
     return updated;
   }
 
+  updateEdited(message: { id: string; text: string; editedAt: string }): boolean {
+    const element = this.messageElements.get(message.id);
+
+    if (!element || element.dataset.deleted === "true") {
+      return false;
+    }
+
+    element.dataset.text = message.text;
+    element.dataset.edited = "true";
+    this.setMessageBody(element, formatMessageText(message.text, message.editedAt));
+    return true;
+  }
+
+  markDeleted(messageId: string): boolean {
+    const element = this.messageElements.get(messageId);
+
+    if (!element) {
+      return false;
+    }
+
+    element.dataset.deleted = "true";
+    element.dataset.text = "";
+    element.classList.add("dm-message-deleted");
+    this.setMessageBody(element, "Message deleted");
+    element.replaceChildren(element.children[0] as HTMLElement);
+    return true;
+  }
+
   private belongsToConversation(message: DirectMessage): boolean {
     const { friendId, selfUserId } = this.conversation ?? { friendId: "", selfUserId: "" };
     return (
@@ -167,12 +198,79 @@ export class DirectMessagePanel {
   private renderMessage(message: DirectMessage): void {
     const mine = message.fromUserId === this.conversation?.selfUserId;
     const item = document.createElement("div");
+    const body = document.createElement("span");
     item.className = mine ? "dm-message dm-message-mine" : "dm-message dm-message-theirs";
     item.dataset.messageId = message.id;
     item.dataset.read = mine && message.readAt ? "true" : "false";
-    item.textContent = message.text;
+    item.dataset.text = message.deletedAt ? "" : message.text;
+    item.dataset.edited = message.editedAt ? "true" : "false";
+    item.dataset.deleted = message.deletedAt ? "true" : "false";
+    body.className = "dm-message-text";
+    body.textContent = formatMessageText(message.text, message.editedAt, message.deletedAt);
+    item.append(body);
+
+    if (message.deletedAt) {
+      item.classList.add("dm-message-deleted");
+    } else if (mine) {
+      item.append(this.createMessageActions(message.id));
+    }
+
     this.messageList.append(item);
     this.messageElements.set(message.id, item);
+  }
+
+  private createMessageActions(messageId: string): HTMLElement {
+    const actions = document.createElement("span");
+    const editButton = document.createElement("button");
+    const deleteButton = document.createElement("button");
+
+    actions.className = "dm-message-actions";
+    editButton.type = "button";
+    editButton.className = "dm-message-action";
+    editButton.dataset.editMessageId = messageId;
+    editButton.textContent = "Edit";
+    deleteButton.type = "button";
+    deleteButton.className = "dm-message-action";
+    deleteButton.dataset.deleteMessageId = messageId;
+    deleteButton.textContent = "Delete";
+    actions.append(editButton, deleteButton);
+    return actions;
+  }
+
+  private handleMessageAction(event: Event): void {
+    const target = event.target as Element | null;
+    const editButton = target?.closest<HTMLButtonElement>("button[data-edit-message-id]");
+    const deleteButton = target?.closest<HTMLButtonElement>("button[data-delete-message-id]");
+
+    if (editButton) {
+      const messageId = editButton.dataset.editMessageId ?? "";
+      const element = this.messageElements.get(messageId);
+      const currentText = element?.dataset.text ?? "";
+      const nextText = prompt("Edit message", currentText)?.trim();
+
+      if (!messageId || !nextText || nextText === currentText) {
+        return;
+      }
+
+      this.options.onEdit?.(messageId, nextText);
+      return;
+    }
+
+    if (deleteButton) {
+      const messageId = deleteButton.dataset.deleteMessageId ?? "";
+
+      if (messageId) {
+        this.options.onDelete?.(messageId);
+      }
+    }
+  }
+
+  private setMessageBody(element: HTMLElement, text: string): void {
+    const body = element.children[0] as HTMLElement | undefined;
+
+    if (body) {
+      body.textContent = text;
+    }
   }
 
   private scrollToLatest(): void {
@@ -213,4 +311,12 @@ export class DirectMessagePanel {
   private isHidden(): boolean {
     return this.element.classList.contains("hidden");
   }
+}
+
+function formatMessageText(text: string, editedAt?: string, deletedAt?: string): string {
+  if (deletedAt) {
+    return "Message deleted";
+  }
+
+  return editedAt ? `${text} (edited)` : text;
 }

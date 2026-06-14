@@ -3,6 +3,7 @@ import type { DirectMessage } from "@tilezo/protocol/messages";
 import { DirectMessagePanel } from "./DirectMessagePanel";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+const originalPrompt = globalThis.prompt;
 
 function dm(over: Partial<DirectMessage>): DirectMessage {
   return {
@@ -17,7 +18,10 @@ function dm(over: Partial<DirectMessage>): DirectMessage {
 }
 
 describe("DirectMessagePanel", () => {
-  afterEach(() => restoreDocument());
+  afterEach(() => {
+    restoreDocument();
+    globalThis.prompt = originalPrompt;
+  });
 
   test("opens a conversation, renders history, and aligns own messages", () => {
     installDocument();
@@ -38,7 +42,7 @@ describe("DirectMessagePanel", () => {
     expect(panel.element.classList.contains("hidden")).toBe(false);
     expect(panel.isOpenFor("user_2")).toBe(true);
     const list = panel.element.children[1] as unknown as FakeElement;
-    expect(list.children.map((c) => c.textContent)).toEqual(["hello", "hey"]);
+    expect(messageTexts(list)).toEqual(["hello", "hey"]);
     expect(list.children[0]?.className).toBe("dm-message dm-message-theirs");
     expect(list.children[1]?.className).toBe("dm-message dm-message-mine");
     expect(list.children[1]?.dataset.read).toBe("true");
@@ -61,7 +65,7 @@ describe("DirectMessagePanel", () => {
     expect(panel.append(dm({ fromUserId: "user_3", toUserId: "user_1", text: "other" }))).toBe(
       false,
     );
-    expect(list.children.map((c) => c.textContent)).toEqual(["live"]);
+    expect(messageTexts(list)).toEqual(["live"]);
     expect(read).toEqual(["user_2", "user_2"]);
   });
 
@@ -158,7 +162,62 @@ describe("DirectMessagePanel", () => {
     expect(panel.markRead(["dm_own"])).toBe(true);
     expect(list.children[0]?.dataset.read).toBe("true");
   });
+
+  test("updates edited and deleted messages", () => {
+    installDocument();
+    const panel = new DirectMessagePanel({ onSend: () => undefined });
+    panel.open(
+      { id: "user_2", username: "Kai" },
+      [dm({ id: "dm_own", fromUserId: "user_1", text: "first" })],
+      "user_1",
+    );
+    const list = panel.element.children[1] as unknown as FakeElement;
+
+    expect(panel.updateEdited({ id: "dm_own", text: "second", editedAt: "2026-06-13" })).toBe(true);
+    expect(messageTexts(list)).toEqual(["second (edited)"]);
+    expect(list.children[0]?.dataset.edited).toBe("true");
+
+    expect(panel.markDeleted("dm_own")).toBe(true);
+    expect(messageTexts(list)).toEqual(["Message deleted"]);
+    expect(list.children[0]?.dataset.deleted).toBe("true");
+    expect(list.children[0]?.classList.contains("dm-message-deleted")).toBe(true);
+  });
+
+  test("routes edit and delete message actions", () => {
+    installDocument();
+    const edited: Array<{ messageId: string; text: string }> = [];
+    const deleted: string[] = [];
+    globalThis.prompt = (() => "edited text") as typeof prompt;
+    const panel = new DirectMessagePanel({
+      onSend: () => undefined,
+      onEdit(messageId, text) {
+        edited.push({ messageId, text });
+        return undefined;
+      },
+      onDelete(messageId) {
+        deleted.push(messageId);
+        return undefined;
+      },
+    });
+    panel.open(
+      { id: "user_2", username: "Kai" },
+      [dm({ id: "dm_own", fromUserId: "user_1", text: "first" })],
+      "user_1",
+    );
+    const list = panel.element.children[1] as unknown as FakeElement;
+    const actions = list.children[0]?.children[1];
+
+    (actions?.children[0] as FakeElement | undefined)?.dispatch("click", {});
+    (actions?.children[1] as FakeElement | undefined)?.dispatch("click", {});
+
+    expect(edited).toEqual([{ messageId: "dm_own", text: "edited text" }]);
+    expect(deleted).toEqual(["dm_own"]);
+  });
 });
+
+function messageTexts(list: FakeElement): string[] {
+  return list.children.map((item) => item.children[0]?.textContent ?? "");
+}
 
 function installDocument() {
   Object.defineProperty(globalThis, "document", {
@@ -226,6 +285,26 @@ class FakeElement {
       listener(event);
     }
     this.parentElement?.dispatch(type, event);
+  }
+
+  closest(selector: string): FakeElement | undefined {
+    if (
+      selector === "button[data-edit-message-id]" &&
+      this.tagName === "button" &&
+      this.dataset.editMessageId
+    ) {
+      return this;
+    }
+
+    if (
+      selector === "button[data-delete-message-id]" &&
+      this.tagName === "button" &&
+      this.dataset.deleteMessageId
+    ) {
+      return this;
+    }
+
+    return this.parentElement?.closest(selector);
   }
 
   focus(): void {}

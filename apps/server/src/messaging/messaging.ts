@@ -10,6 +10,8 @@ export type DirectMessageRecord = {
   text: string;
   sentAt: string;
   readAt?: string;
+  editedAt?: string;
+  deletedAt?: string;
 };
 
 export type DirectMessageReadReceipt = {
@@ -22,6 +24,13 @@ export type DirectMessageReadReceipt = {
 export type DirectMessageUnreadCount = {
   friendId: string;
   count: number;
+};
+
+export type DirectMessageDeletedRecord = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  deletedAt: string;
 };
 
 export const DEFAULT_DM_HISTORY_LIMIT = 50;
@@ -44,6 +53,9 @@ export type DirectMessageStore = {
     readerUserId: string,
     otherUserId: string,
   ): Promise<DirectMessageReadReceipt>;
+  findMessage(messageId: string): Promise<DirectMessageRecord | undefined>;
+  editMessage(messageId: string, text: string): Promise<DirectMessageRecord>;
+  deleteMessage(messageId: string): Promise<DirectMessageDeletedRecord>;
 };
 
 // Friendship gate (injected): direct messages are only allowed between mutual friends.
@@ -104,6 +116,18 @@ export class DirectMessageService {
     return this.store.listUnreadCounts(userId);
   }
 
+  async edit(senderUserId: string, messageId: string, text: string): Promise<DirectMessageRecord> {
+    const message = await this.requireEditableMessage(senderUserId, messageId);
+    await this.assertCanMessage(senderUserId, message.toUserId);
+    return this.store.editMessage(messageId, text);
+  }
+
+  async delete(senderUserId: string, messageId: string): Promise<DirectMessageDeletedRecord> {
+    const message = await this.requireEditableMessage(senderUserId, messageId);
+    await this.assertCanMessage(senderUserId, message.toUserId);
+    return this.store.deleteMessage(messageId);
+  }
+
   async canMessage(userId: string, otherUserId: string): Promise<boolean> {
     try {
       await this.assertCanMessage(userId, otherUserId);
@@ -126,6 +150,27 @@ export class DirectMessageService {
       throw new DirectMessageError("BLOCKED", "You cannot message this player");
     }
   }
+
+  private async requireEditableMessage(
+    senderUserId: string,
+    messageId: string,
+  ): Promise<DirectMessageRecord> {
+    const message = await this.store.findMessage(messageId);
+
+    if (!message) {
+      throw new DirectMessageError("DM_NOT_FOUND", "Message not found");
+    }
+
+    if (message.fromUserId !== senderUserId) {
+      throw new DirectMessageError("DM_NOT_OWNED", "You can only change your own messages");
+    }
+
+    if (message.deletedAt) {
+      throw new DirectMessageError("DM_DELETED", "Message has already been deleted");
+    }
+
+    return message;
+  }
 }
 
 const DM_COLUMNS = {
@@ -135,6 +180,8 @@ const DM_COLUMNS = {
   body: directMessages.body,
   createdAt: directMessages.createdAt,
   readAt: directMessages.readAt,
+  editedAt: directMessages.editedAt,
+  deletedAt: directMessages.deletedAt,
 } as const;
 
 type DirectMessageRow = {
@@ -144,6 +191,8 @@ type DirectMessageRow = {
   body: string;
   createdAt: Date;
   readAt: Date | null;
+  editedAt: Date | null;
+  deletedAt: Date | null;
 };
 
 export class DrizzleDirectMessageStore implements DirectMessageStore {
@@ -191,6 +240,16 @@ export class DrizzleDirectMessageStore implements DirectMessageStore {
     return rows.reverse().map(toRecord);
   }
 
+  async findMessage(messageId: string): Promise<DirectMessageRecord | undefined> {
+    const [row] = await this.db
+      .select(DM_COLUMNS)
+      .from(directMessages)
+      .where(eq(directMessages.id, messageId))
+      .limit(1);
+
+    return row ? toRecord(row) : undefined;
+  }
+
   async listUnreadCounts(userId: string): Promise<DirectMessageUnreadCount[]> {
     const rows = await this.db
       .select({
@@ -198,7 +257,13 @@ export class DrizzleDirectMessageStore implements DirectMessageStore {
         value: count(),
       })
       .from(directMessages)
-      .where(and(eq(directMessages.recipientUserId, userId), isNull(directMessages.readAt)))
+      .where(
+        and(
+          eq(directMessages.recipientUserId, userId),
+          isNull(directMessages.readAt),
+          isNull(directMessages.deletedAt),
+        ),
+      )
       .groupBy(directMessages.senderUserId);
 
     return rows.map((row) => ({ friendId: row.friendId, count: row.value }));
@@ -217,6 +282,7 @@ export class DrizzleDirectMessageStore implements DirectMessageStore {
           eq(directMessages.senderUserId, otherUserId),
           eq(directMessages.recipientUserId, readerUserId),
           isNull(directMessages.readAt),
+          isNull(directMessages.deletedAt),
         ),
       )
       .returning({ id: directMessages.id });
@@ -228,6 +294,46 @@ export class DrizzleDirectMessageStore implements DirectMessageStore {
       readAt: readAt.toISOString(),
     };
   }
+
+  async editMessage(messageId: string, text: string): Promise<DirectMessageRecord> {
+    const editedAt = new Date();
+    const [row] = await this.db
+      .update(directMessages)
+      .set({ body: text, editedAt })
+      .where(and(eq(directMessages.id, messageId), isNull(directMessages.deletedAt)))
+      .returning(DM_COLUMNS);
+
+    if (!row) {
+      throw new Error("Direct message edit failed");
+    }
+
+    return toRecord(row);
+  }
+
+  async deleteMessage(messageId: string): Promise<DirectMessageDeletedRecord> {
+    const deletedAt = new Date();
+    const [row] = await this.db
+      .update(directMessages)
+      .set({ deletedAt })
+      .where(and(eq(directMessages.id, messageId), isNull(directMessages.deletedAt)))
+      .returning({
+        id: directMessages.id,
+        senderUserId: directMessages.senderUserId,
+        recipientUserId: directMessages.recipientUserId,
+        deletedAt: directMessages.deletedAt,
+      });
+
+    if (!row?.deletedAt) {
+      throw new Error("Direct message delete failed");
+    }
+
+    return {
+      id: row.id,
+      fromUserId: row.senderUserId,
+      toUserId: row.recipientUserId,
+      deletedAt: row.deletedAt.toISOString(),
+    };
+  }
 }
 
 function toRecord(row: DirectMessageRow): DirectMessageRecord {
@@ -235,8 +341,10 @@ function toRecord(row: DirectMessageRow): DirectMessageRecord {
     id: row.id,
     fromUserId: row.senderUserId,
     toUserId: row.recipientUserId,
-    text: row.body,
+    text: row.deletedAt ? "" : row.body,
     sentAt: row.createdAt.toISOString(),
     ...(row.readAt ? { readAt: row.readAt.toISOString() } : {}),
+    ...(row.editedAt ? { editedAt: row.editedAt.toISOString() } : {}),
+    ...(row.deletedAt ? { deletedAt: row.deletedAt.toISOString() } : {}),
   };
 }

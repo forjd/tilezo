@@ -974,6 +974,102 @@ describe("direct messages", () => {
 
     expect(published).toEqual([]);
   });
+
+  test("edits direct messages and publishes updates to both users", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const directMessages = {
+      async edit(fromUserId: string, id: string, text: string) {
+        return {
+          id,
+          fromUserId,
+          toUserId: "user_db_2",
+          text,
+          sentAt: "2026-06-13T10:00:00.000Z",
+          editedAt: "2026-06-13T10:03:00.000Z",
+        };
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.edit", messageId: "dm_1", text: "updated" }), {
+      rooms,
+      publish(topic, message) {
+        published.push({ topic, message });
+      },
+      directMessages,
+    });
+    await flushAsyncMessages();
+
+    const message: ServerMessage = {
+      type: "dm.edited",
+      id: "dm_1",
+      fromUserId: "user_db_1",
+      toUserId: "user_db_2",
+      text: "updated",
+      editedAt: "2026-06-13T10:03:00.000Z",
+    };
+    expect(published).toContainEqual({ topic: "user:user_db_1", message });
+    expect(published).toContainEqual({ topic: "user:user_db_2", message });
+  });
+
+  test("deletes direct messages and publishes tombstones to both users", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const directMessages = {
+      async delete(fromUserId: string, id: string) {
+        return {
+          id,
+          fromUserId,
+          toUserId: "user_db_2",
+          deletedAt: "2026-06-13T10:04:00.000Z",
+        };
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.delete", messageId: "dm_1" }), {
+      rooms,
+      publish(topic, message) {
+        published.push({ topic, message });
+      },
+      directMessages,
+    });
+    await flushAsyncMessages();
+
+    const message: ServerMessage = {
+      type: "dm.deleted",
+      id: "dm_1",
+      fromUserId: "user_db_1",
+      toUserId: "user_db_2",
+      deletedAt: "2026-06-13T10:04:00.000Z",
+    };
+    expect(published).toContainEqual({ topic: "user:user_db_1", message });
+    expect(published).toContainEqual({ topic: "user:user_db_2", message });
+  });
+
+  test("surfaces direct message edit rejections as errors", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const directMessages = {
+      async edit() {
+        throw new DirectMessageError("DM_NOT_OWNED", "You can only change your own messages");
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.edit", messageId: "dm_1", text: "updated" }), {
+      rooms,
+      publish() {},
+      directMessages,
+    });
+    await flushAsyncMessages();
+
+    expect(ws.sent).toContainEqual({
+      type: "error",
+      code: "DM_NOT_OWNED",
+      message: "You can only change your own messages",
+    });
+  });
 });
 
 describe("consumeRateLimit", () => {

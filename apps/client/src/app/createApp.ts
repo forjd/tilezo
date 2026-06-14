@@ -205,6 +205,14 @@ export function createApp(root: HTMLElement): void {
           directMessagePanel.markRead(message.messageIds);
         }
       },
+      onDirectEdited(message) {
+        directMessagePanel.updateEdited(message);
+      },
+      onDirectDeleted(message) {
+        if (!directMessagePanel.markDeleted(message.id) && message.fromUserId !== user?.id) {
+          decrementUnread(message.fromUserId);
+        }
+      },
       onDisconnected() {
         if (!user || !gameStarted) {
           return;
@@ -245,6 +253,12 @@ export function createApp(root: HTMLElement): void {
     onRead(friendId) {
       game?.markDirectMessagesRead(friendId);
       clearUnread(friendId);
+    },
+    onEdit(messageId, text) {
+      return game?.editDirectMessage(messageId, text) ?? false;
+    },
+    onDelete(messageId) {
+      return game?.deleteDirectMessage(messageId) ?? false;
     },
   });
 
@@ -569,6 +583,18 @@ export function createApp(root: HTMLElement): void {
   function clearUnread(friendId: string): void {
     unreadCounts.delete(friendId);
     friendsPanel.setUnreadCount(friendId, 0);
+  }
+
+  function decrementUnread(friendId: string): void {
+    const next = Math.max(0, (unreadCounts.get(friendId) ?? 0) - 1);
+
+    if (next === 0) {
+      clearUnread(friendId);
+      return;
+    }
+
+    unreadCounts.set(friendId, next);
+    friendsPanel.setUnreadCount(friendId, next);
   }
 
   function clearReconnectSchedule(): void {

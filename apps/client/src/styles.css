@@ -560,6 +560,25 @@ select {
   word-break: break-word;
 }
 
+.dm-message-text {
+  display: block;
+}
+
+.dm-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.dm-message-action {
+  min-width: 0;
+  height: 22px;
+  padding: 0 5px;
+  border-width: 1px;
+  font-size: 10px;
+}
+
 .dm-message-theirs {
   align-self: flex-start;
   background: #d7d2c4;
@@ -580,6 +599,11 @@ select {
   font-size: 10px;
   font-weight: 700;
   text-align: right;
+}
+
+.dm-message-deleted {
+  opacity: 0.72;
+  font-style: italic;
 }
 
 .dm-typing {
