@@ -15,6 +15,7 @@ export const MAX_RAW_MESSAGE_BYTES = 8 * 1024;
 export const USERNAME_MAX_LENGTH = 24;
 export const USER_ID_MAX_LENGTH = 64;
 export const ROOM_ID_MAX_LENGTH = 64;
+export const MESSAGE_ID_MAX_LENGTH = 128;
 export const CHAT_MAX_LENGTH = 240;
 export const DIRECT_MESSAGE_MAX_LENGTH = 600;
 // Tile coordinates are bounded at the trust boundary so untrusted clients cannot
@@ -88,6 +89,17 @@ export const dmReadMessageSchema = z.object({
   friendId: trimmedString(USER_ID_MAX_LENGTH),
 });
 
+export const dmEditMessageSchema = z.object({
+  type: z.literal("dm.edit"),
+  messageId: trimmedString(MESSAGE_ID_MAX_LENGTH),
+  text: directMessageText,
+});
+
+export const dmDeleteMessageSchema = z.object({
+  type: z.literal("dm.delete"),
+  messageId: trimmedString(MESSAGE_ID_MAX_LENGTH),
+});
+
 export const avatarAppearanceSchema = z.object({
   hair: z.enum(AVATAR_HAIR_STYLES),
   hairColor: z.enum(AVATAR_HAIR_COLORS),
@@ -119,6 +131,8 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   dmSendMessageSchema,
   dmTypingMessageSchema,
   dmReadMessageSchema,
+  dmEditMessageSchema,
+  dmDeleteMessageSchema,
   avatarAppearanceUpdateMessageSchema,
   pingMessageSchema,
 ]);
@@ -184,6 +198,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     text: z.string(),
     sentAt: z.string(),
     readAt: z.string().optional(),
+    editedAt: z.string().optional(),
+    deletedAt: z.string().optional(),
   }),
   z.object({
     type: z.literal("dm.typing"),
@@ -197,6 +213,21 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     otherUserId: z.string(),
     messageIds: z.array(z.string()),
     readAt: z.string(),
+  }),
+  z.object({
+    type: z.literal("dm.edited"),
+    id: z.string(),
+    fromUserId: z.string(),
+    toUserId: z.string(),
+    text: z.string(),
+    editedAt: z.string(),
+  }),
+  z.object({
+    type: z.literal("dm.deleted"),
+    id: z.string(),
+    fromUserId: z.string(),
+    toUserId: z.string(),
+    deletedAt: z.string(),
   }),
   z.object({
     type: z.literal("chat.typing"),

@@ -291,6 +291,38 @@ export function handleMessage(
         break;
       }
 
+      case "dm.edit": {
+        if (!consumeRateLimit(ws, "dm", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.dm_edit");
+          sendError(ws, "RATE_LIMITED", "Slow down before editing another message");
+          return;
+        }
+
+        if (!ws.data.username) {
+          sendError(ws, "UNAUTHENTICATED", "Log in before editing messages");
+          return;
+        }
+
+        void editDirectMessage(ws, parsed.value.messageId, parsed.value.text, context);
+        break;
+      }
+
+      case "dm.delete": {
+        if (!consumeRateLimit(ws, "dm", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.dm_delete");
+          sendError(ws, "RATE_LIMITED", "Slow down before deleting another message");
+          return;
+        }
+
+        if (!ws.data.username) {
+          sendError(ws, "UNAUTHENTICATED", "Log in before deleting messages");
+          return;
+        }
+
+        void deleteDirectMessage(ws, parsed.value.messageId, context);
+        break;
+      }
+
       case "ping":
         if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.ping");
@@ -705,6 +737,76 @@ function disconnectSupersededRoomSockets(
     socket.data.roomId = undefined;
     socket.data.lastTypingState = undefined;
     context.metrics?.increment("room.socket_superseded");
+  }
+}
+
+async function editDirectMessage(
+  ws: ServerWebSocket<SocketData>,
+  messageId: string,
+  text: string,
+  context: Context,
+): Promise<void> {
+  if (!context.directMessages) {
+    sendError(ws, "DM_UNAVAILABLE", "Direct messages are unavailable");
+    return;
+  }
+
+  try {
+    const record = await context.directMessages.edit(ws.data.userId, messageId, text);
+    const message: ServerMessage = {
+      type: "dm.edited",
+      id: record.id,
+      fromUserId: record.fromUserId,
+      toUserId: record.toUserId,
+      text: record.text,
+      editedAt: record.editedAt ?? record.sentAt,
+    };
+    context.publish(userTopic(record.toUserId), message);
+    context.publish(userTopic(record.fromUserId), message);
+    context.metrics?.increment("dm_edit.accepted");
+  } catch (error) {
+    if (error instanceof DirectMessageError) {
+      context.metrics?.increment(`dm_edit.rejected.${error.code}`);
+      sendError(ws, error.code, error.message);
+      return;
+    }
+
+    context.logger?.warn("dm.edit.failed", { ...socketFields(ws), messageId, error });
+    sendError(ws, "DM_FAILED", "Could not edit message");
+  }
+}
+
+async function deleteDirectMessage(
+  ws: ServerWebSocket<SocketData>,
+  messageId: string,
+  context: Context,
+): Promise<void> {
+  if (!context.directMessages) {
+    sendError(ws, "DM_UNAVAILABLE", "Direct messages are unavailable");
+    return;
+  }
+
+  try {
+    const record = await context.directMessages.delete(ws.data.userId, messageId);
+    const message: ServerMessage = {
+      type: "dm.deleted",
+      id: record.id,
+      fromUserId: record.fromUserId,
+      toUserId: record.toUserId,
+      deletedAt: record.deletedAt,
+    };
+    context.publish(userTopic(record.toUserId), message);
+    context.publish(userTopic(record.fromUserId), message);
+    context.metrics?.increment("dm_delete.accepted");
+  } catch (error) {
+    if (error instanceof DirectMessageError) {
+      context.metrics?.increment(`dm_delete.rejected.${error.code}`);
+      sendError(ws, error.code, error.message);
+      return;
+    }
+
+    context.logger?.warn("dm.delete.failed", { ...socketFields(ws), messageId, error });
+    sendError(ws, "DM_FAILED", "Could not delete message");
   }
 }
 

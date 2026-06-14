@@ -103,6 +103,29 @@ Mark unread messages from a friend as read in the direct-message conversation.
 }
 ```
 
+### `dm.edit`
+
+Edit a direct message sent by the authenticated user.
+
+```json
+{
+  "type": "dm.edit",
+  "messageId": "dm_...",
+  "text": "Updated message"
+}
+```
+
+### `dm.delete`
+
+Delete a direct message sent by the authenticated user for both participants.
+
+```json
+{
+  "type": "dm.delete",
+  "messageId": "dm_..."
+}
+```
+
 ### `avatar.appearance.update`
 
 Broadcast the authenticated user's saved character appearance to the current room after the profile
@@ -307,7 +330,8 @@ message.
   "toUserId": "user_...",
   "text": "Hi",
   "sentAt": "2026-05-10T12:00:00.000Z",
-  "readAt": "2026-05-10T12:01:00.000Z"
+  "readAt": "2026-05-10T12:01:00.000Z",
+  "editedAt": "2026-05-10T12:00:30.000Z"
 }
 ```
 
@@ -335,6 +359,35 @@ Published to both direct-message participants after the reader marks received me
   "otherUserId": "user_...",
   "messageIds": ["dm_..."],
   "readAt": "2026-05-10T12:01:00.000Z"
+}
+```
+
+### `dm.edited`
+
+Published to both direct-message participants after the sender edits one of their messages.
+
+```json
+{
+  "type": "dm.edited",
+  "id": "dm_...",
+  "fromUserId": "user_...",
+  "toUserId": "user_...",
+  "text": "Updated message",
+  "editedAt": "2026-05-10T12:00:30.000Z"
+}
+```
+
+### `dm.deleted`
+
+Published to both direct-message participants after the sender deletes one of their messages.
+
+```json
+{
+  "type": "dm.deleted",
+  "id": "dm_...",
+  "fromUserId": "user_...",
+  "toUserId": "user_...",
+  "deletedAt": "2026-05-10T12:02:00.000Z"
 }
 ```
 

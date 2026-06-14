@@ -93,6 +93,22 @@ describe("protocol parser", () => {
     expect(parseClientMessage({ type: "dm.read", friendId: "" }).ok).toBe(false);
   });
 
+  test("accepts direct message edits and deletes", () => {
+    expect(
+      parseClientMessage({ type: "dm.edit", messageId: " dm_1 ", text: "  updated  " }),
+    ).toEqual({
+      ok: true,
+      value: { type: "dm.edit", messageId: "dm_1", text: "updated" },
+    });
+    expect(parseClientMessage({ type: "dm.edit", messageId: "dm_1", text: "" }).ok).toBe(false);
+    expect(parseClientMessage({ type: "dm.edit", messageId: "", text: "updated" }).ok).toBe(false);
+    expect(parseClientMessage({ type: "dm.delete", messageId: " dm_1 " })).toEqual({
+      ok: true,
+      value: { type: "dm.delete", messageId: "dm_1" },
+    });
+    expect(parseClientMessage({ type: "dm.delete", messageId: "" }).ok).toBe(false);
+  });
+
   test("rejects malformed raw messages", () => {
     expect(parseRawClientMessage("{bad json").ok).toBe(false);
   });

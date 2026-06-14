@@ -61,6 +61,36 @@ function createStore(): DirectMessageStore & { saved: DirectMessageRecord[] } {
 
       return { readerUserId, otherUserId, messageIds, readAt };
     },
+    async findMessage(messageId) {
+      return saved.find((message) => message.id === messageId);
+    },
+    async editMessage(messageId, text) {
+      const message = saved.find((item) => item.id === messageId);
+
+      if (!message) {
+        throw new Error("missing message");
+      }
+
+      message.text = text;
+      message.editedAt = "2026-06-13T10:03:00.000Z";
+      return message;
+    },
+    async deleteMessage(messageId) {
+      const message = saved.find((item) => item.id === messageId);
+
+      if (!message) {
+        throw new Error("missing message");
+      }
+
+      message.deletedAt = "2026-06-13T10:04:00.000Z";
+      message.text = "";
+      return {
+        id: message.id,
+        fromUserId: message.fromUserId,
+        toUserId: message.toUserId,
+        deletedAt: message.deletedAt,
+      };
+    },
   };
 }
 
@@ -134,6 +164,32 @@ describe("DirectMessageService", () => {
     expect(receipt.messageIds.every((id) => id.startsWith("dm_"))).toBe(true);
     expect(await service.unreadCounts("user_1")).toEqual([]);
   });
+
+  test("edits and deletes owned messages", async () => {
+    const store = createStore();
+    const service = new DirectMessageService(store, async () => true);
+    const sent = await service.send("user_1", "user_2", "before");
+
+    await expect(service.edit("user_1", sent.id, "after")).resolves.toMatchObject({
+      id: sent.id,
+      text: "after",
+      editedAt: "2026-06-13T10:03:00.000Z",
+    });
+    await expect(service.delete("user_1", sent.id)).resolves.toMatchObject({
+      id: sent.id,
+      deletedAt: "2026-06-13T10:04:00.000Z",
+    });
+  });
+
+  test("rejects edits from non-senders and deleted messages", async () => {
+    const store = createStore();
+    const service = new DirectMessageService(store, async () => true);
+    const sent = await service.send("user_1", "user_2", "before");
+
+    await expect(service.edit("user_2", sent.id, "after")).rejects.toThrow("own messages");
+    await service.delete("user_1", sent.id);
+    await expect(service.edit("user_1", sent.id, "after")).rejects.toThrow("already been deleted");
+  });
 });
 
 describe("DrizzleDirectMessageStore", () => {
@@ -147,6 +203,8 @@ describe("DrizzleDirectMessageStore", () => {
       body: "hello",
       createdAt,
       readAt: new Date("2026-06-13T10:02:00.000Z"),
+      editedAt: new Date("2026-06-13T10:03:00.000Z"),
+      deletedAt: null,
     };
     const store = new DrizzleDirectMessageStore(queryDouble([[row]]));
 
@@ -159,6 +217,7 @@ describe("DrizzleDirectMessageStore", () => {
       text: "hello",
       sentAt: "2026-06-13T10:00:00.000Z",
       readAt: "2026-06-13T10:02:00.000Z",
+      editedAt: "2026-06-13T10:03:00.000Z",
     });
   });
 
@@ -171,6 +230,8 @@ describe("DrizzleDirectMessageStore", () => {
       body: "second",
       createdAt: new Date("2026-06-13T10:01:00.000Z"),
       readAt: null,
+      editedAt: null,
+      deletedAt: null,
     };
     const older = {
       id: "dm_1",
@@ -179,11 +240,36 @@ describe("DrizzleDirectMessageStore", () => {
       body: "first",
       createdAt,
       readAt: null,
+      editedAt: null,
+      deletedAt: null,
     };
     const store = new DrizzleDirectMessageStore(queryDouble([[newer, older]]));
 
     const history = await store.listConversation("user_1", "user_2", 50);
     expect(history.map((message) => message.text)).toEqual(["first", "second"]);
+  });
+
+  test("hides deleted message body in mapped records", async () => {
+    const row = {
+      id: "dm_1",
+      senderUserId: "user_1",
+      recipientUserId: "user_2",
+      body: "secret",
+      createdAt,
+      readAt: null,
+      editedAt: null,
+      deletedAt: new Date("2026-06-13T10:04:00.000Z"),
+    };
+    const store = new DrizzleDirectMessageStore(queryDouble([[row]]));
+
+    await expect(store.findMessage("dm_1")).resolves.toEqual({
+      id: "dm_1",
+      fromUserId: "user_1",
+      toUserId: "user_2",
+      text: "",
+      sentAt: "2026-06-13T10:00:00.000Z",
+      deletedAt: "2026-06-13T10:04:00.000Z",
+    });
   });
 
   test("lists unread counts and marks conversations read", async () => {
@@ -198,6 +284,38 @@ describe("DrizzleDirectMessageStore", () => {
       readerUserId: "user_1",
       otherUserId: "user_2",
       messageIds: ["dm_1", "dm_2"],
+    });
+  });
+
+  test("edits and deletes messages in the store", async () => {
+    const edited = {
+      id: "dm_1",
+      senderUserId: "user_1",
+      recipientUserId: "user_2",
+      body: "after",
+      createdAt,
+      readAt: null,
+      editedAt: new Date("2026-06-13T10:03:00.000Z"),
+      deletedAt: null,
+    };
+    const deleted = {
+      id: "dm_1",
+      senderUserId: "user_1",
+      recipientUserId: "user_2",
+      deletedAt: new Date("2026-06-13T10:04:00.000Z"),
+    };
+    const store = new DrizzleDirectMessageStore(queryDouble([[edited], [deleted]]));
+
+    await expect(store.editMessage("dm_1", "after")).resolves.toMatchObject({
+      id: "dm_1",
+      text: "after",
+      editedAt: "2026-06-13T10:03:00.000Z",
+    });
+    await expect(store.deleteMessage("dm_1")).resolves.toEqual({
+      id: "dm_1",
+      fromUserId: "user_1",
+      toUserId: "user_2",
+      deletedAt: "2026-06-13T10:04:00.000Z",
     });
   });
 });

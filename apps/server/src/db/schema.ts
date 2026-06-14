@@ -141,6 +141,8 @@ export const directMessages = pgTable(
     body: text("body").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     readAt: timestamp("read_at", { withTimezone: true }),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
     index("direct_messages_pair_idx").on(
@@ -150,6 +152,7 @@ export const directMessages = pgTable(
     ),
     index("direct_messages_recipient_idx").on(table.recipientUserId, table.createdAt),
     index("direct_messages_unread_idx").on(table.recipientUserId, table.readAt, table.createdAt),
+    index("direct_messages_deleted_idx").on(table.deletedAt),
     check("direct_messages_no_self_check", sql`${table.senderUserId} <> ${table.recipientUserId}`),
   ],
 );
