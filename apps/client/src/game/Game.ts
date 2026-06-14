@@ -41,6 +41,7 @@ type GameDependencies = {
     onMoveRequest: (target: { x: number; y: number }) => void,
     onInteraction: () => void,
     onFurnitureEditRequest: (request: FurnitureEditRequest) => void,
+    onFurnitureInteractRequest: (itemId: string, action: "toggle") => void,
   ) => RoomScene;
   globalTarget?: Pick<typeof globalThis, "addEventListener" | "removeEventListener">;
 };
@@ -67,8 +68,20 @@ export class Game {
     this.net = dependencies.createNetClient?.() ?? new NetClient();
     this.createRoomScene =
       dependencies.createRoomScene ??
-      ((app, onMoveRequest, onInteraction, onFurnitureEditRequest) =>
-        new RoomScene(app, onMoveRequest, onInteraction, onFurnitureEditRequest));
+      ((
+        app,
+        onMoveRequest,
+        onInteraction,
+        onFurnitureEditRequest,
+        onFurnitureInteractRequest,
+      ) =>
+        new RoomScene(
+          app,
+          onMoveRequest,
+          onInteraction,
+          onFurnitureEditRequest,
+          onFurnitureInteractRequest,
+        ));
     this.globalTarget = dependencies.globalTarget ?? globalThis;
   }
 
@@ -92,6 +105,7 @@ export class Game {
         },
         () => this.options.chat.focusInput(),
         (request) => this.sendFurnitureEditRequest(request),
+        (itemId, action) => this.sendIfConnected({ type: "room.item.interact.request", itemId, action }),
       );
 
       this.cleanup.push(this.net.onStatus(this.options.setStatus));

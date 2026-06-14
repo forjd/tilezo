@@ -1,7 +1,11 @@
 import { screenToTile, tileToScreen } from "@tilezo/engine/iso";
 import type { RoomTile, TilePosition } from "@tilezo/engine/types";
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
-import type { RoomItem } from "@tilezo/protocol/furniture";
+import {
+  getFurnitureDefinition,
+  getFurnitureFootprintTiles,
+  type RoomItem,
+} from "@tilezo/protocol/furniture";
 import type { RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { type Application, Container } from "pixi.js";
 import { Avatar, type ChatBubbleLayout } from "./Avatar";
@@ -15,6 +19,7 @@ export type FurnitureEditMode =
   | { type: "move"; itemId: string; rotation: number };
 export type FurnitureEditRequest = FurnitureEditMode & { position: TilePosition };
 type FurnitureEditRequestHandler = (request: FurnitureEditRequest) => void;
+type FurnitureInteractRequestHandler = (itemId: string, action: "toggle") => void;
 type Point = {
   x: number;
   y: number;
@@ -57,6 +62,7 @@ export class RoomScene {
     private readonly onMoveRequest: MoveRequestHandler,
     private readonly onCanvasInteraction?: CanvasInteractionHandler,
     private readonly onFurnitureEditRequest?: FurnitureEditRequestHandler,
+    private readonly onFurnitureInteractRequest?: FurnitureInteractRequestHandler,
   ) {
     this.world.addChild(
       this.tiles.view,
@@ -323,6 +329,11 @@ export class RoomScene {
 
       const target = this.eventToTile(event);
 
+      if (!this.furnitureEditMode && this.requestFurnitureInteraction(target)) {
+        this.onCanvasInteraction?.();
+        return;
+      }
+
       if (this.furnitureEditMode) {
         this.requestFurnitureEdit(target);
         this.onCanvasInteraction?.();
@@ -542,6 +553,47 @@ export class RoomScene {
       position,
     });
   }
+
+  private requestFurnitureInteraction(position: TilePosition): boolean {
+    const item = this.findInteractiveItemAt(position);
+
+    if (!item) {
+      return false;
+    }
+
+    this.onFurnitureInteractRequest?.(item.id, "toggle");
+    return true;
+  }
+
+  private findInteractiveItemAt(position: TilePosition): RoomItem | undefined {
+    const candidates = [...this.furniture.values()]
+      .map((furniture) => furniture.item)
+      .filter((item) => {
+        const definition = getFurnitureDefinition(item.itemType);
+        return definition?.interactionKind === "toggle" && itemOccupiesTile(item, position);
+      })
+      .sort(compareRoomItemsDescending);
+
+    return candidates[0];
+  }
+}
+
+function itemOccupiesTile(item: RoomItem, position: TilePosition): boolean {
+  const definition = getFurnitureDefinition(item.itemType);
+
+  if (!definition) {
+    return false;
+  }
+
+  return getFurnitureFootprintTiles(item, definition).some(
+    (tile) => tile.x === position.x && tile.y === position.y,
+  );
+}
+
+function compareRoomItemsDescending(left: RoomItem, right: RoomItem): number {
+  return (
+    right.y - left.y || right.x - left.x || right.z - left.z || right.id.localeCompare(left.id)
+  );
 }
 
 type RoomBounds = {

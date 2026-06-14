@@ -245,6 +245,28 @@ describe("RoomScene", () => {
     expect(interactions).toBe(3);
   });
 
+  test("requests interactive furniture toggles before tile movement", () => {
+    const app = createApp();
+    const moves: unknown[] = [];
+    const interactions: unknown[] = [];
+    const scene = new RoomScene(
+      app,
+      (target) => moves.push(target),
+      undefined,
+      undefined,
+      (itemId, action) => interactions.push({ itemId, action }),
+    );
+
+    scene.loadSnapshot({
+      ...snapshot([]),
+      items: [roomItem("lamp_1", { itemType: "glass_lamp", x: 0, y: 0, state: { on: false } })],
+    });
+    app.canvas.click({ clientX: 384, clientY: 348 });
+
+    expect(moves).toEqual([]);
+    expect(interactions).toEqual([{ itemId: "lamp_1", action: "toggle" }]);
+  });
+
   test("routes tile activation to furniture edit mode instead of movement", () => {
     const app = createApp();
     const moves: unknown[] = [];

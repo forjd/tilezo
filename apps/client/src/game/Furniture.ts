@@ -11,15 +11,19 @@ const TILE_HALF_HEIGHT = 16;
 
 export class Furniture {
   readonly view = new Container();
-  private item: RoomItem;
+  private currentItem: RoomItem;
 
   constructor(item: RoomItem) {
-    this.item = cloneRoomItem(item);
+    this.currentItem = cloneRoomItem(item);
     this.redraw();
   }
 
+  get item(): RoomItem {
+    return cloneRoomItem(this.currentItem);
+  }
+
   update(item: RoomItem): void {
-    this.item = cloneRoomItem(item);
+    this.currentItem = cloneRoomItem(item);
     this.redraw();
   }
 
@@ -31,11 +35,11 @@ export class Furniture {
     this.view.removeChildren();
     this.view.sortableChildren = false;
 
-    const definition = getFurnitureDefinition(this.item.itemType);
-    const anchor = tileToScreen(this.item.x, this.item.y);
+    const definition = getFurnitureDefinition(this.currentItem.itemType);
+    const anchor = tileToScreen(this.currentItem.x, this.currentItem.y);
     this.view.x = anchor.x;
     this.view.y = anchor.y;
-    this.view.zIndex = this.item.x + this.item.y + this.item.z;
+    this.view.zIndex = this.currentItem.x + this.currentItem.y + this.currentItem.z;
 
     if (!definition) {
       drawMissingItem(this.view);
@@ -45,7 +49,7 @@ export class Furniture {
     const footprint = new Graphics();
     const body = new Graphics();
 
-    for (const tile of getFurnitureFootprintTiles(this.item, definition)) {
+    for (const tile of getFurnitureFootprintTiles(this.currentItem, definition)) {
       const screen = tileToScreen(tile.x, tile.y);
       drawDiamond(
         footprint,
@@ -71,7 +75,7 @@ export class Furniture {
         drawReedDivider(body);
         break;
       case "glass_lamp":
-        drawGlassLamp(body, this.item.state.on === true);
+        drawGlassLamp(body, this.currentItem.state.on === true);
         break;
       default:
         drawMissingItem(body);
