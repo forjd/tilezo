@@ -270,6 +270,7 @@ export class DrizzlePersistenceStore implements PersistenceStore {
       .onConflictDoUpdate({
         target: roomItems.id,
         set: {
+          roomId,
           itemType: item.itemType,
           x: item.x,
           y: item.y,

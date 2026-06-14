@@ -16,7 +16,11 @@
       "@tilezo/engine/types": ["./packages/engine/src/types.ts"],
       "@tilezo/protocol": ["./packages/protocol/src/index.ts"],
       "@tilezo/protocol/appearance": ["./packages/protocol/src/appearance.ts"],
-      "@tilezo/protocol/messages": ["./packages/protocol/src/messages.ts"]
+      "@tilezo/protocol/economy": ["./packages/protocol/src/economy.ts"],
+      "@tilezo/protocol/furniture": ["./packages/protocol/src/furniture.ts"],
+      "@tilezo/protocol/messages": ["./packages/protocol/src/messages.ts"],
+      "@tilezo/protocol/parse": ["./packages/protocol/src/parse.ts"],
+      "@tilezo/protocol/user": ["./packages/protocol/src/user.ts"]
     },
     "skipLibCheck": true,
     "strict": true,

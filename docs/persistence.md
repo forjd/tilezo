@@ -19,10 +19,11 @@ Persist:
 - Room items.
 - Private room ownership.
 - User inventory (`user_inventory`) keyed by user and item type, with per-item quantities.
+- Friend-gated direct messages, including history/read/edit/delete metadata.
 
 Do not persist:
 
-- Chat messages, until chat history becomes part of the product.
+- Room chat messages, until room chat history becomes part of the product.
 - High-frequency movement updates.
 - Every interpolated avatar position.
 - Transient WebSocket connection state.

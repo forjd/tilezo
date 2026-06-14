@@ -77,8 +77,8 @@ export class LoginForm {
       event.preventDefault();
       this.clearError();
       const username = this.username.value.trim();
-      const password = this.password.value.trim();
-      const confirmPassword = this.confirmPassword.value.trim();
+      const password = this.password.value;
+      const confirmPassword = this.confirmPassword.value;
 
       if (!username || !password) {
         return;

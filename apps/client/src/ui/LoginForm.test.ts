@@ -32,7 +32,7 @@ describe("LoginForm", () => {
     expect(form.element.classList.contains("hidden")).toBe(true);
   });
 
-  test("submits trimmed login values with password and mode", () => {
+  test("submits trimmed username while preserving password whitespace and mode", () => {
     installDocument();
     const submissions: unknown[] = [];
     const form = new LoginForm((values) => submissions.push(values));
@@ -48,7 +48,9 @@ describe("LoginForm", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(button.textContent).toBe("Create account");
-    expect(submissions).toEqual([{ mode: "register", username: "Dan", password: "secret phrase" }]);
+    expect(submissions).toEqual([
+      { mode: "register", username: "Dan", password: "  secret phrase  " },
+    ]);
   });
 
   test("requires matching password confirmation when creating accounts", () => {

@@ -5,8 +5,13 @@ The realtime protocol uses JSON messages over WebSocket.
 Default endpoint after login or account creation:
 
 ```txt
-ws://localhost:3000/ws?token=<auth-token>
+ws://localhost:3000/ws
 ```
+
+Browser clients authenticate the WebSocket handshake with the HttpOnly session cookie set by the
+HTTP auth routes. Non-browser clients should send an `Authorization` bearer header on the
+upgrade request. Query-string tokens are intentionally unsupported because URLs are commonly
+captured in logs and browser history.
 
 ## Client Messages
 
@@ -225,7 +230,8 @@ and `room.list` messages for the resumed room.
 ```json
 {
   "type": "connected",
-  "userId": "user_..."
+  "userId": "user_...",
+  "dollars": 500
 }
 ```
 
