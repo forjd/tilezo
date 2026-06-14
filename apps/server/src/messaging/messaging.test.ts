@@ -60,6 +60,21 @@ describe("DirectMessageService", () => {
     expect(store.saved).toHaveLength(0);
   });
 
+  test("rejects blocked conversations without persisting", async () => {
+    const store = createStore();
+    const service = new DirectMessageService(
+      store,
+      async () => true,
+      async () => true,
+    );
+
+    await expect(service.send("user_1", "user_2", "hi")).rejects.toThrow(
+      "cannot message this player",
+    );
+    await expect(service.history("user_1", "user_2")).rejects.toBeInstanceOf(DirectMessageError);
+    expect(store.saved).toHaveLength(0);
+  });
+
   test("returns conversation history for friends and blocks it for non-friends", async () => {
     const store = createStore();
     const friendly = new DirectMessageService(store, async () => true);

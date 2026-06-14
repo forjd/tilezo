@@ -110,6 +110,24 @@ export const friendships = pgTable(
   ],
 );
 
+export const blockedUsers = pgTable(
+  "blocked_users",
+  {
+    blockerUserId: text("blocker_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    blockedUserId: text("blocked_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.blockerUserId, table.blockedUserId] }),
+    index("blocked_users_blocked_user_id_idx").on(table.blockedUserId),
+    check("blocked_users_no_self_check", sql`${table.blockerUserId} <> ${table.blockedUserId}`),
+  ],
+);
+
 export const directMessages = pgTable(
   "direct_messages",
   {

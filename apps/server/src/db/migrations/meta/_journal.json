@@ -78,6 +78,13 @@
       "when": 1781391017000,
       "tag": "0010_friendship_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781431598898,
+      "tag": "0011_smart_william_stryker",
+      "breakpoints": true
     }
   ]
 }

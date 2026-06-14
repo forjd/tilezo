@@ -3,6 +3,7 @@ import { MAX_RAW_MESSAGE_BYTES } from "@tilezo/protocol";
 import type { Server } from "bun";
 import { AuthPasswordLimiter, AuthService, DrizzleAuthStore } from "./auth/auth";
 import { FixedWindowRateLimiter } from "./auth/rateLimit";
+import { BlockService, DrizzleBlockStore } from "./blocks/blocks";
 import { getConfig, type ServerConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
@@ -72,6 +73,7 @@ const database = createDatabase(config.databaseUrl);
 const persistence = database ? new DrizzlePersistenceStore(database) : undefined;
 const presence = new PresenceTracker();
 const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
+const blocks = database ? new BlockService(new DrizzleBlockStore(database)) : undefined;
 const friends = database
   ? new FriendService(new DrizzleFriendStore(database), (userId) => presence.get(userId), {
       canJoinRoom: (userId, roomId) => rooms.canJoinRoom(roomId, userId).ok,
@@ -80,8 +82,10 @@ const friends = database
   : undefined;
 const directMessages =
   database && friends
-    ? new DirectMessageService(new DrizzleDirectMessageStore(database), (a, b) =>
-        friends.areFriends(a, b),
+    ? new DirectMessageService(
+        new DrizzleDirectMessageStore(database),
+        (a, b) => friends.areFriends(a, b),
+        (a, b) => blocks?.isBlockedEitherDirection(a, b) ?? Promise.resolve(false),
       )
     : undefined;
 const auth = database
@@ -106,6 +110,7 @@ const router = createHttpRouter({
   metrics,
   auth,
   friends,
+  blocks,
   directMessages,
   persistence,
   rooms,
