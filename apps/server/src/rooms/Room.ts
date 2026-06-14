@@ -219,27 +219,34 @@ export class Room {
     return cloneRoomItem(nextItem);
   }
 
-  moveItem(itemId: string, patch: Pick<RoomItem, "x" | "y" | "rotation">): RoomItem | undefined {
+  moveItem(
+    itemId: string,
+    next: Pick<RoomItem, "x" | "y" | "rotation">,
+  ): RoomItem | undefined {
     const existing = this.items.get(itemId);
 
     if (!existing) {
       return undefined;
     }
 
-    const nextItem = {
-      ...cloneRoomItem(existing),
-      x: patch.x,
-      y: patch.y,
-      rotation: patch.rotation,
+    const updated: RoomItem = {
+      ...existing,
+      x: next.x,
+      y: next.y,
+      rotation: next.rotation,
     };
 
-    if (!this.validateItemPlacement(nextItem, { ignoreItemId: itemId }).ok) {
+    if (!this.validateItemMove(itemId, updated).ok) {
       return undefined;
     }
 
-    this.items.set(itemId, nextItem);
+    this.items.set(itemId, cloneRoomItem(updated));
     this.rebuildGrid();
-    return cloneRoomItem(nextItem);
+    return cloneRoomItem(updated);
+  }
+
+  validateItemMove(itemId: string, item: RoomItem): { ok: true } | { ok: false } {
+    return this.validateItemPlacement(item, { ignoreItemId: itemId });
   }
 
   pickupItem(itemId: string): RoomItem | undefined {

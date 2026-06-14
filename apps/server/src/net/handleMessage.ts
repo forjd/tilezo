@@ -736,20 +736,29 @@ async function moveRoomItem(
     return;
   }
 
-  const moved = room.moveItem(message.itemId, {
+  const candidate = {
+    ...previous,
     x: message.position.x,
     y: message.position.y,
     rotation: message.rotation,
-  });
+  };
+  const validation = room.validateItemMove(message.itemId, candidate);
 
-  if (!moved) {
+  if (!validation.ok) {
     context.metrics?.increment("room_item.move.rejected.invalid_placement");
     sendError(ws, "INVALID_ITEM_PLACEMENT", "Furniture cannot be moved there");
     return;
   }
 
-  if (!(await saveRoomItem(room.id, moved, ws, context))) {
-    room.moveItem(previous.id, previous);
+  if (!(await saveRoomItem(room.id, candidate, ws, context))) {
+    return;
+  }
+
+  const moved = room.moveItem(message.itemId, candidate);
+
+  if (!moved) {
+    context.metrics?.increment("room_item.move.rejected.invalid_placement");
+    sendError(ws, "INVALID_ITEM_PLACEMENT", "Furniture cannot be moved there");
     return;
   }
 
