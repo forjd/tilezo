@@ -1960,6 +1960,9 @@ function createEconomyStore(): EconomyStore {
     async spend() {
       return { balance: 500 };
     },
+    async credit() {
+      return { balance: 500 };
+    },
     async reserveItem(_userId: string, itemType: string) {
       const quantity = inventory.get(itemType) ?? 0;
       if (quantity === 0) {

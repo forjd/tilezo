@@ -93,6 +93,9 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
       async spend() {
         return { balance: authUser.dollars - 100 };
       },
+      async credit() {
+        return { balance: authUser.dollars };
+      },
       async reserveItem() {
         return true;
       },
@@ -1082,6 +1085,61 @@ describe("createHttpRouter", () => {
       expect(response.status).toBe(201);
     });
 
+    test("refunds room creation spend when persistence fails", async () => {
+      let credited = 0;
+      const published: unknown[] = [];
+      const route = createHttpRouter(
+        makeDeps({
+          economy: {
+            async getBalance() {
+              return 500;
+            },
+            async getInventory() {
+              return [];
+            },
+            async purchase() {
+              return { balance: 500, inventory: [] };
+            },
+            async spend() {
+              return { balance: 400 };
+            },
+            async credit(_userId: string, amount: number) {
+              credited += amount;
+              return { balance: 500 };
+            },
+            async reserveItem() {
+              return true;
+            },
+            async refundItem() {},
+          } as unknown as EconomyStore,
+          persistence: {
+            listOwnedRooms: async () => [],
+            seedRoom: async () => {
+              throw new Error("db down");
+            },
+          } as unknown as PersistenceStore,
+          publishUserMessage(userId, message) {
+            published.push({ userId, message });
+          },
+        }),
+      );
+
+      const response = await route(
+        request("/rooms", {
+          token: "good-token",
+          body: { templateId: "compact-studio", name: "My Room" },
+        }),
+        "ip",
+      );
+
+      expect(response.status).toBe(400);
+      expect(credited).toBe(100);
+      expect(published).toContainEqual({
+        userId: "user_1",
+        message: { type: "balance.updated", dollars: 500 },
+      });
+    });
+
     test("maps room persistence failures as invalid room responses", async () => {
       const route = createHttpRouter(
         makeDeps({
@@ -1129,6 +1187,9 @@ describe("createHttpRouter", () => {
             },
             async spend() {
               return { balance: 400 };
+            },
+            async credit() {
+              return { balance: 500 };
             },
             async reserveItem() {
               return true;

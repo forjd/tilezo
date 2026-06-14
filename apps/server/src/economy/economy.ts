@@ -16,6 +16,7 @@ export type EconomyStore = {
     itemType: string,
   ): Promise<{ balance: number; inventory: InventoryItem[] }>;
   spend(userId: string, amount: number): Promise<{ balance: number }>;
+  credit(userId: string, amount: number): Promise<{ balance: number }>;
   reserveItem(userId: string, itemType: string): Promise<boolean>;
   refundItem(userId: string, itemType: string): Promise<void>;
 };
@@ -110,6 +111,20 @@ export class DrizzleEconomyStore implements EconomyStore {
     }
 
     return { balance: updated.dollars };
+  }
+
+  async credit(userId: string, amount: number): Promise<{ balance: number }> {
+    if (amount <= 0) {
+      return { balance: await this.getBalance(userId) };
+    }
+
+    const [updated] = await this.db
+      .update(users)
+      .set({ dollars: sql`${users.dollars} + ${amount}` })
+      .where(eq(users.id, userId))
+      .returning({ dollars: users.dollars });
+
+    return { balance: updated?.dollars ?? (await this.getBalance(userId)) };
   }
 
   async reserveItem(userId: string, itemType: string): Promise<boolean> {

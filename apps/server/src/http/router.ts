@@ -730,9 +730,11 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
     const roomId = createId("room");
     const layout = createRoomLayoutFromTemplate(roomId, parsed.value);
     let balance: number;
+    let charged = false;
 
     try {
       const result = await economy.spend(user.id, ROOM_CREATION_COST);
+      charged = true;
       balance = result.balance;
     } catch (error) {
       if (error instanceof EconomyError) {
@@ -742,13 +744,22 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
       throw error;
     }
 
-    await persistence.seedRoom(layout, {
-      ownerUserId: user.id,
-      visibility: parsed.value.visibility,
-      description: parsed.value.description,
-      capacity: parsed.value.capacity,
-      access: parsed.value.access,
-    });
+    try {
+      await persistence.seedRoom(layout, {
+        ownerUserId: user.id,
+        visibility: parsed.value.visibility,
+        description: parsed.value.description,
+        capacity: parsed.value.capacity,
+        access: parsed.value.access,
+      });
+    } catch (error) {
+      if (charged) {
+        const refund = await economy.credit(user.id, ROOM_CREATION_COST);
+        balance = refund.balance;
+        publishUserMessage?.(user.id, { type: "balance.updated", dollars: balance });
+      }
+      throw error;
+    }
     rooms.addRoom(layout, {
       access: parsed.value.access,
       ownerUserId: user.id,
