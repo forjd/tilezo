@@ -912,6 +912,68 @@ describe("direct messages", () => {
       message: "You cannot message this player",
     });
   });
+
+  test("marks direct messages read and publishes receipts to both users", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const directMessages = {
+      async markRead(readerUserId: string, otherUserId: string) {
+        return {
+          readerUserId,
+          otherUserId,
+          messageIds: ["dm_1", "dm_2"],
+          readAt: "2026-06-13T10:02:00.000Z",
+        };
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.read", friendId: "user_db_2" }), {
+      rooms,
+      publish(topic, message) {
+        published.push({ topic, message });
+      },
+      directMessages,
+    });
+    await flushAsyncMessages();
+
+    const message: ServerMessage = {
+      type: "dm.read",
+      readerUserId: "user_db_1",
+      otherUserId: "user_db_2",
+      messageIds: ["dm_1", "dm_2"],
+      readAt: "2026-06-13T10:02:00.000Z",
+    };
+    expect(published).toContainEqual({ topic: "user:user_db_1", message });
+    expect(published).toContainEqual({ topic: "user:user_db_2", message });
+  });
+
+  test("does not publish empty direct message read receipts", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: ServerMessage[] = [];
+    const directMessages = {
+      async markRead(readerUserId: string, otherUserId: string) {
+        return {
+          readerUserId,
+          otherUserId,
+          messageIds: [],
+          readAt: "2026-06-13T10:02:00.000Z",
+        };
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.read", friendId: "user_db_2" }), {
+      rooms,
+      publish(_topic, message) {
+        published.push(message);
+      },
+      directMessages,
+    });
+    await flushAsyncMessages();
+
+    expect(published).toEqual([]);
+  });
 });
 
 describe("consumeRateLimit", () => {

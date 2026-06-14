@@ -61,6 +61,7 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
           sentAt: "2026-06-13T00:00:00.000Z",
         },
       ],
+      unreadCounts: async () => [{ friendId: "user_2", count: 2 }],
     } as unknown as DirectMessageService,
     persistence: {
       listOwnedRooms: async () => [],
@@ -412,6 +413,18 @@ describe("createHttpRouter", () => {
       );
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({ error: { code: "NOT_FRIENDS" } });
+    });
+
+    test("returns unread direct message counts", async () => {
+      const route = createHttpRouter(makeDeps());
+
+      const response = await route(
+        request("/direct-messages/unread", { method: "GET", token: "good-token" }),
+        "ip",
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ unread: [{ friendId: "user_2", count: 2 }] });
     });
   });
 

@@ -1,0 +1,2 @@
+ALTER TABLE "direct_messages" ADD COLUMN "read_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "direct_messages_unread_idx" ON "direct_messages" USING btree ("recipient_user_id","read_at","created_at");

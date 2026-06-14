@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { DirectMessage } from "@tilezo/protocol/messages";
 import { DEFAULT_API_URL } from "../assets";
-import { loadConversation } from "./DirectMessageClient";
+import { loadConversation, loadUnreadCounts } from "./DirectMessageClient";
 
 const originalFetch = globalThis.fetch;
 type FetchArgs = Parameters<typeof fetch>;
@@ -45,5 +45,21 @@ describe("loadConversation", () => {
       )) as unknown as typeof fetch;
 
     await expect(loadConversation("user_2")).rejects.toThrow("only message your friends");
+  });
+
+  test("loads unread counts", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = (async (url: FetchArgs[0], init?: FetchArgs[1]) => {
+      requests.push({ url: String(url), init });
+      return Response.json({ unread: [{ friendId: "user_2", count: 3 }] });
+    }) as unknown as typeof fetch;
+
+    await expect(loadUnreadCounts()).resolves.toEqual([{ friendId: "user_2", count: 3 }]);
+    expect(requests).toEqual([
+      {
+        url: `${DEFAULT_API_URL}/direct-messages/unread`,
+        init: { credentials: "include" },
+      },
+    ]);
   });
 });

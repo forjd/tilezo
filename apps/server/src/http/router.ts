@@ -141,6 +141,10 @@ async function dispatch(ctx: RouteContext): Promise<Response> {
     return handleDirectMessageHistoryRequest(ctx);
   }
 
+  if (url.pathname === "/direct-messages/unread" && request.method === "GET") {
+    return handleDirectMessageUnreadRequest(ctx);
+  }
+
   if (url.pathname === "/blocked-users" || url.pathname.startsWith("/blocked-users/")) {
     return handleBlockedUsersRequest(ctx);
   }
@@ -612,6 +616,36 @@ async function handleDirectMessageHistoryRequest(ctx: RouteContext): Promise<Res
 
     requestLogger.error("dm.history.failed", { userId: user.id, friendId, error });
     return authJson({ error: { code: "DM_FAILED", message: "Could not load messages" } }, 400);
+  }
+}
+
+async function handleDirectMessageUnreadRequest(ctx: RouteContext): Promise<Response> {
+  const { auth, directMessages, requestLogger } = ctx;
+
+  if (!auth || !directMessages) {
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for messages" } },
+      503,
+    );
+  }
+
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
+
+  if (!user) {
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before reading messages" } },
+      401,
+    );
+  }
+
+  try {
+    return authJson({ unread: await directMessages.unreadCounts(user.id) }, 200);
+  } catch (error) {
+    requestLogger.error("dm.unread.failed", { userId: user.id, error });
+    return authJson(
+      { error: { code: "DM_FAILED", message: "Could not load unread messages" } },
+      400,
+    );
   }
 }
 

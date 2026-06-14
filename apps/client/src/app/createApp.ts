@@ -11,7 +11,7 @@ import { blockUser } from "../blocks/BlockClient";
 import type { FriendSummary } from "../friends/FriendClient";
 import { addFriend, listFriends, removeFriend } from "../friends/FriendClient";
 import type { Game } from "../game/Game";
-import { loadConversation } from "../messaging/DirectMessageClient";
+import { loadConversation, loadUnreadCounts } from "../messaging/DirectMessageClient";
 import { createRoom, listRoomTemplates } from "../rooms/RoomClient";
 import { ClientLogger } from "../telemetry/ClientLogger";
 import { CharacterEditor } from "../ui/CharacterEditor";
@@ -47,6 +47,7 @@ export function createApp(root: HTMLElement): void {
   let reconnectTimeout: ReturnType<typeof setTimeout> | undefined;
   let countdownInterval: ReturnType<typeof setInterval> | undefined;
   let reconnecting = false;
+  const unreadCounts = new Map<string, number>();
 
   shell.className = "app-shell";
   stage.className = "game-stage";
@@ -180,12 +181,29 @@ export function createApp(root: HTMLElement): void {
         roomBrowser.hide();
       },
       onDirectMessage(message) {
-        if (!directMessagePanel.append(message) && message.fromUserId !== user?.id) {
+        const appended = directMessagePanel.append(message);
+
+        if (appended) {
+          if (message.fromUserId !== user?.id) {
+            clearUnread(message.fromUserId);
+          }
+          return;
+        }
+
+        if (message.fromUserId !== user?.id) {
+          incrementUnread(message.fromUserId);
           status.textContent = "new direct message";
         }
       },
       onDirectTyping(message) {
         directMessagePanel.setFriendTyping(message.fromUserId, message.isTyping);
+      },
+      onDirectRead(message) {
+        if (message.readerUserId === user?.id) {
+          clearUnread(message.otherUserId);
+        } else {
+          directMessagePanel.markRead(message.messageIds);
+        }
       },
       onDisconnected() {
         if (!user || !gameStarted) {
@@ -223,6 +241,10 @@ export function createApp(root: HTMLElement): void {
     },
     onTypingChange(friendId, isTyping) {
       game?.sendDirectTyping(friendId, isTyping);
+    },
+    onRead(friendId) {
+      game?.markDirectMessagesRead(friendId);
+      clearUnread(friendId);
     },
   });
 
@@ -523,12 +545,30 @@ export function createApp(root: HTMLElement): void {
     }
 
     try {
-      friendsPanel.setFriends(await listFriends());
+      const [friends, unread] = await Promise.all([listFriends(), loadUnreadCounts()]);
+      unreadCounts.clear();
+
+      for (const item of unread) {
+        unreadCounts.set(item.friendId, item.count);
+      }
+
+      friendsPanel.setFriends(friends, unreadCounts);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Friends failed";
       status.textContent = message;
       friendsPanel.showError(message);
     }
+  }
+
+  function incrementUnread(friendId: string): void {
+    const next = (unreadCounts.get(friendId) ?? 0) + 1;
+    unreadCounts.set(friendId, next);
+    friendsPanel.setUnreadCount(friendId, next);
+  }
+
+  function clearUnread(friendId: string): void {
+    unreadCounts.delete(friendId);
+    friendsPanel.setUnreadCount(friendId, 0);
   }
 
   function clearReconnectSchedule(): void {

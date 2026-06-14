@@ -21,11 +21,17 @@ describe("DirectMessagePanel", () => {
 
   test("opens a conversation, renders history, and aligns own messages", () => {
     installDocument();
-    const panel = new DirectMessagePanel({ onSend: () => undefined });
+    const read: string[] = [];
+    const panel = new DirectMessagePanel({
+      onSend: () => undefined,
+      onRead(friendId) {
+        read.push(friendId);
+      },
+    });
 
     panel.open(
       { id: "user_2", username: "Kai" },
-      [dm({ text: "hello" }), dm({ fromUserId: "user_1", text: "hey" })],
+      [dm({ text: "hello" }), dm({ fromUserId: "user_1", text: "hey", readAt: "2026-06-13" })],
       "user_1",
     );
 
@@ -35,11 +41,19 @@ describe("DirectMessagePanel", () => {
     expect(list.children.map((c) => c.textContent)).toEqual(["hello", "hey"]);
     expect(list.children[0]?.className).toBe("dm-message dm-message-theirs");
     expect(list.children[1]?.className).toBe("dm-message dm-message-mine");
+    expect(list.children[1]?.dataset.read).toBe("true");
+    expect(read).toEqual(["user_2"]);
   });
 
   test("appends only messages that belong to the open conversation", () => {
     installDocument();
-    const panel = new DirectMessagePanel({ onSend: () => undefined });
+    const read: string[] = [];
+    const panel = new DirectMessagePanel({
+      onSend: () => undefined,
+      onRead(friendId) {
+        read.push(friendId);
+      },
+    });
     panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
     const list = panel.element.children[1] as unknown as FakeElement;
 
@@ -48,6 +62,7 @@ describe("DirectMessagePanel", () => {
       false,
     );
     expect(list.children.map((c) => c.textContent)).toEqual(["live"]);
+    expect(read).toEqual(["user_2", "user_2"]);
   });
 
   test("sends the typed message for the open friend and clears the input", () => {
@@ -127,6 +142,22 @@ describe("DirectMessagePanel", () => {
     expect(typingStatus.textContent).toBe("");
     expect(typingStatus.classList.contains("visible")).toBe(false);
   });
+
+  test("marks own messages read from receipts", () => {
+    installDocument();
+    const panel = new DirectMessagePanel({ onSend: () => undefined });
+    panel.open(
+      { id: "user_2", username: "Kai" },
+      [dm({ id: "dm_own", fromUserId: "user_1", text: "hey" })],
+      "user_1",
+    );
+    const list = panel.element.children[1] as unknown as FakeElement;
+
+    expect(list.children[0]?.dataset.read).toBe("false");
+    expect(panel.markRead(["dm_other"])).toBe(false);
+    expect(panel.markRead(["dm_own"])).toBe(true);
+    expect(list.children[0]?.dataset.read).toBe("true");
+  });
 });
 
 function installDocument() {
@@ -153,6 +184,7 @@ type FakeEvent = { preventDefault?: () => void; target?: FakeElement };
 class FakeElement {
   readonly children: FakeElement[] = [];
   readonly classList = new FakeClassList(this);
+  readonly dataset: Record<string, string> = {};
   readonly listeners = new Map<string, Set<(event: FakeEvent) => void>>();
   autocomplete = "";
   className = "";

@@ -24,6 +24,7 @@ export class FriendsPanel {
   private readonly closeButton = document.createElement("button");
   private readonly previewDestroyers: (() => void)[] = [];
   private friends: FriendSummary[] = [];
+  private unreadCounts = new Map<string, number>();
 
   constructor(private readonly options: FriendsPanelOptions) {
     this.element.className = "friends-panel hidden";
@@ -121,10 +122,23 @@ export class FriendsPanel {
     this.element.classList.add("hidden");
   }
 
-  setFriends(friends: FriendSummary[]): void {
+  setFriends(friends: FriendSummary[], unreadCounts?: Map<string, number>): void {
     this.friends = friends;
+    if (unreadCounts) {
+      this.unreadCounts = new Map(unreadCounts);
+    }
     this.message.textContent = "";
     this.message.classList.remove("visible");
+    this.render();
+  }
+
+  setUnreadCount(friendId: string, count: number): void {
+    if (count > 0) {
+      this.unreadCounts.set(friendId, count);
+    } else {
+      this.unreadCounts.delete(friendId);
+    }
+
     this.render();
   }
 
@@ -154,7 +168,9 @@ export class FriendsPanel {
     const item = document.createElement("article");
     const preview = this.options.createAvatarPreview?.() ?? new AvatarPreview(document);
     const details = document.createElement("div");
+    const nameRow = document.createElement("div");
     const name = document.createElement("strong");
+    const unreadBadge = document.createElement("span");
     const meta = document.createElement("span");
     const actions = document.createElement("div");
     const joinButton = document.createElement("button");
@@ -168,6 +184,7 @@ export class FriendsPanel {
     void preview.mount();
     this.previewDestroyers.push(() => preview.destroy());
     details.className = "friend-details";
+    nameRow.className = "friend-name-row";
     actions.className = "friend-actions";
     joinButton.type = "button";
     joinButton.className = "primary-button friend-join-button";
@@ -188,13 +205,18 @@ export class FriendsPanel {
     removeButton.textContent = "Remove";
 
     name.textContent = friend.username;
+    const unreadCount = this.unreadCounts.get(friend.id) ?? 0;
+    unreadBadge.className = "friend-unread-badge";
+    unreadBadge.textContent = unreadCount > 99 ? "99+" : unreadCount.toString();
+    unreadBadge.hidden = unreadCount === 0;
     meta.textContent = friend.online
       ? friend.roomId
         ? `online in ${friend.roomId}`
         : "online"
       : "offline";
 
-    details.append(name, meta);
+    nameRow.append(name, unreadBadge);
+    details.append(nameRow, meta);
     actions.append(joinButton, messageButton, blockButton, removeButton);
     item.append(preview.element, details, actions);
     return item;

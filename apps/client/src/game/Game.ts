@@ -2,6 +2,7 @@ import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 import type {
   ClientMessage,
   DirectMessage,
+  DirectMessageReadReceiptMessage,
   DirectMessageTypingStatusMessage,
   PublicRoomSummary,
   RoomSnapshotMessage,
@@ -19,6 +20,7 @@ type GameOptions = {
   onRoomJoined: (snapshot: RoomSnapshotMessage) => void;
   onDirectMessage: (message: DirectMessage) => void;
   onDirectTyping: (message: DirectMessageTypingStatusMessage) => void;
+  onDirectRead: (message: DirectMessageReadReceiptMessage) => void;
   onDisconnected: () => void;
 };
 
@@ -89,6 +91,10 @@ export class Game {
             this.options.onDirectTyping(message);
           }
 
+          if (message.type === "dm.read") {
+            this.options.onDirectRead(message);
+          }
+
           if (message.type === "error") {
             this.options.setStatus(`${message.code}: ${message.message}`);
           }
@@ -151,6 +157,10 @@ export class Game {
 
   sendDirectTyping(toUserId: string, isTyping: boolean): boolean {
     return this.sendIfConnected({ type: "dm.typing", toUserId, isTyping });
+  }
+
+  markDirectMessagesRead(friendId: string): boolean {
+    return this.sendIfConnected({ type: "dm.read", friendId });
   }
 
   async reconnect(): Promise<void> {
