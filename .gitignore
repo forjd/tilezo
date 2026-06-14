@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 tmp/
+inspiration/
 apps/client/tilezo-runtime-config.json
 *.tsbuildinfo
 .env
