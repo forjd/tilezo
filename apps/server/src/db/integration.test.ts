@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createRectRoomLayout } from "@tilezo/engine";
-import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import { DEFAULT_AVATAR_APPEARANCE, ROOM_CREATION_COST } from "@tilezo/protocol";
 import { sql } from "drizzle-orm";
 import { DrizzleAuthStore, UsernameTakenError } from "../auth/auth";
+import { DrizzleEconomyStore } from "../economy/economy";
 import { DrizzleFriendStore } from "../friends/friends";
 import { DrizzleDirectMessageStore } from "../messaging/messaging";
 import { createDatabase } from "./db";
@@ -25,13 +26,14 @@ describe("database integration", () => {
   }
 
   const authStore = new DrizzleAuthStore(database);
+  const economyStore = new DrizzleEconomyStore(database);
   const friendStore = new DrizzleFriendStore(database);
   const directMessageStore = new DrizzleDirectMessageStore(database);
   const persistence = new DrizzlePersistenceStore(database);
 
   beforeEach(async () => {
     await database.execute(
-      sql`TRUNCATE TABLE users, rooms, friendships, user_room_sessions, room_items, direct_messages RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE users, rooms, friendships, user_room_sessions, room_items, direct_messages, user_inventory RESTART IDENTITY CASCADE`,
     );
   });
 
@@ -165,5 +167,58 @@ describe("database integration", () => {
     expect(await persistence.getLastRoomIdForUser(owner.id)).toBe("lobby");
     await persistence.clearLastRoomIdForUser(owner.id);
     expect(await persistence.getLastRoomIdForUser(owner.id)).toBeUndefined();
+  });
+
+  test("tracks starting balance, room creation costs, and inventory purchases", async () => {
+    const owner = await seedUser("Dan");
+    const startBalance = owner.dollars;
+
+    expect(await economyStore.getBalance(owner.id)).toBe(startBalance);
+    expect(await economyStore.getInventory(owner.id)).toEqual([]);
+
+    const spent = await economyStore.spend(owner.id, ROOM_CREATION_COST);
+    expect(spent.balance).toBe(startBalance - ROOM_CREATION_COST);
+    expect(await economyStore.getBalance(owner.id)).toBe(startBalance - ROOM_CREATION_COST);
+
+    const purchase = await economyStore.purchase(owner.id, "woven_rug");
+    expect(purchase.balance).toBe(startBalance - ROOM_CREATION_COST - 25);
+    expect(purchase.inventory).toContainEqual({ itemType: "woven_rug", quantity: 1 });
+
+    const second = await economyStore.purchase(owner.id, "woven_rug");
+    expect(second.inventory).toContainEqual({ itemType: "woven_rug", quantity: 2 });
+
+    expect(await economyStore.reserveItem(owner.id, "woven_rug")).toBe(true);
+    expect(await economyStore.getInventory(owner.id)).toContainEqual({
+      itemType: "woven_rug",
+      quantity: 1,
+    });
+
+    await economyStore.refundItem(owner.id, "woven_rug");
+    expect(await economyStore.getInventory(owner.id)).toContainEqual({
+      itemType: "woven_rug",
+      quantity: 2,
+    });
+  });
+
+  test("rejects spending and purchases with insufficient funds", async () => {
+    const owner = await seedUser("Dan");
+    await economyStore.spend(owner.id, owner.dollars);
+
+    await expect(economyStore.purchase(owner.id, "crate_table")).rejects.toThrow(
+      "You need $50 to buy this item",
+    );
+    await expect(economyStore.spend(owner.id, 1)).rejects.toThrow("You need $1 for this");
+  });
+
+  test("rejects purchasing unknown furniture", async () => {
+    const owner = await seedUser("Dan");
+    await expect(economyStore.purchase(owner.id, "no_such_item")).rejects.toThrow(
+      "This item is not for sale",
+    );
+  });
+
+  test("rejects reserving items that are not in the inventory", async () => {
+    const owner = await seedUser("Dan");
+    expect(await economyStore.reserveItem(owner.id, "crate_table")).toBe(false);
   });
 });

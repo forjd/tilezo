@@ -14,6 +14,7 @@ describe("FurniturePanel", () => {
     installDocument();
     const modes: Array<FurnitureEditMode | undefined> = [];
     const pickups: string[] = [];
+    const buys: string[] = [];
     const panel = new FurniturePanel({
       onModeChange(mode) {
         modes.push(mode);
@@ -21,6 +22,10 @@ describe("FurniturePanel", () => {
       onPickup(itemId) {
         pickups.push(itemId);
       },
+      onBuy(itemType) {
+        buys.push(itemType);
+      },
+      inventory: [{ itemType: "woven_rug", quantity: 1 }],
     });
 
     panel.show();
@@ -52,6 +57,68 @@ describe("FurniturePanel", () => {
     expect(panel.element.classList.contains("hidden")).toBe(true);
     expect(modes.at(-1)).toBeUndefined();
   });
+
+  test("shows owned counts, disables place when none owned, and buys on click", () => {
+    installDocument();
+    const buys: string[] = [];
+    const panel = new FurniturePanel({
+      onModeChange() {},
+      onPickup() {},
+      onBuy(itemType) {
+        buys.push(itemType);
+      },
+      inventory: [{ itemType: "woven_rug", quantity: 2 }],
+    });
+
+    panel.setCanEdit(true);
+    panel.show();
+
+    const options = getItemSelect(panel).children;
+    expect(options[0]?.textContent).toContain("Woven Rug");
+    expect(options[0]?.textContent).toContain("owned: 2");
+
+    expect(getPlaceButton(panel).disabled).toBe(false);
+    expect(getPlaceButton(panel).textContent).toBe("Place (2)");
+
+    getBuyButton(panel).dispatch("click", {});
+    expect(buys).toEqual(["woven_rug"]);
+  });
+
+  test("disables place and shows zero owned when inventory is empty", () => {
+    installDocument();
+    const panel = new FurniturePanel({
+      onModeChange() {},
+      onPickup() {},
+      onBuy() {},
+      inventory: [],
+    });
+
+    panel.setCanEdit(true);
+    panel.show();
+
+    expect(getPlaceButton(panel).disabled).toBe(true);
+    expect(getPlaceButton(panel).textContent).toBe("Place (0)");
+  });
+
+  test("shows inline error when purchase fails", async () => {
+    installDocument();
+    const panel = new FurniturePanel({
+      onModeChange() {},
+      onPickup() {},
+      onBuy: async () => {
+        throw new Error("Not enough cash");
+      },
+      inventory: [],
+    });
+
+    panel.setCanEdit(true);
+    panel.show();
+    await getBuyButton(panel).dispatch("click", {});
+
+    expect(getMessage(panel).textContent).toBe("Not enough cash");
+    expect(getMessage(panel).classList.contains("visible")).toBe(true);
+    expect(getBuyButton(panel).disabled).toBe(false);
+  });
 });
 
 const roomItem: RoomItem = {
@@ -65,11 +132,27 @@ const roomItem: RoomItem = {
 };
 
 function getRotateButton(panel: FurniturePanel): FakeElement {
-  return panel.element.children[1]?.children[0]?.children[1] as unknown as FakeElement;
+  return panel.element.children[1]?.children[1]?.children[1] as unknown as FakeElement;
 }
 
 function getItemList(panel: FurniturePanel): FakeElement {
-  return panel.element.children[1]?.children[1] as unknown as FakeElement;
+  return panel.element.children[1]?.children[2] as unknown as FakeElement;
+}
+
+function getItemSelect(panel: FurniturePanel): FakeElement {
+  return panel.element.children[1]?.children[1]?.children[0] as unknown as FakeElement;
+}
+
+function getPlaceButton(panel: FurniturePanel): FakeElement {
+  return panel.element.children[1]?.children[1]?.children[2] as unknown as FakeElement;
+}
+
+function getBuyButton(panel: FurniturePanel): FakeElement {
+  return panel.element.children[1]?.children[1]?.children[3] as unknown as FakeElement;
+}
+
+function getMessage(panel: FurniturePanel): FakeElement {
+  return panel.element.children[1]?.children[0] as unknown as FakeElement;
 }
 
 function installDocument() {
@@ -98,6 +181,7 @@ class FakeElement {
   readonly listeners = new Map<string, Set<(event: FakeEvent) => void>>();
   readonly classList = new FakeClassList(this);
   className = "";
+  disabled = false;
   parentElement?: FakeElement;
   textContent = "";
   type = "";

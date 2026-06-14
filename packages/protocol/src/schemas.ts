@@ -21,6 +21,7 @@ export const ITEM_ACTION_MAX_LENGTH = 64;
 export const MESSAGE_ID_MAX_LENGTH = 128;
 export const CHAT_MAX_LENGTH = 240;
 export const DIRECT_MESSAGE_MAX_LENGTH = 600;
+export const DOLLARS_MAX = 999_999_999;
 // Tile coordinates are bounded at the trust boundary so untrusted clients cannot
 // send absurd integers (e.g. near MAX_SAFE_INTEGER). The bound is far larger than
 // any real room while keeping every value comfortably within safe-integer math.
@@ -46,6 +47,7 @@ const directMessageText = z
 
 const tileCoordinate = z.number().int().min(-MAX_TILE_COORDINATE).max(MAX_TILE_COORDINATE);
 const furnitureRotation = z.number().int().min(0).max(3);
+export const dollarsSchema = z.number().int().min(0).max(DOLLARS_MAX);
 
 export const tilePositionSchema = z.object({
   x: tileCoordinate,
@@ -202,11 +204,16 @@ const roomItemSchema = z.object({
   state: z.record(z.string(), z.unknown()),
 });
 
+export const inventoryItemSchema = z.object({
+  itemType: trimmedString(ITEM_TYPE_MAX_LENGTH),
+  quantity: z.number().int().min(0),
+});
+
 // Server -> client messages are validated on the client so a malformed or skewed
 // payload surfaces as a clean "invalid server message" instead of throwing deep in
 // the scene/avatar code and silently dropping that state update (client desync).
 export const serverMessageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("connected"), userId: z.string() }),
+  z.object({ type: z.literal("connected"), userId: z.string(), dollars: dollarsSchema }),
   z.object({
     type: z.literal("room.snapshot"),
     roomId: z.string(),
@@ -284,6 +291,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("room.item.moved"), item: roomItemSchema }),
   z.object({ type: z.literal("room.item.picked_up"), itemId: z.string() }),
   z.object({ type: z.literal("room.item.state_updated"), item: roomItemSchema }),
+  z.object({ type: z.literal("balance.updated"), dollars: dollarsSchema }),
+  z.object({ type: z.literal("inventory.updated"), items: z.array(inventoryItemSchema) }),
   z.object({ type: z.literal("pong"), sentAt: z.string() }),
   z.object({ type: z.literal("error"), code: z.string(), message: z.string() }),
 ]);

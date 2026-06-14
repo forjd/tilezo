@@ -1,9 +1,11 @@
-import { avatarAppearanceSchema } from "@tilezo/protocol";
+import type { ServerMessage } from "@tilezo/protocol";
+import { avatarAppearanceSchema, ROOM_CREATION_COST } from "@tilezo/protocol";
 import { AuthError, type AuthService, normalizeUsername } from "../auth/auth";
 import type { FixedWindowRateLimiter } from "../auth/rateLimit";
 import { BlockError, type BlockService } from "../blocks/blocks";
 import type { ServerConfig } from "../config";
 import type { PersistenceStore } from "../db/persistence";
+import { EconomyError, type EconomyStore } from "../economy/economy";
 import { FriendError, type FriendService } from "../friends/friends";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger, LogLevel } from "../observability/logger";
@@ -25,6 +27,8 @@ export type RouterDeps = {
   blocks?: BlockService;
   directMessages?: DirectMessageService;
   persistence?: PersistenceStore;
+  economy?: EconomyStore;
+  publishUserMessage?: (userId: string, message: ServerMessage) => void;
   rooms: RoomManager;
   registerRateLimiter: FixedWindowRateLimiter;
   loginRateLimiter: FixedWindowRateLimiter;
@@ -160,6 +164,14 @@ async function dispatch(ctx: RouteContext): Promise<Response> {
 
   if (url.pathname === "/rooms" && request.method === "POST") {
     return handleCreateRoomRequest(ctx);
+  }
+
+  if (url.pathname === "/inventory" && request.method === "GET") {
+    return handleGetInventoryRequest(ctx);
+  }
+
+  if (url.pathname === "/inventory/purchase" && request.method === "POST") {
+    return handlePurchaseRequest(ctx);
   }
 
   if (url.pathname === "/health") {
@@ -650,9 +662,9 @@ async function handleDirectMessageUnreadRequest(ctx: RouteContext): Promise<Resp
 }
 
 async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
-  const { auth, persistence, rooms, requestLogger } = ctx;
+  const { auth, persistence, economy, rooms, publishUserMessage, requestLogger } = ctx;
 
-  if (!auth || !persistence) {
+  if (!auth || !persistence || !economy) {
     requestLogger.warn("room.create.database_required");
     return authJson(
       { error: { code: "DATABASE_REQUIRED", message: "Database is required to create rooms" } },
@@ -717,6 +729,18 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
 
     const roomId = createId("room");
     const layout = createRoomLayoutFromTemplate(roomId, parsed.value);
+    let balance: number;
+
+    try {
+      const result = await economy.spend(user.id, ROOM_CREATION_COST);
+      balance = result.balance;
+    } catch (error) {
+      if (error instanceof EconomyError) {
+        requestLogger.warn("room.create.insufficient_funds", { userId: user.id });
+        return authJson({ error: { code: "INSUFFICIENT_FUNDS", message: error.message } }, 402);
+      }
+      throw error;
+    }
 
     await persistence.seedRoom(layout, {
       ownerUserId: user.id,
@@ -739,9 +763,12 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
       capacity: parsed.value.capacity,
     });
 
+    publishUserMessage?.(user.id, { type: "balance.updated", dollars: balance });
+
     return authJson(
       {
         roomId,
+        balance,
         room: {
           id: roomId,
           name: parsed.value.name,
@@ -754,6 +781,102 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
   } catch (error) {
     requestLogger.error("room.create.failed", { userId: user.id, error });
     return authJson({ error: { code: "INVALID_ROOM", message: "Unable to create room" } }, 400);
+  }
+}
+
+async function handleGetInventoryRequest(ctx: RouteContext): Promise<Response> {
+  const { auth, economy, requestLogger } = ctx;
+
+  if (!auth || !economy) {
+    requestLogger.warn("inventory.get.database_required");
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for inventory" } },
+      503,
+    );
+  }
+
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
+
+  if (!user) {
+    requestLogger.warn("inventory.get.unauthenticated");
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in to view inventory" } },
+      401,
+    );
+  }
+
+  try {
+    const items = await economy.getInventory(user.id);
+    return authJson({ items }, 200);
+  } catch (error) {
+    requestLogger.error("inventory.get.failed", { userId: user.id, error });
+    return authJson(
+      { error: { code: "INVENTORY_FAILED", message: "Could not load inventory" } },
+      400,
+    );
+  }
+}
+
+async function handlePurchaseRequest(ctx: RouteContext): Promise<Response> {
+  const { auth, economy, publishUserMessage, requestLogger } = ctx;
+
+  if (!auth || !economy) {
+    requestLogger.warn("inventory.purchase.database_required");
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for purchases" } },
+      503,
+    );
+  }
+
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
+
+  if (!user) {
+    requestLogger.warn("inventory.purchase.unauthenticated");
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before purchasing" } },
+      401,
+    );
+  }
+
+  const body = await readJsonWithLimit(ctx.request, ctx.config.maxAuthBodyBytes);
+
+  if (!body.ok) {
+    return badBody(body.reason, "INVALID_PURCHASE", "Unable to purchase item");
+  }
+
+  const itemType = (body.value as { itemType?: unknown }).itemType;
+
+  if (typeof itemType !== "string" || !itemType.trim()) {
+    return authJson({ error: { code: "INVALID_PURCHASE", message: "Item type is required" } }, 400);
+  }
+
+  try {
+    const result = await economy.purchase(user.id, itemType.trim());
+    requestLogger.info("inventory.purchase", {
+      userId: user.id,
+      itemType,
+      balance: result.balance,
+    });
+    publishUserMessage?.(user.id, { type: "balance.updated", dollars: result.balance });
+    publishUserMessage?.(user.id, { type: "inventory.updated", items: result.inventory });
+    return authJson({ balance: result.balance, items: result.inventory }, 200);
+  } catch (error) {
+    if (error instanceof EconomyError) {
+      const status = error.code === "INSUFFICIENT_FUNDS" ? 402 : 400;
+      requestLogger.warn("inventory.purchase.failed", {
+        userId: user.id,
+        itemType,
+        code: error.code,
+      });
+      return authJson({ error: { code: error.code, message: error.message } }, status);
+    }
+
+    requestLogger.error("inventory.purchase.unexpected_error", {
+      userId: user.id,
+      itemType,
+      error,
+    });
+    return authJson({ error: { code: "INVENTORY_FAILED", message: "Purchase failed" } }, 400);
   }
 }
 

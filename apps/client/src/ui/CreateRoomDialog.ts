@@ -1,3 +1,4 @@
+import { ROOM_CREATION_COST } from "@tilezo/protocol";
 import type { CreateRoomRequest, RoomTemplateSummary } from "../rooms/RoomClient";
 
 type CreateRoomDialogOptions = {
@@ -10,6 +11,7 @@ export class CreateRoomDialog {
 
   private readonly form = document.createElement("form");
   private readonly message = document.createElement("p");
+  private readonly costDisplay = document.createElement("p");
   private readonly nameInput = document.createElement("input");
   private readonly descriptionInput = document.createElement("input");
   private readonly templateSelect = document.createElement("select");
@@ -17,6 +19,7 @@ export class CreateRoomDialog {
   private readonly accessSelect = document.createElement("select");
   private readonly capacityInput = document.createElement("input");
   private readonly doorSelect = document.createElement("select");
+  private readonly submitButton = document.createElement("button");
   private templates: RoomTemplateSummary[] = [];
 
   constructor(private readonly options: CreateRoomDialogOptions) {
@@ -24,7 +27,6 @@ export class CreateRoomDialog {
     const title = document.createElement("h2");
     const subtitle = document.createElement("p");
     const actions = document.createElement("div");
-    const submit = document.createElement("button");
     const cancel = document.createElement("button");
 
     this.element.className = "create-room-panel hidden";
@@ -35,7 +37,8 @@ export class CreateRoomDialog {
 
     title.textContent = "Create room";
     subtitle.textContent = "Choose a Tilezo layout and basic access settings.";
-    header.append(title, subtitle);
+    this.costDisplay.className = "room-cost";
+    header.append(title, subtitle, this.costDisplay);
 
     this.nameInput.type = "text";
     this.nameInput.maxLength = 40;
@@ -59,9 +62,9 @@ export class CreateRoomDialog {
 
     this.doorSelect.required = true;
 
-    submit.type = "submit";
-    submit.className = "primary-button";
-    submit.textContent = "Create";
+    this.submitButton.type = "submit";
+    this.submitButton.className = "primary-button create-room-submit";
+    this.submitButton.textContent = "Create";
 
     cancel.type = "button";
     cancel.className = "secondary-button";
@@ -71,7 +74,7 @@ export class CreateRoomDialog {
       this.options.onCancel();
     });
 
-    actions.append(submit, cancel);
+    actions.append(this.submitButton, cancel);
     this.form.append(
       field("Name", this.nameInput),
       field("Description", this.descriptionInput),
@@ -90,10 +93,12 @@ export class CreateRoomDialog {
     this.element.append(header, this.message, this.form);
   }
 
-  show(templates: RoomTemplateSummary[]): void {
+  show(templates: RoomTemplateSummary[], balance: number): void {
     this.templates = templates;
     this.message.classList.remove("visible");
     this.message.textContent = "";
+    this.costDisplay.textContent = `Room cost: $${ROOM_CREATION_COST.toString()} — Your balance: $${balance.toString()}`;
+    this.submitButton.disabled = balance < ROOM_CREATION_COST;
     this.templateSelect.replaceChildren(
       ...templates.map((template) => option(template.id, template.name)),
     );

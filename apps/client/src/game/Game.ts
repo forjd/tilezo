@@ -7,6 +7,7 @@ import type {
   DirectMessageEditedMessage,
   DirectMessageReadReceiptMessage,
   DirectMessageTypingStatusMessage,
+  InventoryItem,
   PublicRoomSummary,
   RoomSnapshotMessage,
 } from "@tilezo/protocol/messages";
@@ -27,6 +28,8 @@ type GameOptions = {
   onDirectEdited: (message: DirectMessageEditedMessage) => void;
   onDirectDeleted: (message: DirectMessageDeletedMessage) => void;
   onFurnitureItemsChanged: (items: RoomItem[]) => void;
+  onBalanceUpdated?: (dollars: number) => void;
+  onInventoryUpdated?: (items: InventoryItem[]) => void;
   onDisconnected: () => void;
 };
 
@@ -103,6 +106,15 @@ export class Game {
         this.net.onMessage((message) => {
           if (message.type === "connected") {
             this.options.setStatus(`connected as ${message.userId}`);
+            this.options.onBalanceUpdated?.(message.dollars);
+          }
+
+          if (message.type === "balance.updated") {
+            this.options.onBalanceUpdated?.(message.dollars);
+          }
+
+          if (message.type === "inventory.updated") {
+            this.options.onInventoryUpdated?.(message.items);
           }
 
           if (message.type === "room.snapshot") {

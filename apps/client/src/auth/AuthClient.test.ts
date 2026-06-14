@@ -8,7 +8,7 @@ const originalProcess = Object.getOwnPropertyDescriptor(globalThis, "process");
 const originalPublicApiUrl = Bun.env.PUBLIC_API_URL;
 type FetchArgs = Parameters<typeof fetch>;
 
-const user = { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE };
+const user = { id: "user_1", username: "dan", appearance: DEFAULT_AVATAR_APPEARANCE, dollars: 500 };
 
 describe("authenticate", () => {
   afterEach(() => {

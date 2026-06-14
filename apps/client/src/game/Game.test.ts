@@ -95,7 +95,7 @@ describe("Game", () => {
       text: "hi",
       sentAt: "2026-06-13T00:00:00.000Z",
     } satisfies ServerMessage;
-    net.emitMessage({ type: "connected", userId: "user_1" });
+    net.emitMessage({ type: "connected", userId: "user_1", dollars: 500 });
     net.emitMessage(snapshot);
     net.emitMessage({
       type: "room.list",

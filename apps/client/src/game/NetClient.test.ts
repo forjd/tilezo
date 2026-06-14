@@ -100,11 +100,11 @@ describe("NetClient", () => {
 
     void client.connect();
     const socket = currentSocket();
-    socket.message(JSON.stringify({ type: "connected", userId: "user_1" }));
+    socket.message(JSON.stringify({ type: "connected", userId: "user_1", dollars: 500 }));
     unsubscribe();
-    socket.message(JSON.stringify({ type: "connected", userId: "user_2" }));
+    socket.message(JSON.stringify({ type: "connected", userId: "user_2", dollars: 0 }));
 
-    expect(received).toEqual([{ type: "connected", userId: "user_1" }]);
+    expect(received).toEqual([{ type: "connected", userId: "user_1", dollars: 500 }]);
   });
 
   test("reports invalid messages, connection errors, and disconnects", async () => {

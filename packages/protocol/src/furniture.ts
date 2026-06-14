@@ -22,6 +22,7 @@ export type FurnitureDefinition = {
   spriteKey: string;
   interactionKind: FurnitureInteractionKind;
   defaultState: Record<string, unknown>;
+  price: number;
 };
 
 export type RoomItem = {
@@ -48,6 +49,7 @@ export const FURNITURE_DEFINITIONS = [
     spriteKey: "woven_rug",
     interactionKind: "none",
     defaultState: {},
+    price: 25,
   },
   {
     id: "crate_table",
@@ -62,6 +64,7 @@ export const FURNITURE_DEFINITIONS = [
     spriteKey: "crate_table",
     interactionKind: "none",
     defaultState: {},
+    price: 50,
   },
   {
     id: "low_stool",
@@ -76,6 +79,7 @@ export const FURNITURE_DEFINITIONS = [
     spriteKey: "low_stool",
     interactionKind: "sit",
     defaultState: {},
+    price: 35,
   },
   {
     id: "reed_divider",
@@ -90,6 +94,7 @@ export const FURNITURE_DEFINITIONS = [
     spriteKey: "reed_divider",
     interactionKind: "none",
     defaultState: {},
+    price: 45,
   },
   {
     id: "glass_lamp",
@@ -104,6 +109,7 @@ export const FURNITURE_DEFINITIONS = [
     spriteKey: "glass_lamp",
     interactionKind: "toggle",
     defaultState: { on: false },
+    price: 60,
   },
 ] as const satisfies readonly FurnitureDefinition[];
 

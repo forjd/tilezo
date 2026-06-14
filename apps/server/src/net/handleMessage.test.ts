@@ -3,6 +3,7 @@ import { createRectRoomLayout } from "@tilezo/engine";
 import { DEFAULT_AVATAR_APPEARANCE, type RoomItem, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
+import type { EconomyStore } from "../economy/economy";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
@@ -394,6 +395,8 @@ describe("handleMessage", () => {
     const ws = createSocket({ userId: "user_db_1", username: "Dan" });
     const published: ServerMessage[] = [];
     const saved: Array<{ roomId: string; item: RoomItem }> = [];
+    const economy = createEconomyStore();
+    await economy.refundItem(ws.data.userId, "crate_table");
 
     handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "owned_room" }), {
       rooms,
@@ -412,6 +415,7 @@ describe("handleMessage", () => {
       }),
       {
         rooms,
+        economy,
         publish(_topic, message) {
           published.push(message);
         },
@@ -444,6 +448,122 @@ describe("handleMessage", () => {
 
     expect(ws.sent).toEqual([
       { type: "error", code: "INVALID_TILE", message: "Target tile is not walkable" },
+    ]);
+  });
+
+  test("rejects placement when the inventory item is not owned", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("owned_room", "Owned Room"), {
+      ownerUserId: "user_db_1",
+      visibility: "public",
+    });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const economy = createEconomyStore();
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "owned_room" }), {
+      rooms,
+      publish() {},
+    });
+    expect(ws.sent[0]).toMatchObject({ type: "room.snapshot", canEditItems: true });
+    ws.sent.length = 0;
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 2, y: 1 },
+        rotation: 0,
+      }),
+      {
+        rooms,
+        economy,
+        publish() {},
+      },
+    );
+    await flushAsyncMessages();
+
+    expect(ws.sent).toEqual([
+      {
+        type: "error",
+        code: "INSUFFICIENT_INVENTORY",
+        message: "You do not have that item in your inventory",
+      },
+    ]);
+  });
+
+  test("refunds inventory when the owner picks up a placed item", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("owned_room", "Owned Room"), {
+      ownerUserId: "user_db_1",
+      visibility: "public",
+    });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const economy = createEconomyStore();
+    await economy.refundItem(ws.data.userId, "crate_table");
+    const published: ServerMessage[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "owned_room" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 2, y: 1 },
+        rotation: 0,
+      }),
+      {
+        rooms,
+        economy,
+        publish(_topic, message) {
+          published.push(message);
+        },
+        persistence: {
+          async getRoom() {
+            return undefined;
+          },
+          async seedRoom() {},
+          async saveRoomItem() {},
+        },
+      },
+    );
+    await flushAsyncMessages();
+
+    const placedItem = published.find((message) => message.type === "room.item.placed")?.item;
+    expect(placedItem).toBeDefined();
+    expect(await economy.getInventory(ws.data.userId)).toEqual([]);
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.pickup.request",
+        itemId: placedItem?.id ?? "",
+      }),
+      {
+        rooms,
+        economy,
+        publish(_topic, message) {
+          published.push(message);
+        },
+        persistence: {
+          async getRoom() {
+            return undefined;
+          },
+          async seedRoom() {},
+          async deleteRoomItem() {},
+        },
+      },
+    );
+    await flushAsyncMessages();
+
+    expect(published.some((message) => message.type === "room.item.picked_up")).toBe(true);
+    expect(await economy.getInventory(ws.data.userId)).toEqual([
+      { itemType: "crate_table", quantity: 1 },
     ]);
   });
 
@@ -962,7 +1082,7 @@ describe("handleOpen", () => {
     // The socket subscribes to its per-user DM topic on open, then resumes the room.
     expect(ws.subscribed).toEqual(["user:user_db_1", "room:studio"]);
     expect(ws.sent).toEqual([
-      { type: "connected", userId: "user_db_1" },
+      { type: "connected", userId: "user_db_1", dollars: 0 },
       {
         type: "room.snapshot",
         roomId: "studio",
@@ -1057,7 +1177,7 @@ describe("handleOpen", () => {
     });
     await flushAsyncMessages();
 
-    expect(ws.sent).toEqual([{ type: "connected", userId: "user_db_1" }]);
+    expect(ws.sent).toEqual([{ type: "connected", userId: "user_db_1", dollars: 0 }]);
     expect(ws.data.roomId).toBeUndefined();
     expect(warning).toBe("persistence.room_session.clear_failed");
   });
@@ -1822,7 +1942,39 @@ describe("consumeRateLimit", () => {
   });
 });
 
-function createSocket(data: SocketData = { userId: "user_1" }) {
+function createEconomyStore(): EconomyStore {
+  const inventory = new Map<string, number>();
+
+  return {
+    async getBalance() {
+      return 500;
+    },
+    async getInventory(_userId: string) {
+      return [...inventory.entries()]
+        .filter(([, quantity]) => quantity > 0)
+        .map(([itemType, quantity]) => ({ itemType, quantity }));
+    },
+    async purchase() {
+      return { balance: 500, inventory: [] };
+    },
+    async spend() {
+      return { balance: 500 };
+    },
+    async reserveItem(_userId: string, itemType: string) {
+      const quantity = inventory.get(itemType) ?? 0;
+      if (quantity === 0) {
+        return false;
+      }
+      inventory.set(itemType, quantity - 1);
+      return true;
+    },
+    async refundItem(_userId: string, itemType: string) {
+      inventory.set(itemType, (inventory.get(itemType) ?? 0) + 1);
+    },
+  };
+}
+
+function createSocket(data: SocketData = { userId: "user_1", dollars: 0 }) {
   const sent: ServerMessage[] = [];
   const subscribed: string[] = [];
   const unsubscribed: string[] = [];

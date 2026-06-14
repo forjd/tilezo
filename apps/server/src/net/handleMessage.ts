@@ -9,6 +9,7 @@ import {
 } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
+import type { EconomyStore } from "../economy/economy";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
@@ -25,6 +26,7 @@ type Context = {
   publish: (topic: string, message: ServerMessage) => void;
   persistence?: PersistenceStore;
   directMessages?: DirectMessageService;
+  economy?: EconomyStore;
   logger?: Logger;
   metrics?: Metrics;
   presence?: PresenceTracker;
@@ -407,6 +409,7 @@ export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): v
   send(ws, {
     type: "connected",
     userId: ws.data.userId,
+    dollars: ws.data.dollars ?? 0,
   });
 
   if (!ws.data.resumeRoomId) {
@@ -676,6 +679,12 @@ async function placeRoomItem(
     return;
   }
 
+  if (!(await context.economy?.reserveItem(ws.data.userId, definition.id))) {
+    context.metrics?.increment("room_item.place.rejected.insufficient_inventory");
+    sendError(ws, "INSUFFICIENT_INVENTORY", "You do not have that item in your inventory");
+    return;
+  }
+
   const item: RoomItem = {
     id: createId("item"),
     itemType: definition.id,
@@ -688,6 +697,7 @@ async function placeRoomItem(
   const placed = room.placeItem(item);
 
   if (!placed) {
+    await context.economy?.refundItem(ws.data.userId, definition.id);
     context.metrics?.increment("room_item.place.rejected.invalid_placement");
     sendError(ws, "INVALID_ITEM_PLACEMENT", "Furniture cannot be placed there");
     return;
@@ -695,11 +705,13 @@ async function placeRoomItem(
 
   if (!(await saveRoomItem(room.id, placed, ws, context))) {
     room.pickupItem(placed.id);
+    await context.economy?.refundItem(ws.data.userId, definition.id);
     return;
   }
 
   context.rooms.rememberRoomItem(room.id, placed);
   context.publish(roomTopic(room.id), { type: "room.item.placed", item: placed });
+  await sendInventoryUpdate(ws, context);
   context.metrics?.increment("room_item.place.accepted");
 }
 
@@ -768,8 +780,10 @@ async function pickupRoomItem(
     return;
   }
 
+  await context.economy?.refundItem(ws.data.userId, pickedUp.itemType);
   context.rooms.forgetRoomItem(room.id, pickedUp.id);
   context.publish(roomTopic(room.id), { type: "room.item.picked_up", itemId: pickedUp.id });
+  await sendInventoryUpdate(ws, context);
   context.metrics?.increment("room_item.pickup.accepted");
 }
 
@@ -1219,8 +1233,19 @@ function roomTopic(roomId: string): string {
   return `room:${roomId}`;
 }
 
-function userTopic(userId: string): string {
+export function userTopic(userId: string): string {
   return `user:${userId}`;
+}
+
+async function sendInventoryUpdate(
+  ws: ServerWebSocket<SocketData>,
+  context: Context,
+): Promise<void> {
+  const items = await context.economy?.getInventory(ws.data.userId);
+
+  if (items) {
+    context.publish(userTopic(ws.data.userId), { type: "inventory.updated", items });
+  }
 }
 
 function send(ws: ServerWebSocket<SocketData>, message: ServerMessage): void {

@@ -21,6 +21,7 @@ export type CreateRoomRequest = {
 
 export type CreatedRoom = {
   roomId: string;
+  balance?: number;
   room: {
     id: string;
     name: string;

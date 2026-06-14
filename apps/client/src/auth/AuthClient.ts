@@ -1,15 +1,12 @@
+import type { AuthUser } from "@tilezo/protocol";
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
 import { DEFAULT_API_URL } from "../assets";
+
+export type { AuthUser };
 
 const LOGOUT_TIMEOUT_MS = 5_000;
 
 export type AuthMode = "login" | "register";
-
-export type AuthUser = {
-  id: string;
-  username: string;
-  appearance: AvatarAppearance;
-};
 
 // The token is never returned to page JavaScript: the server delivers it as an HttpOnly
 // session cookie, and every authenticated request below uses `credentials: "include"`.

@@ -1,9 +1,16 @@
-import { FURNITURE_DEFINITIONS, getFurnitureDefinition, type RoomItem } from "@tilezo/protocol";
+import {
+  FURNITURE_DEFINITIONS,
+  getFurnitureDefinition,
+  type InventoryItem,
+  type RoomItem,
+} from "@tilezo/protocol";
 import type { FurnitureEditMode } from "../game/RoomScene";
 
 type FurniturePanelOptions = {
   onModeChange: (mode?: FurnitureEditMode) => void;
   onPickup: (itemId: string) => void;
+  onBuy: (itemType: string) => Promise<void> | void;
+  inventory: InventoryItem[];
 };
 
 export class FurniturePanel {
@@ -11,10 +18,13 @@ export class FurniturePanel {
   private readonly itemSelect = document.createElement("select");
   private readonly rotateButton = document.createElement("button");
   private readonly placeButton = document.createElement("button");
+  private readonly buyButton = document.createElement("button");
   private readonly closeButton = document.createElement("button");
   private readonly itemList = document.createElement("div");
   private readonly emptyMessage = document.createElement("p");
+  private readonly message = document.createElement("p");
   private items: RoomItem[] = [];
+  private inventory: Map<string, number>;
   private canEdit = false;
   private rotation = 0;
   private selectedMoveItemId?: string;
@@ -31,6 +41,7 @@ export class FurniturePanel {
     actions.className = "furniture-actions";
     this.itemList.className = "furniture-list";
     this.emptyMessage.className = "room-list-empty";
+    this.message.className = "furniture-message";
 
     title.textContent = "Furniture";
     this.closeButton.type = "button";
@@ -43,17 +54,17 @@ export class FurniturePanel {
     this.placeButton.type = "button";
     this.placeButton.className = "primary-button furniture-place-button";
     this.placeButton.textContent = "Place";
+    this.buyButton.type = "button";
+    this.buyButton.className = "primary-button furniture-buy-button";
     this.emptyMessage.textContent = "No furniture placed.";
 
-    for (const definition of FURNITURE_DEFINITIONS) {
-      const option = document.createElement("option");
-      option.value = definition.id;
-      option.textContent = definition.name;
-      this.itemSelect.append(option);
-    }
+    this.inventory = this.buildInventoryMap(options.inventory);
+    this.populateItemSelect();
 
     this.itemSelect.addEventListener("change", () => {
       this.selectedMoveItemId = undefined;
+      this.clearMessage();
+      this.syncControls();
       this.emitPlaceMode();
     });
     this.rotateButton.addEventListener("click", () => {
@@ -64,13 +75,17 @@ export class FurniturePanel {
       this.selectedMoveItemId = undefined;
       this.emitPlaceMode();
     });
+    this.buyButton.addEventListener("click", () => {
+      void this.buySelected();
+    });
     this.closeButton.addEventListener("click", () => this.hide());
 
-    actions.append(this.itemSelect, this.rotateButton, this.placeButton);
-    controls.append(actions, this.itemList);
+    actions.append(this.itemSelect, this.rotateButton, this.placeButton, this.buyButton);
+    controls.append(this.message, actions, this.itemList);
     header.append(title, this.closeButton);
     this.element.append(header, controls);
     this.renderItems();
+    this.syncControls();
   }
 
   show(): void {
@@ -79,11 +94,13 @@ export class FurniturePanel {
     }
 
     this.element.classList.remove("hidden");
+    this.syncControls();
     this.emitCurrentMode();
   }
 
   hide(): void {
     this.element.classList.add("hidden");
+    this.clearMessage();
     this.options.onModeChange(undefined);
   }
 
@@ -106,6 +123,75 @@ export class FurniturePanel {
       this.selectedMoveItemId = undefined;
       this.emitPlaceMode();
     }
+  }
+
+  setInventory(inventory: InventoryItem[]): void {
+    this.inventory = this.buildInventoryMap(inventory);
+    this.populateItemSelect();
+    this.syncControls();
+  }
+
+  private buildInventoryMap(inventory: InventoryItem[]): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const item of inventory) {
+      map.set(item.itemType, item.quantity);
+    }
+    return map;
+  }
+
+  private populateItemSelect(): void {
+    const selectedValue = this.itemSelect.value;
+    this.itemSelect.replaceChildren();
+
+    for (const definition of FURNITURE_DEFINITIONS) {
+      const option = document.createElement("option");
+      option.value = definition.id;
+      const owned = this.inventory.get(definition.id) ?? 0;
+      option.textContent = `${definition.name} ($${definition.price.toString()}) — owned: ${owned.toString()}`;
+      this.itemSelect.append(option);
+    }
+
+    const stillAvailable = FURNITURE_DEFINITIONS.some((d) => d.id === selectedValue);
+    this.itemSelect.value = stillAvailable ? selectedValue : (FURNITURE_DEFINITIONS[0]?.id ?? "");
+  }
+
+  private syncControls(): void {
+    const definition = getFurnitureDefinition(this.itemSelect.value);
+    const owned = definition ? (this.inventory.get(definition.id) ?? 0) : 0;
+
+    this.placeButton.disabled = owned === 0;
+    this.placeButton.textContent = `Place (${owned.toString()})`;
+    this.buyButton.textContent = definition ? `Buy $${definition.price.toString()}` : "Buy";
+    this.buyButton.disabled = false;
+  }
+
+  private async buySelected(): Promise<void> {
+    const itemType = this.itemSelect.value;
+    const definition = getFurnitureDefinition(itemType);
+
+    if (!definition) {
+      return;
+    }
+
+    this.clearMessage();
+    this.buyButton.disabled = true;
+    try {
+      await this.options.onBuy(itemType);
+    } catch (error) {
+      this.showMessage(error instanceof Error ? error.message : "Purchase failed");
+    } finally {
+      this.buyButton.disabled = false;
+    }
+  }
+
+  private showMessage(message: string): void {
+    this.message.textContent = message;
+    this.message.classList.add("visible");
+  }
+
+  private clearMessage(): void {
+    this.message.textContent = "";
+    this.message.classList.remove("visible");
   }
 
   private renderItems(): void {
@@ -170,9 +256,17 @@ export class FurniturePanel {
   }
 
   private emitPlaceMode(): void {
+    const definition = getFurnitureDefinition(this.itemSelect.value);
+    const owned = definition ? (this.inventory.get(definition.id) ?? 0) : 0;
+
+    if (owned === 0) {
+      this.options.onModeChange(undefined);
+      return;
+    }
+
     this.options.onModeChange({
       type: "place",
-      itemType: this.itemSelect.value || FURNITURE_DEFINITIONS[0].id,
+      itemType: definition?.id ?? FURNITURE_DEFINITIONS[0].id,
       rotation: this.rotation,
     });
   }

@@ -1,3 +1,4 @@
+import { ROOM_CREATION_COST } from "@tilezo/protocol";
 import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import { DEFAULT_ROOM_ID } from "../assets";
 import {
@@ -11,6 +12,7 @@ import { blockUser } from "../blocks/BlockClient";
 import type { FriendSummary } from "../friends/FriendClient";
 import { addFriend, listFriends, removeFriend } from "../friends/FriendClient";
 import type { Game } from "../game/Game";
+import { getInventory, purchaseItem } from "../inventory/InventoryClient";
 import { loadConversation, loadUnreadCounts } from "../messaging/DirectMessageClient";
 import { createRoom, listRoomTemplates } from "../rooms/RoomClient";
 import { ClientLogger } from "../telemetry/ClientLogger";
@@ -66,6 +68,8 @@ type CreateAppDependencies = {
   setInterval: (callback: () => void, ms: number) => AppInterval;
   setTimeout: (callback: () => void, ms: number) => AppTimeout;
   updateAppearance: typeof updateAppearance;
+  getInventory: typeof getInventory;
+  purchaseItem: typeof purchaseItem;
 };
 
 const defaultCreateAppDependencies: CreateAppDependencies = {
@@ -96,6 +100,8 @@ const defaultCreateAppDependencies: CreateAppDependencies = {
   setInterval: (callback, ms) => setInterval(callback, ms) as AppInterval,
   setTimeout: (callback, ms) => setTimeout(callback, ms) as AppTimeout,
   updateAppearance,
+  getInventory,
+  purchaseItem,
 };
 
 export function createApp(
@@ -117,6 +123,7 @@ export function createApp(
   const furnitureButton = document.createElement("button");
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
+  const balanceDisplay = document.createElement("span");
   const chat = deps.createChatPanel();
   const clientLogger = deps.createClientLogger();
   // The auth token lives only in an HttpOnly cookie; the page keeps just the user profile.
@@ -127,6 +134,7 @@ export function createApp(
   let reconnectTimeout: AppTimeout | undefined;
   let countdownInterval: AppInterval | undefined;
   let reconnecting = false;
+  let balanceCueTimeout: AppTimeout | undefined;
   const unreadCounts = new Map<string, number>();
 
   shell.className = "app-shell";
@@ -153,9 +161,35 @@ export function createApp(
   logOut.className = "log-out-button hidden";
   logOut.type = "button";
   logOut.textContent = "Log out";
+  balanceDisplay.className = "balance hidden";
+  balanceDisplay.textContent = "";
   brandTitle.textContent = "Room";
   brandSubtitle.textContent = "server-authoritative isometric multiplayer";
   status.textContent = "idle";
+
+  function updateBalanceDisplay(dollars: number): void {
+    balanceDisplay.textContent = `$${dollars.toString()}`;
+  }
+
+  function cueBalanceChange(): void {
+    balanceDisplay.classList.remove("balance-updated");
+    // Reading layout restarts the animation when updates arrive before the cue clears.
+    void balanceDisplay.offsetWidth;
+    balanceDisplay.classList.add("balance-updated");
+    deps.clearTimeout(balanceCueTimeout);
+    balanceCueTimeout = deps.setTimeout(() => {
+      balanceDisplay.classList.remove("balance-updated");
+      balanceCueTimeout = undefined;
+    }, 900);
+  }
+
+  function syncCreateRoomButton(): void {
+    const canCreate = (user?.dollars ?? 0) >= ROOM_CREATION_COST;
+    createRoomButton.disabled = !canCreate;
+    createRoomButton.title = canCreate
+      ? ""
+      : `You need $${ROOM_CREATION_COST.toString()} to create a room`;
+  }
 
   brand.append(brandTitle, brandSubtitle);
   topActions.append(
@@ -166,7 +200,7 @@ export function createApp(
     editCharacter,
     logOut,
   );
-  topBar.append(brand, topActions, status);
+  topBar.append(brand, topActions, status, balanceDisplay);
 
   const roomBrowser = deps.createRoomBrowser({
     onJoin(roomId) {
@@ -254,6 +288,26 @@ export function createApp(
     onPickup(itemId) {
       game?.pickupRoomItem(itemId);
     },
+    onBuy: async (itemType) => {
+      if (!user) {
+        return;
+      }
+      status.textContent = "purchasing";
+      try {
+        const result = await deps.purchaseItem(itemType);
+        user.dollars = result.balance;
+        updateBalanceDisplay(result.balance);
+        cueBalanceChange();
+        furniturePanel.setInventory(result.items);
+        status.textContent = "purchased";
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Purchase failed";
+        status.textContent = message;
+        void clientLogger.event("furniture.purchase_failed", { message }, "warn");
+        throw new Error(message);
+      }
+    },
+    inventory: [],
   });
 
   async function ensureGame(): Promise<Game> {
@@ -291,6 +345,18 @@ export function createApp(
       },
       onFurnitureItemsChanged(items) {
         furniturePanel.setItems(items);
+      },
+      onBalanceUpdated(dollars) {
+        if (!user) {
+          return;
+        }
+        user.dollars = dollars;
+        updateBalanceDisplay(dollars);
+        cueBalanceChange();
+        syncCreateRoomButton();
+      },
+      onInventoryUpdated(items) {
+        furniturePanel.setInventory(items);
       },
       onDirectMessage(message) {
         const appended = directMessagePanel.append(message);
@@ -430,6 +496,7 @@ export function createApp(
 
     try {
       user = await deps.authenticate({ mode, username, password });
+      updateBalanceDisplay(user.dollars);
       void clientLogger.event(`auth.${mode}.succeeded`, { userId: user.id });
       logOut.classList.remove("hidden");
       friendsButton.classList.remove("hidden");
@@ -456,6 +523,11 @@ export function createApp(
 
       try {
         const created = await deps.createRoom(room);
+        if (created.balance !== undefined) {
+          user.dollars = created.balance;
+          updateBalanceDisplay(created.balance);
+          cueBalanceChange();
+        }
         createRoomDialog.hide();
         roomBrowser.hide();
 
@@ -510,6 +582,7 @@ export function createApp(
   });
 
   furnitureButton.addEventListener("click", () => {
+    void refreshInventory();
     furniturePanel.show();
   });
 
@@ -524,6 +597,8 @@ export function createApp(
 
     logOut.disabled = true;
     clearReconnectSchedule();
+    deps.clearTimeout(balanceCueTimeout);
+    balanceCueTimeout = undefined;
 
     if (gameStarted) {
       game?.stop();
@@ -531,6 +606,20 @@ export function createApp(
 
     await deps.requestLogout();
     createApp(root, deps);
+  }
+
+  async function refreshInventory(): Promise<void> {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const items = await deps.getInventory();
+      furniturePanel.setInventory(items);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Inventory failed";
+      status.textContent = message;
+    }
   }
 
   shell.append(
@@ -557,6 +646,8 @@ export function createApp(
     friendsButton.classList.remove("hidden");
     createRoomButton.classList.remove("hidden");
     logOut.classList.remove("hidden");
+    balanceDisplay.classList.remove("hidden");
+    syncCreateRoomButton();
 
     if (options.editCharacter) {
       editCharacter.classList.remove("hidden");
@@ -571,6 +662,7 @@ export function createApp(
     }
 
     user = existing;
+    updateBalanceDisplay(user.dollars);
     login.hide();
     logOut.classList.remove("hidden");
     friendsButton.classList.remove("hidden");
@@ -643,10 +735,14 @@ export function createApp(
   }
 
   async function openCreateRoomDialog(): Promise<void> {
+    if (!user) {
+      return;
+    }
+
     status.textContent = "loading room templates";
 
     try {
-      createRoomDialog.show(await deps.listRoomTemplates());
+      createRoomDialog.show(await deps.listRoomTemplates(), user.dollars);
       status.textContent = "create room";
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "Room templates failed";
