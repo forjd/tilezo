@@ -1,6 +1,7 @@
 import { avatarAppearanceSchema } from "@tilezo/protocol";
 import { AuthError, type AuthService, normalizeUsername } from "../auth/auth";
 import type { FixedWindowRateLimiter } from "../auth/rateLimit";
+import { BlockError, type BlockService } from "../blocks/blocks";
 import type { ServerConfig } from "../config";
 import type { PersistenceStore } from "../db/persistence";
 import { FriendError, type FriendService } from "../friends/friends";
@@ -21,6 +22,7 @@ export type RouterDeps = {
   metrics: Metrics;
   auth?: AuthService;
   friends?: FriendService;
+  blocks?: BlockService;
   directMessages?: DirectMessageService;
   persistence?: PersistenceStore;
   rooms: RoomManager;
@@ -137,6 +139,10 @@ async function dispatch(ctx: RouteContext): Promise<Response> {
     request.method === "GET"
   ) {
     return handleDirectMessageHistoryRequest(ctx);
+  }
+
+  if (url.pathname === "/blocked-users" || url.pathname.startsWith("/blocked-users/")) {
+    return handleBlockedUsersRequest(ctx);
   }
 
   if (url.pathname === "/friends" || url.pathname.startsWith("/friends/")) {
@@ -392,6 +398,90 @@ async function handleClientEventRequest(ctx: RouteContext): Promise<Response> {
   }
 
   return authJson({ ok: true }, 202);
+}
+
+async function handleBlockedUsersRequest(ctx: RouteContext): Promise<Response> {
+  const { auth, blocks, requestLogger, url } = ctx;
+
+  if (!auth || !blocks) {
+    requestLogger.warn("blocks.database_required");
+    return authJson(
+      { error: { code: "DATABASE_REQUIRED", message: "Database is required for blocking" } },
+      503,
+    );
+  }
+
+  const user = await auth.verifyToken(readSessionToken(ctx.request) ?? "");
+
+  if (!user) {
+    requestLogger.warn("blocks.unauthenticated");
+    return authJson(
+      { error: { code: "UNAUTHENTICATED", message: "Log in before managing blocks" } },
+      401,
+    );
+  }
+
+  try {
+    if (url.pathname === "/blocked-users" && ctx.request.method === "GET") {
+      return authJson({ blockedUsers: await blocks.list(user.id) }, 200);
+    }
+
+    if (url.pathname === "/blocked-users" && ctx.request.method === "POST") {
+      const limited = enforceRateLimit(
+        ctx,
+        ctx.friendRateLimiter,
+        `user:${user.id}`,
+        "blocks.rate_limited",
+        "Too many block requests, try again shortly",
+      );
+      if (limited) {
+        return limited;
+      }
+
+      const body = await readJsonWithLimit(ctx.request, ctx.config.maxAuthBodyBytes);
+
+      if (!body.ok) {
+        return badBody(body.reason, "INVALID_BLOCK", "Blocked user id is required");
+      }
+
+      const blockedUserId = (body.value as { userId?: unknown }).userId;
+
+      if (typeof blockedUserId !== "string" || !blockedUserId.trim()) {
+        return authJson(
+          { error: { code: "INVALID_BLOCK", message: "Blocked user id is required" } },
+          400,
+        );
+      }
+
+      await blocks.block(user.id, blockedUserId.trim());
+      requestLogger.info("blocks.added", { userId: user.id, blockedUserId });
+      return authJson({ ok: true }, 200);
+    }
+
+    if (url.pathname.startsWith("/blocked-users/") && ctx.request.method === "DELETE") {
+      const blockedUserId = decodeURIComponent(url.pathname.slice("/blocked-users/".length));
+
+      if (!blockedUserId) {
+        return authJson(
+          { error: { code: "INVALID_BLOCK", message: "Blocked user id is required" } },
+          400,
+        );
+      }
+
+      await blocks.unblock(user.id, blockedUserId);
+      requestLogger.info("blocks.removed", { userId: user.id, blockedUserId });
+      return authJson({ ok: true }, 200);
+    }
+
+    return authJson({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } }, 405);
+  } catch (error) {
+    if (error instanceof BlockError) {
+      return authJson({ error: { code: error.code, message: error.message } }, 400);
+    }
+
+    requestLogger.error("blocks.failed", { userId: user.id, error });
+    return authJson({ error: { code: "BLOCKS_FAILED", message: "Block request failed" } }, 400);
+  }
 }
 
 async function handleFriendsRequest(ctx: RouteContext): Promise<Response> {

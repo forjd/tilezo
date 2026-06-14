@@ -726,6 +726,7 @@ select {
 }
 
 .friend-join-button,
+.friend-block-button,
 .friend-remove-button {
   width: 74px;
   height: 30px;

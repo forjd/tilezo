@@ -30,6 +30,7 @@ export type DirectMessageStore = {
 
 // Friendship gate (injected): direct messages are only allowed between mutual friends.
 type FriendshipCheck = (userId: string, otherUserId: string) => Promise<boolean>;
+type BlockCheck = (userId: string, otherUserId: string) => Promise<boolean>;
 
 export class DirectMessageError extends Error {
   constructor(
@@ -44,6 +45,7 @@ export class DirectMessageService {
   constructor(
     private readonly store: DirectMessageStore,
     private readonly areFriends: FriendshipCheck,
+    private readonly isBlockedEitherDirection: BlockCheck = async () => false,
   ) {}
 
   async send(senderId: string, recipientId: string, text: string): Promise<DirectMessageRecord> {
@@ -51,9 +53,7 @@ export class DirectMessageService {
       throw new DirectMessageError("INVALID_RECIPIENT", "You cannot message yourself");
     }
 
-    if (!(await this.areFriends(senderId, recipientId))) {
-      throw new DirectMessageError("NOT_FRIENDS", "You can only message your friends");
-    }
+    await this.assertCanMessage(senderId, recipientId);
 
     return this.store.save({
       id: createId("dm"),
@@ -68,15 +68,36 @@ export class DirectMessageService {
     otherUserId: string,
     limit = DEFAULT_DM_HISTORY_LIMIT,
   ): Promise<DirectMessageRecord[]> {
-    if (!(await this.areFriends(userId, otherUserId))) {
-      throw new DirectMessageError("NOT_FRIENDS", "You can only message your friends");
-    }
+    await this.assertCanMessage(userId, otherUserId);
 
     const safeLimit = Math.max(
       1,
       Math.min(MAX_DM_HISTORY_LIMIT, Math.trunc(limit) || DEFAULT_DM_HISTORY_LIMIT),
     );
     return this.store.listConversation(userId, otherUserId, safeLimit);
+  }
+
+  async canMessage(userId: string, otherUserId: string): Promise<boolean> {
+    try {
+      await this.assertCanMessage(userId, otherUserId);
+      return true;
+    } catch (error) {
+      if (error instanceof DirectMessageError) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
+  private async assertCanMessage(userId: string, otherUserId: string): Promise<void> {
+    if (!(await this.areFriends(userId, otherUserId))) {
+      throw new DirectMessageError("NOT_FRIENDS", "You can only message your friends");
+    }
+
+    if (await this.isBlockedEitherDirection(userId, otherUserId)) {
+      throw new DirectMessageError("BLOCKED", "You cannot message this player");
+    }
   }
 }
 

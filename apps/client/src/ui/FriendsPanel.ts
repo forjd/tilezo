@@ -8,6 +8,7 @@ type FriendsPanelOptions = {
   onMessage: (friend: FriendSummary) => void;
   onRefresh: () => void;
   onRemove: (friendId: string) => void;
+  onBlock: (friend: FriendSummary) => void;
 };
 
 type AvatarPreviewLike = Pick<AvatarPreview, "destroy" | "element" | "mount" | "update">;
@@ -73,6 +74,7 @@ export class FriendsPanel {
       const target = event.target as Element | null;
       const joinButton = target?.closest<HTMLButtonElement>("button[data-room-id]");
       const messageButton = target?.closest<HTMLButtonElement>("button[data-message-friend-id]");
+      const blockButton = target?.closest<HTMLButtonElement>("button[data-block-friend-id]");
       const removeButton = target?.closest<HTMLButtonElement>("button[data-friend-id]");
 
       if (joinButton && !joinButton.disabled) {
@@ -86,6 +88,15 @@ export class FriendsPanel {
 
         if (friend) {
           this.options.onMessage(friend);
+        }
+        return;
+      }
+
+      if (blockButton) {
+        const friend = this.friends.find((f) => f.id === blockButton.dataset.blockFriendId);
+
+        if (friend) {
+          this.options.onBlock(friend);
         }
         return;
       }
@@ -148,6 +159,7 @@ export class FriendsPanel {
     const actions = document.createElement("div");
     const joinButton = document.createElement("button");
     const messageButton = document.createElement("button");
+    const blockButton = document.createElement("button");
     const removeButton = document.createElement("button");
 
     item.className = friend.online ? "friend-item online" : "friend-item";
@@ -166,6 +178,10 @@ export class FriendsPanel {
     messageButton.className = "secondary-button friend-message-button";
     messageButton.dataset.messageFriendId = friend.id;
     messageButton.textContent = "Message";
+    blockButton.type = "button";
+    blockButton.className = "secondary-button friend-block-button";
+    blockButton.dataset.blockFriendId = friend.id;
+    blockButton.textContent = "Block";
     removeButton.type = "button";
     removeButton.className = "secondary-button friend-remove-button";
     removeButton.dataset.friendId = friend.id;
@@ -179,7 +195,7 @@ export class FriendsPanel {
       : "offline";
 
     details.append(name, meta);
-    actions.append(joinButton, messageButton, removeButton);
+    actions.append(joinButton, messageButton, blockButton, removeButton);
     item.append(preview.element, details, actions);
     return item;
   }

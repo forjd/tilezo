@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
 import { AuthError, type AuthService } from "../auth/auth";
 import { FixedWindowRateLimiter } from "../auth/rateLimit";
+import { BlockError, type BlockService } from "../blocks/blocks";
 import { getConfig } from "../config";
 import type { PersistenceStore } from "../db/persistence";
 import { FriendError, type FriendService } from "../friends/friends";
@@ -45,6 +46,11 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
       }),
       remove: async () => {},
     } as unknown as FriendService,
+    blocks: {
+      list: async () => [],
+      block: async () => {},
+      unblock: async () => {},
+    } as unknown as BlockService,
     directMessages: {
       history: async () => [
         {
@@ -406,6 +412,85 @@ describe("createHttpRouter", () => {
       );
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({ error: { code: "NOT_FRIENDS" } });
+    });
+  });
+
+  describe("blocked users", () => {
+    test("blocks, lists, and unblocks users", async () => {
+      const blocked: string[] = [];
+      const unblocked: string[] = [];
+      const route = createHttpRouter(
+        makeDeps({
+          blocks: {
+            list: async () => [
+              {
+                id: "user_2",
+                username: "Kai",
+                appearance: DEFAULT_AVATAR_APPEARANCE,
+                blockedAt: "2026-06-13T00:00:00.000Z",
+              },
+            ],
+            block: async (_userId: string, blockedUserId: string) => {
+              blocked.push(blockedUserId);
+            },
+            unblock: async (_userId: string, blockedUserId: string) => {
+              unblocked.push(blockedUserId);
+            },
+          } as unknown as BlockService,
+        }),
+      );
+
+      const post = await route(
+        request("/blocked-users", {
+          method: "POST",
+          token: "good-token",
+          body: { userId: "user_2" },
+        }),
+        "ip",
+      );
+      const list = await route(
+        request("/blocked-users", { method: "GET", token: "good-token" }),
+        "ip",
+      );
+      const remove = await route(
+        request("/blocked-users/user_2", { method: "DELETE", token: "good-token" }),
+        "ip",
+      );
+
+      expect(post.status).toBe(200);
+      expect(list.status).toBe(200);
+      expect(await list.json()).toMatchObject({ blockedUsers: [{ id: "user_2" }] });
+      expect(remove.status).toBe(200);
+      expect(blocked).toEqual(["user_2"]);
+      expect(unblocked).toEqual(["user_2"]);
+    });
+
+    test("rejects invalid and unauthenticated block requests", async () => {
+      const route = createHttpRouter(
+        makeDeps({
+          blocks: {
+            list: async () => [],
+            block: async () => {
+              throw new BlockError("INVALID_BLOCK", "You cannot block yourself");
+            },
+            unblock: async () => {},
+          } as unknown as BlockService,
+        }),
+      );
+
+      const unauthenticated = await route(request("/blocked-users", { method: "GET" }), "ip");
+      const invalid = await route(
+        request("/blocked-users", {
+          method: "POST",
+          token: "good-token",
+          body: { userId: "user_1" },
+        }),
+        "ip",
+      );
+
+      expect(unauthenticated.status).toBe(401);
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toMatchObject({ error: { code: "INVALID_BLOCK" } });
     });
   });
 

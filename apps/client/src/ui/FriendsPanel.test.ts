@@ -23,6 +23,7 @@ describe("FriendsPanel", () => {
         refreshes += 1;
       },
       onRemove() {},
+      onBlock() {},
     });
 
     panel.show();
@@ -41,6 +42,7 @@ describe("FriendsPanel", () => {
     installDocument();
     const joined: string[] = [];
     const messaged: string[] = [];
+    const blocked: string[] = [];
     const removed: string[] = [];
     const panel = new FriendsPanel({
       onAdd() {},
@@ -53,6 +55,9 @@ describe("FriendsPanel", () => {
       onRefresh() {},
       onRemove(friendId) {
         removed.push(friendId);
+      },
+      onBlock(friend) {
+        blocked.push(friend.id);
       },
     });
 
@@ -78,9 +83,11 @@ describe("FriendsPanel", () => {
     (actions?.children[0] as FakeElement | undefined)?.dispatch("click", {});
     (actions?.children[1] as FakeElement | undefined)?.dispatch("click", {});
     (actions?.children[2] as FakeElement | undefined)?.dispatch("click", {});
+    (actions?.children[3] as FakeElement | undefined)?.dispatch("click", {});
 
     expect(joined).toEqual(["studio"]);
     expect(messaged).toEqual(["user_2"]);
+    expect(blocked).toEqual(["user_2"]);
     expect(removed).toEqual(["user_2"]);
   });
 
@@ -106,6 +113,7 @@ describe("FriendsPanel", () => {
       onMessage() {},
       onRefresh() {},
       onRemove() {},
+      onBlock() {},
     });
 
     panel.setFriends([
@@ -227,6 +235,14 @@ class FakeElement {
       selector === "button[data-message-friend-id]" &&
       this.tagName === "button" &&
       this.dataset.messageFriendId
+    ) {
+      return this;
+    }
+
+    if (
+      selector === "button[data-block-friend-id]" &&
+      this.tagName === "button" &&
+      this.dataset.blockFriendId
     ) {
       return this;
     }

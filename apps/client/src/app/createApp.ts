@@ -7,6 +7,7 @@ import {
   logout as requestLogout,
   updateAppearance,
 } from "../auth/AuthClient";
+import { blockUser } from "../blocks/BlockClient";
 import type { FriendSummary } from "../friends/FriendClient";
 import { addFriend, listFriends, removeFriend } from "../friends/FriendClient";
 import type { Game } from "../game/Game";
@@ -129,6 +130,26 @@ export function createApp(root: HTMLElement): void {
         status.textContent = "friend removed";
       } catch (error) {
         const message = error instanceof Error ? error.message : "Friend remove failed";
+        status.textContent = message;
+        friendsPanel.showError(message);
+      }
+    },
+    async onBlock(friend) {
+      if (!user) {
+        return;
+      }
+
+      try {
+        await blockUser(friend.id);
+        await refreshFriends();
+
+        if (directMessagePanel.isOpenFor(friend.id)) {
+          directMessagePanel.hide();
+        }
+
+        status.textContent = `blocked ${friend.username}`;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Block failed";
         status.textContent = message;
         friendsPanel.showError(message);
       }
