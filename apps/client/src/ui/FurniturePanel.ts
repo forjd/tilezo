@@ -129,6 +129,10 @@ export class FurniturePanel {
     this.inventory = this.buildInventoryMap(inventory);
     this.populateItemSelect();
     this.syncControls();
+
+    if (!this.element.classList.contains("hidden") && !this.selectedMoveItemId) {
+      this.emitPlaceMode();
+    }
   }
 
   private buildInventoryMap(inventory: InventoryItem[]): Map<string, number> {

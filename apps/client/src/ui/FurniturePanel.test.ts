@@ -100,6 +100,28 @@ describe("FurniturePanel", () => {
     expect(getPlaceButton(panel).textContent).toBe("Place (0)");
   });
 
+  test("clears active place mode when inventory update consumes the last item", () => {
+    installDocument();
+    const modes: Array<FurnitureEditMode | undefined> = [];
+    const panel = new FurniturePanel({
+      onModeChange(mode) {
+        modes.push(mode);
+      },
+      onPickup() {},
+      onBuy() {},
+      inventory: [{ itemType: "woven_rug", quantity: 1 }],
+    });
+
+    panel.setCanEdit(true);
+    panel.show();
+    expect(modes.at(-1)).toEqual({ type: "place", itemType: "woven_rug", rotation: 0 });
+
+    panel.setInventory([{ itemType: "woven_rug", quantity: 0 }]);
+
+    expect(getPlaceButton(panel).disabled).toBe(true);
+    expect(modes.at(-1)).toBeUndefined();
+  });
+
   test("shows inline error when purchase fails", async () => {
     installDocument();
     const panel = new FurniturePanel({
