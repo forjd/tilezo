@@ -90,7 +90,7 @@ export class DirectMessageService {
     }
   }
 
-  private async assertCanMessage(userId: string, otherUserId: string): Promise<void> {
+  async assertCanMessage(userId: string, otherUserId: string): Promise<void> {
     if (!(await this.areFriends(userId, otherUserId))) {
       throw new DirectMessageError("NOT_FRIENDS", "You can only message your friends");
     }

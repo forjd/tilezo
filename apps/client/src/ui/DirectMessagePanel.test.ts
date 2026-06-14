@@ -61,7 +61,7 @@ describe("DirectMessagePanel", () => {
     });
     panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
 
-    const form = panel.element.children[2] as unknown as FakeElement;
+    const form = panel.element.children[3] as unknown as FakeElement;
     const input = form.children[0] as FakeElement;
     input.value = "  yo  ";
     form.dispatch("submit", { preventDefault() {} });
@@ -79,12 +79,53 @@ describe("DirectMessagePanel", () => {
     });
     panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
 
-    const form = panel.element.children[2] as unknown as FakeElement;
+    const form = panel.element.children[3] as unknown as FakeElement;
     const input = form.children[0] as FakeElement;
     input.value = "  try again  ";
     form.dispatch("submit", { preventDefault() {} });
 
     expect(input.value).toBe("  try again  ");
+  });
+
+  test("emits local typing changes and clears them after send", () => {
+    installDocument();
+    const typing: Array<{ friendId: string; isTyping: boolean }> = [];
+    const panel = new DirectMessagePanel({
+      onSend: () => undefined,
+      onTypingChange(friendId, isTyping) {
+        typing.push({ friendId, isTyping });
+      },
+    });
+    panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
+
+    const form = panel.element.children[3] as unknown as FakeElement;
+    const input = form.children[0] as FakeElement;
+    input.value = "hey";
+    input.dispatch("input", {});
+    input.value = "hey there";
+    input.dispatch("input", {});
+    form.dispatch("submit", { preventDefault() {} });
+
+    expect(typing).toEqual([
+      { friendId: "user_2", isTyping: true },
+      { friendId: "user_2", isTyping: false },
+    ]);
+  });
+
+  test("shows incoming typing state for the open conversation", () => {
+    installDocument();
+    const panel = new DirectMessagePanel({ onSend: () => undefined });
+    panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
+    const typingStatus = panel.element.children[2] as unknown as FakeElement;
+
+    expect(panel.setFriendTyping("user_3", true)).toBe(false);
+    expect(panel.setFriendTyping("user_2", true)).toBe(true);
+    expect(typingStatus.textContent).toBe("Kai is typing");
+    expect(typingStatus.classList.contains("visible")).toBe(true);
+
+    expect(panel.append(dm({ text: "sent" }))).toBe(true);
+    expect(typingStatus.textContent).toBe("");
+    expect(typingStatus.classList.contains("visible")).toBe(false);
   });
 });
 
@@ -171,6 +212,19 @@ class FakeClassList {
 
   contains(className: string): boolean {
     return this.getClasses().includes(className);
+  }
+
+  toggle(className: string, force?: boolean): boolean {
+    const hasClass = this.contains(className);
+    const shouldAdd = force ?? !hasClass;
+
+    if (shouldAdd && !hasClass) {
+      this.add(className);
+    } else if (!shouldAdd && hasClass) {
+      this.remove(className);
+    }
+
+    return shouldAdd;
   }
 
   private getClasses(): string[] {

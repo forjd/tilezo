@@ -9,6 +9,7 @@ export type SocketData = {
   appearance?: AvatarAppearance;
   rateLimits?: Partial<Record<RateLimitedMessageKind, RateLimitState>>;
   lastTypingState?: boolean;
+  lastDirectTypingStates?: Map<string, boolean>;
 };
 
 export type RateLimitedMessageKind = "movement" | "chat" | "typing" | "dm" | "default";
