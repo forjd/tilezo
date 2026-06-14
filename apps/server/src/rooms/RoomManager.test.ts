@@ -126,6 +126,40 @@ describe("RoomManager", () => {
     expect(manager.canJoinRoom("room_knock", "user_1")).toEqual({ ok: true });
   });
 
+  test("rejects joins when an active room is at capacity but allows reconnects", () => {
+    const manager = new RoomManager(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
+    const tinyRoom = createRectRoomLayout("tiny", "Tiny", 4, 4, { x: 1, y: 1 });
+    manager.addRoom(tinyRoom, { capacity: 1, visibility: "public" });
+    const room = manager.getOrCreate("tiny");
+
+    room?.join({ id: "user_1", username: "Dan" });
+
+    expect(manager.canJoinRoom("tiny", "user_2")).toEqual({
+      ok: false,
+      code: "ROOM_FULL",
+      message: "This room is full",
+    });
+    expect(manager.canJoinRoom("tiny", "user_1")).toEqual({ ok: true });
+  });
+
+  test("hydrates persisted room capacity rules", () => {
+    const layout = createRectRoomLayout("tiny", "Tiny", 4, 4, { x: 1, y: 1 });
+    const manager = new RoomManager({
+      publicLayouts: [layout],
+      privateLayouts: [],
+      roomRules: [{ roomId: "tiny", access: "open", capacity: 1 }],
+    });
+    const room = manager.getOrCreate("tiny");
+
+    room?.join({ id: "user_1", username: "Dan" });
+
+    expect(manager.canJoinRoom("tiny", "user_2")).toEqual({
+      ok: false,
+      code: "ROOM_FULL",
+      message: "This room is full",
+    });
+  });
+
   test("hydrates cached room items and exposes owner edit permissions", () => {
     const layout = createRectRoomLayout("room_public", "Public Room", 4, 4, { x: 1, y: 1 });
     const manager = new RoomManager(

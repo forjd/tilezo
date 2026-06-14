@@ -23,7 +23,13 @@ type RawRoomLayout = {
 
 type RoomJoinAccess =
   | { ok: true }
-  | { ok: false; code: "ROOM_NOT_FOUND" | "ROOM_ACCESS_REQUIRED"; message: string };
+  | {
+      ok: false;
+      code: "ROOM_NOT_FOUND" | "ROOM_ACCESS_REQUIRED" | "ROOM_FULL";
+      message: string;
+    };
+
+type RoomRule = RoomAccessRule & { capacity?: number };
 
 export class RoomManager {
   private readonly rooms = new Map<string, Room>();
@@ -33,7 +39,7 @@ export class RoomManager {
   // Secondary index of private layouts by owner so listing a user's accessible rooms is
   // O(rooms they own) rather than O(every private room in the directory).
   private readonly privateLayoutsByOwner = new Map<string, Map<string, OwnedRoomLayout>>();
-  private readonly roomRules = new Map<string, RoomAccessRule>();
+  private readonly roomRules = new Map<string, RoomRule>();
   private readonly bots: readonly RoomBotDefinition[];
 
   constructor(
@@ -65,7 +71,7 @@ export class RoomManager {
     }
 
     for (const rule of roomDirectory.roomRules ?? []) {
-      this.roomRules.set(rule.roomId, rule);
+      this.roomRules.set(rule.roomId, { ...this.roomRules.get(rule.roomId), ...rule });
     }
   }
 
@@ -124,6 +130,16 @@ export class RoomManager {
       };
     }
 
+    const activeRoom = this.rooms.get(roomId);
+
+    if (activeRoom && !activeRoom.hasUser(userId ?? "") && isRoomAtCapacity(activeRoom, rule?.capacity)) {
+      return {
+        ok: false,
+        code: "ROOM_FULL",
+        message: "This room is full",
+      };
+    }
+
     return { ok: true };
   }
 
@@ -148,6 +164,7 @@ export class RoomManager {
       access?: RoomAccess;
       ownerUserId?: string;
       visibility?: "public" | "private";
+      capacity?: number;
     } = {},
   ): void {
     const access = options.access ?? "open";
@@ -155,6 +172,7 @@ export class RoomManager {
       roomId: layout.id,
       ownerUserId: options.ownerUserId,
       access,
+      capacity: options.capacity,
     });
 
     if (options.visibility === "private" && options.ownerUserId) {
@@ -291,6 +309,10 @@ export class RoomManager {
   private botIds(): ReadonlySet<string> {
     return new Set(this.bots.map((bot) => bot.id));
   }
+}
+
+function isRoomAtCapacity(room: Room, capacity: number | undefined): boolean {
+  return typeof capacity === "number" && capacity > 0 && room.userCount >= capacity;
 }
 
 function normalizeRoomDirectory(

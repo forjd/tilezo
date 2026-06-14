@@ -764,6 +764,7 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
       access: parsed.value.access,
       ownerUserId: user.id,
       visibility: parsed.value.visibility,
+      capacity: parsed.value.capacity,
     });
     requestLogger.info("room.created", {
       userId: user.id,

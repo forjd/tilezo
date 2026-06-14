@@ -17,6 +17,7 @@ export type RoomAccessRule = {
   roomId: string;
   ownerUserId?: string;
   access: RoomAccess;
+  capacity?: number;
 };
 
 export type PersistedRoomLayout = {
@@ -119,6 +120,7 @@ export async function loadOrSeedPublicRooms(
         roomId: room.layout.id,
         ownerUserId: room.ownerUserId,
         access: room.access,
+        capacity: room.capacity,
       })),
     };
   } catch (error) {

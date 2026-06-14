@@ -474,7 +474,9 @@ async function joinRoom(
       context.metrics?.increment(
         access.code === "ROOM_ACCESS_REQUIRED"
           ? "room.join.access_required"
-          : "room.join.unavailable",
+          : access.code === "ROOM_FULL"
+            ? "room.join.full"
+            : "room.join.unavailable",
       );
       context.logger?.warn("room.join.rejected", {
         ...socketFields(ws),
