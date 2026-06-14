@@ -1,6 +1,6 @@
 import type { AuthUser } from "@tilezo/protocol";
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
-import { DEFAULT_API_URL } from "../assets";
+import { apiUrl } from "../config";
 
 export type { AuthUser };
 
@@ -15,7 +15,7 @@ export async function authenticate(options: {
   username: string;
   password: string;
 }): Promise<AuthUser> {
-  const response = await fetch(`${getApiUrl()}/auth/${options.mode}`, {
+  const response = await fetch(apiUrl(`/auth/${options.mode}`), {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -35,7 +35,7 @@ export async function authenticate(options: {
 // there is no valid session). This is what replaces reading a token out of localStorage.
 export async function fetchSession(): Promise<AuthUser | undefined> {
   try {
-    const response = await fetch(`${getApiUrl()}/auth/session`, { credentials: "include" });
+    const response = await fetch(apiUrl("/auth/session"), { credentials: "include" });
 
     if (!response.ok) {
       return undefined;
@@ -57,7 +57,7 @@ export async function logout(options: { timeoutMs?: number } = {}): Promise<void
   }
 
   try {
-    await fetch(`${getApiUrl()}/auth/logout`, {
+    await fetch(apiUrl("/auth/logout"), {
       method: "POST",
       credentials: "include",
       signal: controller.signal,
@@ -70,7 +70,7 @@ export async function logout(options: { timeoutMs?: number } = {}): Promise<void
 }
 
 export async function updateAppearance(appearance: AvatarAppearance): Promise<AvatarAppearance> {
-  const response = await fetch(`${getApiUrl()}/me/appearance`, {
+  const response = await fetch(apiUrl("/me/appearance"), {
     method: "PUT",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -88,26 +88,11 @@ export async function updateAppearance(appearance: AvatarAppearance): Promise<Av
   return (body as { appearance: AvatarAppearance }).appearance;
 }
 
-function getApiUrl(): string {
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_API_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
-  return runtimeConfigured ?? buildConfigured ?? DEFAULT_API_URL;
-}
 
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {
     return (await response.json()) as T;
   } catch {
     return undefined;
-  }
-}
-
-declare global {
-  interface Window {
-    TILEZO_CONFIG?: {
-      PUBLIC_API_URL?: string;
-      PUBLIC_WS_URL?: string;
-    };
   }
 }

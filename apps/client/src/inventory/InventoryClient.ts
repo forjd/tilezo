@@ -1,5 +1,5 @@
 import type { InventoryItem } from "@tilezo/protocol";
-import { DEFAULT_API_URL } from "../assets";
+import { apiUrl } from "../config";
 
 export type { InventoryItem };
 
@@ -9,7 +9,7 @@ export type PurchaseResult = {
 };
 
 export async function getInventory(): Promise<InventoryItem[]> {
-  const response = await fetch(`${getApiUrl()}/inventory`, {
+  const response = await fetch(apiUrl("/inventory"), {
     credentials: "include",
   });
   const body = await readJson<{ items?: InventoryItem[] } | { error?: { message?: string } }>(
@@ -24,7 +24,7 @@ export async function getInventory(): Promise<InventoryItem[]> {
 }
 
 export async function purchaseItem(itemType: string): Promise<PurchaseResult> {
-  const response = await fetch(`${getApiUrl()}/inventory/purchase`, {
+  const response = await fetch(apiUrl("/inventory/purchase"), {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -39,12 +39,6 @@ export async function purchaseItem(itemType: string): Promise<PurchaseResult> {
   return body as PurchaseResult;
 }
 
-function getApiUrl(): string {
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_API_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
-  return runtimeConfigured ?? buildConfigured ?? DEFAULT_API_URL;
-}
 
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {

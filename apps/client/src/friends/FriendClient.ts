@@ -1,5 +1,5 @@
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
-import { DEFAULT_API_URL } from "../assets";
+import { apiUrl } from "../config";
 
 export type FriendSummary = {
   id: string;
@@ -16,7 +16,7 @@ export type FriendAddResult = {
 };
 
 export async function listFriends(): Promise<FriendSummary[]> {
-  const response = await fetch(`${getApiUrl()}/friends`, { credentials: "include" });
+  const response = await fetch(apiUrl("/friends"), { credentials: "include" });
   const body = await readJson<{ friends?: FriendSummary[] } | { error?: { message?: string } }>(
     response,
   );
@@ -31,7 +31,7 @@ export async function listFriends(): Promise<FriendSummary[]> {
 }
 
 export async function addFriend(username: string): Promise<FriendAddResult> {
-  const response = await fetch(`${getApiUrl()}/friends`, {
+  const response = await fetch(apiUrl("/friends"), {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -47,7 +47,7 @@ export async function addFriend(username: string): Promise<FriendAddResult> {
 }
 
 export async function removeFriend(friendId: string): Promise<void> {
-  const response = await fetch(`${getApiUrl()}/friends/${encodeURIComponent(friendId)}`, {
+  const response = await fetch(apiUrl(`/friends/${encodeURIComponent(friendId)}`), {
     method: "DELETE",
     credentials: "include",
   });
@@ -58,12 +58,6 @@ export async function removeFriend(friendId: string): Promise<void> {
   }
 }
 
-function getApiUrl(): string {
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_API_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
-  return runtimeConfigured ?? buildConfigured ?? DEFAULT_API_URL;
-}
 
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {

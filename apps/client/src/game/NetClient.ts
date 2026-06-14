@@ -1,6 +1,6 @@
 import { parseServerMessage } from "@tilezo/protocol";
 import type { ClientMessage, ServerMessage } from "@tilezo/protocol/messages";
-import { DEFAULT_WS_URL } from "../assets";
+import { getWebSocketUrl } from "../config";
 
 type MessageHandler = (message: ServerMessage) => void;
 type StatusHandler = (status: string) => void;
@@ -122,34 +122,5 @@ export class NetClient {
     for (const handler of this.disconnectHandlers) {
       handler();
     }
-  }
-}
-
-function getWebSocketUrl(): string {
-  // No token in the URL: the browser sends the HttpOnly session cookie on the WebSocket
-  // handshake, so the server authenticates the upgrade from the cookie instead.
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_WS_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_WS_URL;
-  const browserDefault = getBrowserWebSocketUrl();
-  const baseUrl = runtimeConfigured ?? buildConfigured ?? browserDefault ?? DEFAULT_WS_URL;
-
-  return new URL(baseUrl).toString();
-}
-
-function getBrowserWebSocketUrl(): string | undefined {
-  if (typeof location === "undefined") {
-    return undefined;
-  }
-
-  return location.protocol === "https:" ? DEFAULT_WS_URL.replace("ws://", "wss://") : undefined;
-}
-
-declare global {
-  interface Window {
-    TILEZO_CONFIG?: {
-      PUBLIC_API_URL?: string;
-      PUBLIC_WS_URL?: string;
-    };
   }
 }

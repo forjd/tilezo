@@ -1,5 +1,5 @@
 import type { DirectMessage } from "@tilezo/protocol/messages";
-import { DEFAULT_API_URL } from "../assets";
+import { apiUrl } from "../config";
 
 export type { DirectMessage };
 
@@ -9,7 +9,7 @@ export type DirectMessageUnreadCount = {
 };
 
 export async function loadConversation(friendId: string): Promise<DirectMessage[]> {
-  const response = await fetch(`${getApiUrl()}/friends/${encodeURIComponent(friendId)}/messages`, {
+  const response = await fetch(apiUrl(`/friends/${encodeURIComponent(friendId)}/messages`), {
     credentials: "include",
   });
   const body = await readJson<{ messages?: DirectMessage[] } | { error?: { message?: string } }>(
@@ -26,7 +26,7 @@ export async function loadConversation(friendId: string): Promise<DirectMessage[
 }
 
 export async function loadUnreadCounts(): Promise<DirectMessageUnreadCount[]> {
-  const response = await fetch(`${getApiUrl()}/direct-messages/unread`, {
+  const response = await fetch(apiUrl("/direct-messages/unread"), {
     credentials: "include",
   });
   const body = await readJson<
@@ -44,12 +44,6 @@ export async function loadUnreadCounts(): Promise<DirectMessageUnreadCount[]> {
     : [];
 }
 
-function getApiUrl(): string {
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_API_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
-  return runtimeConfigured ?? buildConfigured ?? DEFAULT_API_URL;
-}
 
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {

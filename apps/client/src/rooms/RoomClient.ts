@@ -1,4 +1,4 @@
-import { DEFAULT_API_URL } from "../assets";
+import { apiUrl } from "../config";
 
 export type RoomTemplateSummary = {
   id: string;
@@ -31,7 +31,7 @@ export type CreatedRoom = {
 };
 
 export async function listRoomTemplates(): Promise<RoomTemplateSummary[]> {
-  const response = await fetch(`${getApiUrl()}/room-templates`);
+  const response = await fetch(apiUrl("/room-templates"));
   const body = await readJson<
     { templates?: RoomTemplateSummary[] } | { error?: { message?: string } }
   >(response);
@@ -46,7 +46,7 @@ export async function listRoomTemplates(): Promise<RoomTemplateSummary[]> {
 }
 
 export async function createRoom(room: CreateRoomRequest): Promise<CreatedRoom> {
-  const response = await fetch(`${getApiUrl()}/rooms`, {
+  const response = await fetch(apiUrl("/rooms"), {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -61,12 +61,6 @@ export async function createRoom(room: CreateRoomRequest): Promise<CreatedRoom> 
   return body as CreatedRoom;
 }
 
-function getApiUrl(): string {
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_API_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
-  return runtimeConfigured ?? buildConfigured ?? DEFAULT_API_URL;
-}
 
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {

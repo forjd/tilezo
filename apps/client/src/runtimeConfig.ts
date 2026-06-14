@@ -46,12 +46,3 @@ function normalizeRuntimeConfig(
     ...(wsUrl ? { PUBLIC_WS_URL: wsUrl } : {}),
   };
 }
-
-declare global {
-  interface Window {
-    TILEZO_CONFIG?: {
-      PUBLIC_API_URL?: string;
-      PUBLIC_WS_URL?: string;
-    };
-  }
-}

@@ -1,4 +1,4 @@
-import { DEFAULT_API_URL } from "../assets";
+import { apiUrl } from "../config";
 
 export type ClientLogLevel = "debug" | "info" | "warn" | "error";
 
@@ -28,7 +28,7 @@ export class ClientLogger {
     // base URL is runtime-overridable, so attaching the bearer token here would risk
     // exfiltrating it to an attacker-controlled origin via a crafted ?tilezoApiUrl link.
     try {
-      await this.fetcher(`${getApiUrl()}/client-events`, {
+      await this.fetcher(apiUrl("/client-events"), {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -52,11 +52,4 @@ function stringifyEvent(payload: {
   } catch {
     return undefined;
   }
-}
-
-function getApiUrl(): string {
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_API_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
-  return runtimeConfigured ?? buildConfigured ?? DEFAULT_API_URL;
 }

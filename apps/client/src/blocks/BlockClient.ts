@@ -1,5 +1,5 @@
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
-import { DEFAULT_API_URL } from "../assets";
+import { apiUrl } from "../config";
 
 export type BlockedUserSummary = {
   id: string;
@@ -9,7 +9,7 @@ export type BlockedUserSummary = {
 };
 
 export async function listBlockedUsers(): Promise<BlockedUserSummary[]> {
-  const response = await fetch(`${getApiUrl()}/blocked-users`, { credentials: "include" });
+  const response = await fetch(apiUrl("/blocked-users"), { credentials: "include" });
   const body = await readJson<
     { blockedUsers?: BlockedUserSummary[] } | { error?: { message?: string } }
   >(response);
@@ -24,7 +24,7 @@ export async function listBlockedUsers(): Promise<BlockedUserSummary[]> {
 }
 
 export async function blockUser(userId: string): Promise<void> {
-  const response = await fetch(`${getApiUrl()}/blocked-users`, {
+  const response = await fetch(apiUrl("/blocked-users"), {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -38,7 +38,7 @@ export async function blockUser(userId: string): Promise<void> {
 }
 
 export async function unblockUser(userId: string): Promise<void> {
-  const response = await fetch(`${getApiUrl()}/blocked-users/${encodeURIComponent(userId)}`, {
+  const response = await fetch(apiUrl(`/blocked-users/${encodeURIComponent(userId)}`), {
     method: "DELETE",
     credentials: "include",
   });
@@ -49,12 +49,6 @@ export async function unblockUser(userId: string): Promise<void> {
   }
 }
 
-function getApiUrl(): string {
-  const runtimeConfigured =
-    typeof window === "undefined" ? undefined : window.TILEZO_CONFIG?.PUBLIC_API_URL;
-  const buildConfigured = typeof process === "undefined" ? undefined : process.env.PUBLIC_API_URL;
-  return runtimeConfigured ?? buildConfigured ?? DEFAULT_API_URL;
-}
 
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {
