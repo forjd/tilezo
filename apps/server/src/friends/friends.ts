@@ -39,6 +39,7 @@ export type FriendStore = {
   addFriend(userId: string, friendUserId: string): Promise<FriendshipStatus>;
   areFriends(userId: string, friendUserId: string): Promise<boolean>;
   countFriendSlots(userId: string): Promise<number>;
+  findFriendshipStatus?(userId: string, friendUserId: string): Promise<FriendshipStatus | undefined>;
   findUserByUsername(username: string): Promise<FriendUser | undefined>;
   listFriends(userId: string): Promise<FriendUser[]>;
   removeFriend(userId: string, friendUserId: string): Promise<void>;
@@ -49,6 +50,7 @@ type RoomAccessLookup = (userId: string, roomId: string) => boolean;
 
 export class FriendService {
   private readonly maxFriends: number;
+  private readonly addLocks = new Map<string, Promise<void>>();
 
   constructor(
     private readonly store: FriendStore,
@@ -77,16 +79,25 @@ export class FriendService {
       throw new FriendError("INVALID_FRIEND", "You cannot add yourself");
     }
 
-    const friendCount = await this.store.countFriendSlots(userId);
+    const status = await this.withAddLock(userId, friend.id, async () => {
+      const existingStatus = await this.store.findFriendshipStatus?.(userId, friend.id);
 
-    if (friendCount >= this.maxFriends) {
-      throw new FriendError(
-        "FRIEND_LIMIT_REACHED",
-        `You can have at most ${this.maxFriends.toString()} friends`,
-      );
-    }
+      if (existingStatus) {
+        return existingStatus;
+      }
 
-    const status = await this.store.addFriend(userId, friend.id);
+      const friendCount = await this.store.countFriendSlots(userId);
+
+      if (friendCount >= this.maxFriends) {
+        throw new FriendError(
+          "FRIEND_LIMIT_REACHED",
+          `You can have at most ${this.maxFriends.toString()} friends`,
+        );
+      }
+
+      return await this.store.addFriend(userId, friend.id);
+    });
+
     return {
       friend:
         status === "accepted" ? this.summarize(friend, userId) : this.summarizePending(friend),
@@ -100,6 +111,28 @@ export class FriendService {
 
   areFriends(userId: string, friendUserId: string): Promise<boolean> {
     return this.store.areFriends(userId, friendUserId);
+  }
+
+  private async withAddLock<T>(userId: string, friendUserId: string, work: () => Promise<T>): Promise<T> {
+    const [leftUserId, rightUserId] = friendshipPair(userId, friendUserId);
+    const key = `${leftUserId}:${rightUserId}`;
+    const previous = this.addLocks.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.addLocks.set(key, previous.then(() => current, () => current));
+
+    await previous;
+
+    try {
+      return await work();
+    } finally {
+      release();
+      if (this.addLocks.get(key) === current) {
+        this.addLocks.delete(key);
+      }
+    }
   }
 
   private summarize(friend: FriendUser, requestingUserId: string): FriendSummary {
@@ -233,6 +266,14 @@ export class DrizzleFriendStore implements FriendStore {
       .where(inArray(users.id, friendIds))
       .orderBy(asc(users.usernameKey))
       .limit(FRIEND_LIST_QUERY_LIMIT);
+  }
+
+  async findFriendshipStatus(
+    userId: string,
+    friendUserId: string,
+  ): Promise<FriendshipStatus | undefined> {
+    const [leftUserId, rightUserId] = friendshipPair(userId, friendUserId);
+    return (await this.findFriendship(leftUserId, rightUserId))?.status;
   }
 
   private async findFriendship(

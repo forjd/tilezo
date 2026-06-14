@@ -113,6 +113,18 @@ describe("FriendService", () => {
     await expect(service.add("user_1", "Rem")).rejects.toThrow("at most 1 friends");
   });
 
+  test("serializes duplicate friend adds so concurrent requests stay idempotent", async () => {
+    const store = createStore([kai]);
+    const service = new FriendService(store, () => ({ online: false }));
+
+    await expect(
+      Promise.all([service.add("user_1", "Kai"), service.add("user_1", "Kai")]),
+    ).resolves.toEqual([
+      { friend: { ...kai, online: false, canJoinRoom: false }, status: "pending" },
+      { friend: { ...kai, online: false, canJoinRoom: false }, status: "pending" },
+    ]);
+  });
+
   test("counts outgoing pending requests toward the configured cap", async () => {
     const rem = { id: "user_3", username: "Rem", appearance: DEFAULT_AVATAR_APPEARANCE };
     const store = createStore([kai, rem]);
@@ -257,6 +269,9 @@ function createStore(users: FriendUser[]): FriendStore {
           (friendship.status === "pending" && friendship.requestedByUserId === userId)
         );
       }).length;
+    },
+    async findFriendshipStatus(userId, friendUserId) {
+      return friendships.get(friendshipKey(userId, friendUserId))?.status;
     },
     async findUserByUsername(username) {
       return users.find((user) => user.username.toLowerCase() === username.trim().toLowerCase());
