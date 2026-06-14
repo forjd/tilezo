@@ -31,6 +31,36 @@ function createStore(): DirectMessageStore & { saved: DirectMessageRecord[] } {
         )
         .slice(-limit);
     },
+    async listUnreadCounts(userId) {
+      const counts = new Map<string, number>();
+
+      for (const message of saved) {
+        if (message.toUserId !== userId || message.readAt) {
+          continue;
+        }
+
+        counts.set(message.fromUserId, (counts.get(message.fromUserId) ?? 0) + 1);
+      }
+
+      return [...counts].map(([friendId, count]) => ({ friendId, count }));
+    },
+    async markConversationRead(readerUserId, otherUserId) {
+      const readAt = "2026-06-13T10:02:00.000Z";
+      const messageIds: string[] = [];
+
+      for (const message of saved) {
+        if (
+          message.fromUserId === otherUserId &&
+          message.toUserId === readerUserId &&
+          !message.readAt
+        ) {
+          message.readAt = readAt;
+          messageIds.push(message.id);
+        }
+      }
+
+      return { readerUserId, otherUserId, messageIds, readAt };
+    },
   };
 }
 
@@ -87,6 +117,23 @@ describe("DirectMessageService", () => {
     const blocked = new DirectMessageService(store, async () => false);
     await expect(blocked.history("user_1", "user_2")).rejects.toBeInstanceOf(DirectMessageError);
   });
+
+  test("marks conversations read and returns unread counts", async () => {
+    const store = createStore();
+    const service = new DirectMessageService(store, async () => true);
+
+    await service.send("user_2", "user_1", "a");
+    await service.send("user_2", "user_1", "b");
+
+    expect(await service.unreadCounts("user_1")).toEqual([{ friendId: "user_2", count: 2 }]);
+
+    const receipt = await service.markRead("user_1", "user_2");
+    expect(receipt.readerUserId).toBe("user_1");
+    expect(receipt.otherUserId).toBe("user_2");
+    expect(receipt.messageIds).toHaveLength(2);
+    expect(receipt.messageIds.every((id) => id.startsWith("dm_"))).toBe(true);
+    expect(await service.unreadCounts("user_1")).toEqual([]);
+  });
 });
 
 describe("DrizzleDirectMessageStore", () => {
@@ -99,6 +146,7 @@ describe("DrizzleDirectMessageStore", () => {
       recipientUserId: "user_2",
       body: "hello",
       createdAt,
+      readAt: new Date("2026-06-13T10:02:00.000Z"),
     };
     const store = new DrizzleDirectMessageStore(queryDouble([[row]]));
 
@@ -110,6 +158,7 @@ describe("DrizzleDirectMessageStore", () => {
       toUserId: "user_2",
       text: "hello",
       sentAt: "2026-06-13T10:00:00.000Z",
+      readAt: "2026-06-13T10:02:00.000Z",
     });
   });
 
@@ -121,6 +170,7 @@ describe("DrizzleDirectMessageStore", () => {
       recipientUserId: "user_1",
       body: "second",
       createdAt: new Date("2026-06-13T10:01:00.000Z"),
+      readAt: null,
     };
     const older = {
       id: "dm_1",
@@ -128,11 +178,27 @@ describe("DrizzleDirectMessageStore", () => {
       recipientUserId: "user_2",
       body: "first",
       createdAt,
+      readAt: null,
     };
     const store = new DrizzleDirectMessageStore(queryDouble([[newer, older]]));
 
     const history = await store.listConversation("user_1", "user_2", 50);
     expect(history.map((message) => message.text)).toEqual(["first", "second"]);
+  });
+
+  test("lists unread counts and marks conversations read", async () => {
+    const store = new DrizzleDirectMessageStore(
+      queryDouble([[{ friendId: "user_2", value: 3 }], [{ id: "dm_1" }, { id: "dm_2" }]]),
+    );
+
+    await expect(store.listUnreadCounts("user_1")).resolves.toEqual([
+      { friendId: "user_2", count: 3 },
+    ]);
+    await expect(store.markConversationRead("user_1", "user_2")).resolves.toMatchObject({
+      readerUserId: "user_1",
+      otherUserId: "user_2",
+      messageIds: ["dm_1", "dm_2"],
+    });
   });
 });
 
@@ -156,6 +222,9 @@ function queryDouble(
     "where",
     "orderBy",
     "limit",
+    "groupBy",
+    "update",
+    "set",
     "values",
     "returning",
     "insert",

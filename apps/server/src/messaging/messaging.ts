@@ -1,4 +1,4 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, count, desc, eq, isNull, or } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
 import { directMessages } from "../db/schema";
 import { createId } from "../util/ids";
@@ -9,6 +9,19 @@ export type DirectMessageRecord = {
   toUserId: string;
   text: string;
   sentAt: string;
+  readAt?: string;
+};
+
+export type DirectMessageReadReceipt = {
+  readerUserId: string;
+  otherUserId: string;
+  messageIds: string[];
+  readAt: string;
+};
+
+export type DirectMessageUnreadCount = {
+  friendId: string;
+  count: number;
 };
 
 export const DEFAULT_DM_HISTORY_LIMIT = 50;
@@ -26,6 +39,11 @@ export type DirectMessageStore = {
     otherUserId: string,
     limit: number,
   ): Promise<DirectMessageRecord[]>;
+  listUnreadCounts(userId: string): Promise<DirectMessageUnreadCount[]>;
+  markConversationRead(
+    readerUserId: string,
+    otherUserId: string,
+  ): Promise<DirectMessageReadReceipt>;
 };
 
 // Friendship gate (injected): direct messages are only allowed between mutual friends.
@@ -77,6 +95,15 @@ export class DirectMessageService {
     return this.store.listConversation(userId, otherUserId, safeLimit);
   }
 
+  async markRead(readerUserId: string, otherUserId: string): Promise<DirectMessageReadReceipt> {
+    await this.assertCanMessage(readerUserId, otherUserId);
+    return this.store.markConversationRead(readerUserId, otherUserId);
+  }
+
+  unreadCounts(userId: string): Promise<DirectMessageUnreadCount[]> {
+    return this.store.listUnreadCounts(userId);
+  }
+
   async canMessage(userId: string, otherUserId: string): Promise<boolean> {
     try {
       await this.assertCanMessage(userId, otherUserId);
@@ -107,6 +134,7 @@ const DM_COLUMNS = {
   recipientUserId: directMessages.recipientUserId,
   body: directMessages.body,
   createdAt: directMessages.createdAt,
+  readAt: directMessages.readAt,
 } as const;
 
 type DirectMessageRow = {
@@ -115,6 +143,7 @@ type DirectMessageRow = {
   recipientUserId: string;
   body: string;
   createdAt: Date;
+  readAt: Date | null;
 };
 
 export class DrizzleDirectMessageStore implements DirectMessageStore {
@@ -161,6 +190,44 @@ export class DrizzleDirectMessageStore implements DirectMessageStore {
 
     return rows.reverse().map(toRecord);
   }
+
+  async listUnreadCounts(userId: string): Promise<DirectMessageUnreadCount[]> {
+    const rows = await this.db
+      .select({
+        friendId: directMessages.senderUserId,
+        value: count(),
+      })
+      .from(directMessages)
+      .where(and(eq(directMessages.recipientUserId, userId), isNull(directMessages.readAt)))
+      .groupBy(directMessages.senderUserId);
+
+    return rows.map((row) => ({ friendId: row.friendId, count: row.value }));
+  }
+
+  async markConversationRead(
+    readerUserId: string,
+    otherUserId: string,
+  ): Promise<DirectMessageReadReceipt> {
+    const readAt = new Date();
+    const rows = await this.db
+      .update(directMessages)
+      .set({ readAt })
+      .where(
+        and(
+          eq(directMessages.senderUserId, otherUserId),
+          eq(directMessages.recipientUserId, readerUserId),
+          isNull(directMessages.readAt),
+        ),
+      )
+      .returning({ id: directMessages.id });
+
+    return {
+      readerUserId,
+      otherUserId,
+      messageIds: rows.map((row) => row.id),
+      readAt: readAt.toISOString(),
+    };
+  }
 }
 
 function toRecord(row: DirectMessageRow): DirectMessageRecord {
@@ -170,5 +237,6 @@ function toRecord(row: DirectMessageRow): DirectMessageRecord {
     toUserId: row.recipientUserId,
     text: row.body,
     sentAt: row.createdAt.toISOString(),
+    ...(row.readAt ? { readAt: row.readAt.toISOString() } : {}),
   };
 }

@@ -275,6 +275,22 @@ export function handleMessage(
         break;
       }
 
+      case "dm.read": {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.dm_read");
+          sendError(ws, "RATE_LIMITED", "Slow down before marking messages read");
+          return;
+        }
+
+        if (!ws.data.username) {
+          sendError(ws, "UNAUTHENTICATED", "Log in before marking messages read");
+          return;
+        }
+
+        void markDirectMessagesRead(ws, parsed.value.friendId, context);
+        break;
+      }
+
       case "ping":
         if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.ping");
@@ -689,6 +705,45 @@ function disconnectSupersededRoomSockets(
     socket.data.roomId = undefined;
     socket.data.lastTypingState = undefined;
     context.metrics?.increment("room.socket_superseded");
+  }
+}
+
+async function markDirectMessagesRead(
+  ws: ServerWebSocket<SocketData>,
+  friendId: string,
+  context: Context,
+): Promise<void> {
+  if (!context.directMessages) {
+    sendError(ws, "DM_UNAVAILABLE", "Direct messages are unavailable");
+    return;
+  }
+
+  try {
+    const receipt = await context.directMessages.markRead(ws.data.userId, friendId);
+
+    if (receipt.messageIds.length === 0) {
+      return;
+    }
+
+    const message: ServerMessage = {
+      type: "dm.read",
+      readerUserId: receipt.readerUserId,
+      otherUserId: receipt.otherUserId,
+      messageIds: receipt.messageIds,
+      readAt: receipt.readAt,
+    };
+    context.publish(userTopic(receipt.readerUserId), message);
+    context.publish(userTopic(receipt.otherUserId), message);
+    context.metrics?.increment("dm_read.accepted");
+  } catch (error) {
+    if (error instanceof DirectMessageError) {
+      context.metrics?.increment(`dm_read.rejected.${error.code}`);
+      sendError(ws, error.code, error.message);
+      return;
+    }
+
+    context.logger?.warn("dm.read.failed", { ...socketFields(ws), friendId, error });
+    sendError(ws, "DM_FAILED", "Could not mark messages read");
   }
 }
 

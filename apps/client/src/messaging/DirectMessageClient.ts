@@ -3,6 +3,11 @@ import { DEFAULT_API_URL } from "../assets";
 
 export type { DirectMessage };
 
+export type DirectMessageUnreadCount = {
+  friendId: string;
+  count: number;
+};
+
 export async function loadConversation(friendId: string): Promise<DirectMessage[]> {
   const response = await fetch(`${getApiUrl()}/friends/${encodeURIComponent(friendId)}/messages`, {
     credentials: "include",
@@ -17,6 +22,25 @@ export async function loadConversation(friendId: string): Promise<DirectMessage[
 
   return Array.isArray((body as { messages?: unknown }).messages)
     ? (body as { messages: DirectMessage[] }).messages
+    : [];
+}
+
+export async function loadUnreadCounts(): Promise<DirectMessageUnreadCount[]> {
+  const response = await fetch(`${getApiUrl()}/direct-messages/unread`, {
+    credentials: "include",
+  });
+  const body = await readJson<
+    { unread?: DirectMessageUnreadCount[] } | { error?: { message?: string } }
+  >(response);
+
+  if (!response.ok) {
+    throw new Error(
+      body && "error" in body ? body.error?.message : "Could not load unread messages",
+    );
+  }
+
+  return Array.isArray((body as { unread?: unknown }).unread)
+    ? (body as { unread: DirectMessageUnreadCount[] }).unread
     : [];
 }
 

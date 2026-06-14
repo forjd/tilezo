@@ -572,6 +572,16 @@ select {
   color: #fafaf5;
 }
 
+.dm-message-mine[data-read="true"]::after {
+  display: block;
+  margin-top: 3px;
+  color: #dff1ec;
+  content: "read";
+  font-size: 10px;
+  font-weight: 700;
+  text-align: right;
+}
+
 .dm-typing {
   min-height: 16px;
   margin: 0;
@@ -716,6 +726,13 @@ select {
   gap: 2px;
 }
 
+.friend-name-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+
 .friend-details strong {
   overflow: hidden;
   color: #302c27;
@@ -723,6 +740,19 @@ select {
   line-height: 1.12;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.friend-details .friend-unread-badge {
+  min-width: 20px;
+  padding: 1px 5px;
+  border: 1px solid #1f2d2f;
+  border-radius: 7px;
+  background: #e2c45e;
+  color: #1f2d2f;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .friend-details span {

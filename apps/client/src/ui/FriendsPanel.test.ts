@@ -61,23 +61,28 @@ describe("FriendsPanel", () => {
       },
     });
 
-    panel.setFriends([
-      {
-        id: "user_2",
-        username: "Kai",
-        appearance: DEFAULT_AVATAR_APPEARANCE,
-        online: true,
-        roomId: "studio",
-        canJoinRoom: true,
-      },
-    ]);
+    panel.setFriends(
+      [
+        {
+          id: "user_2",
+          username: "Kai",
+          appearance: DEFAULT_AVATAR_APPEARANCE,
+          online: true,
+          roomId: "studio",
+          canJoinRoom: true,
+        },
+      ],
+      new Map([["user_2", 3]]),
+    );
 
     const item = getList(panel).children[0];
     const details = item?.children[1];
     const actions = item?.children[2];
 
     expect(item?.className).toBe("friend-item online");
-    expect(details?.children[0]?.textContent).toBe("Kai");
+    expect(details?.children[0]?.children[0]?.textContent).toBe("Kai");
+    expect(details?.children[0]?.children[1]?.textContent).toBe("3");
+    expect(details?.children[0]?.children[1]?.hidden).toBe(false);
     expect(details?.children[1]?.textContent).toBe("online in studio");
 
     (actions?.children[0] as FakeElement | undefined)?.dispatch("click", {});
@@ -89,6 +94,10 @@ describe("FriendsPanel", () => {
     expect(messaged).toEqual(["user_2"]);
     expect(blocked).toEqual(["user_2"]);
     expect(removed).toEqual(["user_2"]);
+
+    panel.setUnreadCount("user_2", 0);
+    const rerenderedDetails = getList(panel).children[0]?.children[1];
+    expect(rerenderedDetails?.children[0]?.children[1]?.hidden).toBe(true);
   });
 
   test("destroys avatar previews before rerendering friends", () => {
@@ -183,6 +192,7 @@ class FakeElement {
   textContent = "";
   type = "";
   value = "";
+  hidden = false;
 
   constructor(readonly tagName: string) {}
 

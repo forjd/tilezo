@@ -3,6 +3,7 @@ import type { DirectMessage } from "@tilezo/protocol/messages";
 type DirectMessagePanelOptions = {
   onSend: (friendId: string, text: string) => boolean | undefined;
   onTypingChange?: (friendId: string, isTyping: boolean) => void;
+  onRead?: (friendId: string) => void;
 };
 
 type Conversation = {
@@ -22,6 +23,7 @@ export class DirectMessagePanel {
   private typingTimeout?: ReturnType<typeof setTimeout>;
   private isTyping = false;
   private conversation?: Conversation;
+  private readonly messageElements = new Map<string, HTMLElement>();
 
   constructor(private readonly options: DirectMessagePanelOptions) {
     this.element.className = "dm-panel hidden";
@@ -83,6 +85,7 @@ export class DirectMessagePanel {
     this.conversation = { friendId: friend.id, friendName: friend.username, selfUserId };
     this.title.textContent = `Chat with ${friend.username}`;
     this.messageList.replaceChildren();
+    this.messageElements.clear();
     this.setFriendTyping(friend.id, false);
 
     for (const message of history) {
@@ -90,6 +93,7 @@ export class DirectMessagePanel {
     }
 
     this.element.classList.remove("hidden");
+    this.options.onRead?.(friend.id);
     this.scrollToLatest();
     this.input.focus();
   }
@@ -105,6 +109,7 @@ export class DirectMessagePanel {
       this.setOwnTyping(false);
     } else {
       this.setFriendTyping(message.fromUserId, false);
+      this.options.onRead?.(message.fromUserId);
     }
     this.scrollToLatest();
     return true;
@@ -132,6 +137,25 @@ export class DirectMessagePanel {
     return true;
   }
 
+  markRead(messageIds: string[]): boolean {
+    if (!this.conversation || this.isHidden()) {
+      return false;
+    }
+
+    let updated = false;
+
+    for (const messageId of messageIds) {
+      const element = this.messageElements.get(messageId);
+
+      if (element) {
+        element.dataset.read = "true";
+        updated = true;
+      }
+    }
+
+    return updated;
+  }
+
   private belongsToConversation(message: DirectMessage): boolean {
     const { friendId, selfUserId } = this.conversation ?? { friendId: "", selfUserId: "" };
     return (
@@ -144,8 +168,11 @@ export class DirectMessagePanel {
     const mine = message.fromUserId === this.conversation?.selfUserId;
     const item = document.createElement("div");
     item.className = mine ? "dm-message dm-message-mine" : "dm-message dm-message-theirs";
+    item.dataset.messageId = message.id;
+    item.dataset.read = mine && message.readAt ? "true" : "false";
     item.textContent = message.text;
     this.messageList.append(item);
+    this.messageElements.set(message.id, item);
   }
 
   private scrollToLatest(): void {

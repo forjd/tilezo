@@ -92,6 +92,17 @@ when the users are allowed to message each other.
 }
 ```
 
+### `dm.read`
+
+Mark unread messages from a friend as read in the direct-message conversation.
+
+```json
+{
+  "type": "dm.read",
+  "friendId": "user_..."
+}
+```
+
 ### `avatar.appearance.update`
 
 Broadcast the authenticated user's saved character appearance to the current room after the profile
@@ -295,7 +306,8 @@ message.
   "fromUserId": "user_...",
   "toUserId": "user_...",
   "text": "Hi",
-  "sentAt": "2026-05-10T12:00:00.000Z"
+  "sentAt": "2026-05-10T12:00:00.000Z",
+  "readAt": "2026-05-10T12:01:00.000Z"
 }
 ```
 
@@ -309,6 +321,20 @@ Published to the recipient user topic after the server accepts a direct-message 
   "fromUserId": "user_...",
   "toUserId": "user_...",
   "isTyping": true
+}
+```
+
+### `dm.read`
+
+Published to both direct-message participants after the reader marks received messages as read.
+
+```json
+{
+  "type": "dm.read",
+  "readerUserId": "user_...",
+  "otherUserId": "user_...",
+  "messageIds": ["dm_..."],
+  "readAt": "2026-05-10T12:01:00.000Z"
 }
 ```
 
