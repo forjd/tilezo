@@ -31,6 +31,12 @@ export type DirectMessageSendMessage = {
   text: string;
 };
 
+export type DirectMessageTypingMessage = {
+  type: "dm.typing";
+  toUserId: string;
+  isTyping: boolean;
+};
+
 export type AvatarAppearanceUpdateMessage = {
   type: "avatar.appearance.update";
   appearance: AvatarAppearance;
@@ -48,6 +54,7 @@ export type ClientMessage =
   | ChatSayMessage
   | ChatTypingMessage
   | DirectMessageSendMessage
+  | DirectMessageTypingMessage
   | AvatarAppearanceUpdateMessage
   | PingMessage;
 
@@ -129,6 +136,13 @@ export type DirectMessage = {
   sentAt: string;
 };
 
+export type DirectMessageTypingStatusMessage = {
+  type: "dm.typing";
+  fromUserId: string;
+  toUserId: string;
+  isTyping: boolean;
+};
+
 export type PongMessage = {
   type: "pong";
   sentAt: string;
@@ -151,5 +165,6 @@ export type ServerMessage =
   | ChatMessage
   | ChatTypingStatusMessage
   | DirectMessage
+  | DirectMessageTypingStatusMessage
   | PongMessage
   | ErrorMessage;

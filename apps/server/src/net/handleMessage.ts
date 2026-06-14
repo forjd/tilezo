@@ -259,6 +259,22 @@ export function handleMessage(
         break;
       }
 
+      case "dm.typing": {
+        if (!consumeRateLimit(ws, "typing", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.dm_typing");
+          sendError(ws, "RATE_LIMITED", "Slow down before sending typing updates");
+          return;
+        }
+
+        if (!ws.data.username) {
+          sendError(ws, "UNAUTHENTICATED", "Log in before sending typing updates");
+          return;
+        }
+
+        void sendDirectTyping(ws, parsed.value.toUserId, parsed.value.isTyping, context);
+        break;
+      }
+
       case "ping":
         if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
           context.metrics?.increment("rate_limited.ping");
@@ -674,6 +690,52 @@ function disconnectSupersededRoomSockets(
     socket.data.lastTypingState = undefined;
     context.metrics?.increment("room.socket_superseded");
   }
+}
+
+async function sendDirectTyping(
+  ws: ServerWebSocket<SocketData>,
+  toUserId: string,
+  isTyping: boolean,
+  context: Context,
+): Promise<void> {
+  if (!context.directMessages) {
+    sendError(ws, "DM_UNAVAILABLE", "Direct messages are unavailable");
+    return;
+  }
+
+  let states = ws.data.lastDirectTypingStates;
+
+  if (!states) {
+    states = new Map<string, boolean>();
+    ws.data.lastDirectTypingStates = states;
+  }
+
+  if (states.get(toUserId) === isTyping) {
+    return;
+  }
+
+  try {
+    await context.directMessages.assertCanMessage(ws.data.userId, toUserId);
+  } catch (error) {
+    if (error instanceof DirectMessageError) {
+      context.metrics?.increment(`dm_typing.rejected.${error.code}`);
+      sendError(ws, error.code, error.message);
+      return;
+    }
+
+    context.logger?.warn("dm.typing.failed", { ...socketFields(ws), toUserId, error });
+    sendError(ws, "DM_FAILED", "Could not send typing update");
+    return;
+  }
+
+  states.set(toUserId, isTyping);
+  context.publish(userTopic(toUserId), {
+    type: "dm.typing",
+    fromUserId: ws.data.userId,
+    toUserId,
+    isTyping,
+  });
+  context.metrics?.increment("dm_typing.accepted");
 }
 
 async function sendDirectMessage(

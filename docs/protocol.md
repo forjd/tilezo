@@ -67,6 +67,31 @@ Send transient typing state for the current room.
 }
 ```
 
+### `dm.send`
+
+Send a friend-gated direct message to another user.
+
+```json
+{
+  "type": "dm.send",
+  "toUserId": "user_...",
+  "text": "Hi"
+}
+```
+
+### `dm.typing`
+
+Send transient typing state for a direct-message conversation. The server only forwards the update
+when the users are allowed to message each other.
+
+```json
+{
+  "type": "dm.typing",
+  "toUserId": "user_...",
+  "isTyping": true
+}
+```
+
 ### `avatar.appearance.update`
 
 Broadcast the authenticated user's saved character appearance to the current room after the profile
@@ -254,6 +279,35 @@ Broadcast after the server accepts a typing state update.
   "type": "chat.typing",
   "userId": "user_...",
   "username": "Tom",
+  "isTyping": true
+}
+```
+
+### `dm.message`
+
+Published to the sender and recipient user topics after the server accepts and persists a direct
+message.
+
+```json
+{
+  "type": "dm.message",
+  "id": "dm_...",
+  "fromUserId": "user_...",
+  "toUserId": "user_...",
+  "text": "Hi",
+  "sentAt": "2026-05-10T12:00:00.000Z"
+}
+```
+
+### `dm.typing`
+
+Published to the recipient user topic after the server accepts a direct-message typing state update.
+
+```json
+{
+  "type": "dm.typing",
+  "fromUserId": "user_...",
+  "toUserId": "user_...",
   "isTyping": true
 }
 ```

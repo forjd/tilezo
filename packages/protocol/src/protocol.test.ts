@@ -72,6 +72,19 @@ describe("protocol parser", () => {
     expect(parseClientMessage({ type: "dm.send", toUserId: "", text: "hi" }).ok).toBe(false);
   });
 
+  test("accepts direct message typing status updates", () => {
+    expect(parseClientMessage({ type: "dm.typing", toUserId: " user_2 ", isTyping: true })).toEqual(
+      {
+        ok: true,
+        value: { type: "dm.typing", toUserId: "user_2", isTyping: true },
+      },
+    );
+    expect(parseClientMessage({ type: "dm.typing", toUserId: "user_2", isTyping: "yes" }).ok).toBe(
+      false,
+    );
+    expect(parseClientMessage({ type: "dm.typing", toUserId: "", isTyping: true }).ok).toBe(false);
+  });
+
   test("rejects malformed raw messages", () => {
     expect(parseRawClientMessage("{bad json").ok).toBe(false);
   });

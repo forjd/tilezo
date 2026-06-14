@@ -77,6 +77,12 @@ export const dmSendMessageSchema = z.object({
   text: directMessageText,
 });
 
+export const dmTypingMessageSchema = z.object({
+  type: z.literal("dm.typing"),
+  toUserId: trimmedString(USER_ID_MAX_LENGTH),
+  isTyping: z.boolean(),
+});
+
 export const avatarAppearanceSchema = z.object({
   hair: z.enum(AVATAR_HAIR_STYLES),
   hairColor: z.enum(AVATAR_HAIR_COLORS),
@@ -106,6 +112,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   chatSayMessageSchema,
   chatTypingMessageSchema,
   dmSendMessageSchema,
+  dmTypingMessageSchema,
   avatarAppearanceUpdateMessageSchema,
   pingMessageSchema,
 ]);
@@ -170,6 +177,12 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     toUserId: z.string(),
     text: z.string(),
     sentAt: z.string(),
+  }),
+  z.object({
+    type: z.literal("dm.typing"),
+    fromUserId: z.string(),
+    toUserId: z.string(),
+    isTyping: z.boolean(),
   }),
   z.object({
     type: z.literal("chat.typing"),

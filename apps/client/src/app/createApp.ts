@@ -184,6 +184,9 @@ export function createApp(root: HTMLElement): void {
           status.textContent = "new direct message";
         }
       },
+      onDirectTyping(message) {
+        directMessagePanel.setFriendTyping(message.fromUserId, message.isTyping);
+      },
       onDisconnected() {
         if (!user || !gameStarted) {
           return;
@@ -217,6 +220,9 @@ export function createApp(root: HTMLElement): void {
   const directMessagePanel = new DirectMessagePanel({
     onSend(friendId, text) {
       return game?.sendDirectMessage(friendId, text) ?? false;
+    },
+    onTypingChange(friendId, isTyping) {
+      game?.sendDirectTyping(friendId, isTyping);
     },
   });
 

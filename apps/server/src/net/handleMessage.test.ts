@@ -851,6 +851,67 @@ describe("direct messages", () => {
       message: "You can only message your friends",
     });
   });
+
+  test("publishes direct message typing status to the recipient topic", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: { topic: string; message: ServerMessage }[] = [];
+    const directMessages = {
+      async assertCanMessage() {},
+    } as unknown as DirectMessageService;
+
+    handleMessage(
+      ws,
+      JSON.stringify({ type: "dm.typing", toUserId: "user_db_2", isTyping: true }),
+      {
+        rooms,
+        publish(topic, message) {
+          published.push({ topic, message });
+        },
+        directMessages,
+      },
+    );
+    await flushAsyncMessages();
+
+    expect(published).toEqual([
+      {
+        topic: "user:user_db_2",
+        message: {
+          type: "dm.typing",
+          fromUserId: "user_db_1",
+          toUserId: "user_db_2",
+          isTyping: true,
+        },
+      },
+    ]);
+  });
+
+  test("surfaces direct message typing policy rejections as errors", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const directMessages = {
+      async assertCanMessage() {
+        throw new DirectMessageError("BLOCKED", "You cannot message this player");
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(
+      ws,
+      JSON.stringify({ type: "dm.typing", toUserId: "user_db_2", isTyping: true }),
+      {
+        rooms,
+        publish() {},
+        directMessages,
+      },
+    );
+    await flushAsyncMessages();
+
+    expect(ws.sent).toContainEqual({
+      type: "error",
+      code: "BLOCKED",
+      message: "You cannot message this player",
+    });
+  });
 });
 
 describe("consumeRateLimit", () => {
