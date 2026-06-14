@@ -151,6 +151,94 @@ describe("AuthPasswordLimiter", () => {
     expect(await second).toBe("second");
   });
 
+  test("times out queued password work", async () => {
+    const limiter = new AuthPasswordLimiter({ concurrency: 1, maxQueue: 1, timeoutMs: 1 });
+    const firstTask = createDeferred<string>();
+
+    const first = limiter.run(() => firstTask.promise);
+    const second = limiter.run(async () => "second").catch((error) => error);
+
+    await Bun.sleep(10);
+    expect(await second).toBeInstanceOf(AuthBackpressureError);
+
+    firstTask.resolve("first");
+    expect(await first).toBe("first");
+  });
+
+  test("records queued password wait time through AuthService", async () => {
+    let now = 0;
+    const observed: { histogram: string; valueMs: number }[] = [];
+    const firstHashStarted = createDeferred<void>();
+    const firstHashRelease = createDeferred<void>();
+    const auth = new AuthService(createAuthStore(), {
+      secret: "test-secret",
+      now: () => now,
+      passwordLimiter: new AuthPasswordLimiter({ concurrency: 1, maxQueue: 1, timeoutMs: 1000 }),
+      passwordHash: async (password) => {
+        if (password === "first password") {
+          firstHashStarted.resolve();
+          await firstHashRelease.promise;
+        }
+
+        now += 5;
+        return `hashed:${password}`;
+      },
+      metrics: {
+        increment() {},
+        observe(histogram, valueMs) {
+          observed.push({ histogram, valueMs });
+        },
+      },
+    });
+
+    const first = auth.createUser("Dan", "first password");
+    await firstHashStarted.promise;
+    const second = auth.createUser("Kai", "second password");
+    now = 25;
+    firstHashRelease.resolve();
+    await Promise.all([first, second]);
+
+    expect(observed).toContainEqual({
+      histogram: "auth.password_hash.queue_wait.duration",
+      valueMs: 30,
+    });
+  });
+
+  test("maps AuthService password backpressure to a public auth error", async () => {
+    const rejected: string[] = [];
+    const firstHashStarted = createDeferred<void>();
+    const firstHashRelease = createDeferred<void>();
+    const auth = new AuthService(createAuthStore(), {
+      secret: "test-secret",
+      passwordLimiter: new AuthPasswordLimiter({ concurrency: 1, maxQueue: 0, timeoutMs: 1000 }),
+      passwordHash: async (password) => {
+        if (password === "first password") {
+          firstHashStarted.resolve();
+          await firstHashRelease.promise;
+        }
+
+        return `hashed:${password}`;
+      },
+      metrics: {
+        increment(counter) {
+          rejected.push(counter);
+        },
+        observe() {},
+      },
+    });
+
+    const first = auth.createUser("Dan", "first password");
+    await firstHashStarted.promise;
+
+    await expect(auth.createUser("Kai", "second password")).rejects.toThrow(
+      "Authentication is busy",
+    );
+
+    firstHashRelease.resolve();
+    await first;
+    expect(rejected).toContain("auth.password_hash.rejected");
+  });
+
   test("records password and store timings through AuthService metrics", async () => {
     let now = 0;
     const observed: { histogram: string; valueMs: number }[] = [];

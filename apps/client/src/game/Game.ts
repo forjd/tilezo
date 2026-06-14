@@ -28,15 +28,41 @@ type GameOptions = {
   onDisconnected: () => void;
 };
 
+type GameDependencies = {
+  createApplication?: () => Application;
+  createNetClient?: () => NetClient;
+  createRoomScene?: (
+    app: Application,
+    onMoveRequest: (target: { x: number; y: number }) => void,
+    onInteraction: () => void,
+  ) => RoomScene;
+  globalTarget?: Pick<typeof globalThis, "addEventListener" | "removeEventListener">;
+};
+
 export class Game {
-  private readonly app = new Application();
-  private readonly net = new NetClient();
+  private readonly app: Application;
   private readonly cleanup: (() => void)[] = [];
+  private readonly createRoomScene: NonNullable<GameDependencies["createRoomScene"]>;
+  private readonly globalTarget: Pick<
+    typeof globalThis,
+    "addEventListener" | "removeEventListener"
+  >;
+  private readonly net: NetClient;
   private scene?: RoomScene;
   private connected = false;
   private initialized = false;
 
-  constructor(private readonly options: GameOptions) {}
+  constructor(
+    private readonly options: GameOptions,
+    dependencies: GameDependencies = {},
+  ) {
+    this.app = dependencies.createApplication?.() ?? new Application();
+    this.net = dependencies.createNetClient?.() ?? new NetClient();
+    this.createRoomScene =
+      dependencies.createRoomScene ??
+      ((app, onMoveRequest, onInteraction) => new RoomScene(app, onMoveRequest, onInteraction));
+    this.globalTarget = dependencies.globalTarget ?? globalThis;
+  }
 
   async start(): Promise<void> {
     try {
@@ -51,7 +77,7 @@ export class Game {
 
       this.app.canvas.style.imageRendering = "pixelated";
       this.options.stage.appendChild(this.app.canvas);
-      this.scene = new RoomScene(
+      this.scene = this.createRoomScene(
         this.app,
         (target) => {
           this.sendIfConnected({ type: "avatar.move.request", target });
@@ -140,8 +166,8 @@ export class Game {
       this.cleanup.push(() => this.app.ticker.remove(updateScene));
 
       const resizeScene = () => this.scene?.resize();
-      globalThis.addEventListener("resize", resizeScene);
-      this.cleanup.push(() => globalThis.removeEventListener("resize", resizeScene));
+      this.globalTarget.addEventListener("resize", resizeScene);
+      this.cleanup.push(() => this.globalTarget.removeEventListener("resize", resizeScene));
     } catch (error) {
       this.stop();
       throw error;

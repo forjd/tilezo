@@ -51,6 +51,7 @@ describe("persistence", () => {
     const lobby = createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 });
     const studio = createRectRoomLayout("studio", "Studio", 4, 4, { x: 1, y: 1 });
     const storedLobby = createRectRoomLayout("lobby", "Stored Lobby", 2, 2, { x: 0, y: 0 });
+    const privateRoom = createRectRoomLayout("home_user_1", "Dan's Room", 3, 3, { x: 1, y: 1 });
     const store = {
       seededRooms: [] as RoomLayout[],
       async getRoom(roomId: string) {
@@ -75,19 +76,48 @@ describe("persistence", () => {
             capacity: 25,
             access: "open" as const,
           },
+          {
+            layout: privateRoom,
+            ownerUserId: "user_1",
+            visibility: "private" as const,
+            description: "Personal space",
+            capacity: 10,
+            access: "knock" as const,
+          },
         ];
       },
     } satisfies PersistenceStore & { seededRooms: RoomLayout[] };
 
     await expect(loadOrSeedPublicRooms(store, [lobby, studio])).resolves.toEqual({
       publicLayouts: [storedLobby, studio],
-      privateLayouts: [],
+      privateLayouts: [{ layout: privateRoom, ownerUserId: "user_1", access: "knock" }],
       roomRules: [
         { roomId: "lobby", ownerUserId: undefined, access: "open" },
         { roomId: "studio", ownerUserId: undefined, access: "open" },
+        { roomId: "home_user_1", ownerUserId: "user_1", access: "knock" },
       ],
     });
     expect(store.seededRooms).toEqual([studio]);
+  });
+
+  test("falls back to listPublicRooms when the store has no room directory", async () => {
+    const lobby = createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 });
+    const storedLobby = createRectRoomLayout("lobby", "Stored Lobby", 2, 2, { x: 0, y: 0 });
+    const store = {
+      async getRoom() {
+        return storedLobby;
+      },
+      async seedRoom() {},
+      async listPublicRooms() {
+        return [storedLobby];
+      },
+    } satisfies PersistenceStore;
+
+    await expect(loadOrSeedPublicRooms(store, [lobby])).resolves.toEqual({
+      publicLayouts: [storedLobby],
+      privateLayouts: [],
+      roomRules: [],
+    });
   });
 });
 
@@ -130,6 +160,14 @@ describe("DrizzlePersistenceStore", () => {
       },
     ]);
     expect(db.conflictUpdates).toHaveLength(1);
+  });
+
+  test("persists last joined room sessions", async () => {
+    const store = new DrizzlePersistenceStore(queryDouble([[{ roomId: "lobby" }], [], []]));
+
+    await expect(store.getLastRoomIdForUser("user_1")).resolves.toBe("lobby");
+    await expect(store.saveLastRoomIdForUser("user_1", "studio")).resolves.toBeUndefined();
+    await expect(store.clearLastRoomIdForUser("user_1")).resolves.toBeUndefined();
   });
 });
 
@@ -199,4 +237,32 @@ function createDrizzleDouble(layout: RoomLayout) {
   };
 
   return calls;
+}
+
+function queryDouble(
+  results: unknown[][] = [],
+  // biome-ignore lint/suspicious/noExplicitAny: a structural stand-in for the Drizzle database.
+): any {
+  let index = 0;
+  const chain: Record<string, unknown> = {
+    // biome-ignore lint/suspicious/noThenProperty: Drizzle query builders are awaitable and chainable.
+    then(resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) {
+      return Promise.resolve(results[index++] ?? []).then(resolve, reject);
+    },
+  };
+
+  for (const method of [
+    "select",
+    "from",
+    "where",
+    "orderBy",
+    "insert",
+    "values",
+    "onConflictDoUpdate",
+    "delete",
+  ]) {
+    chain[method] = () => chain;
+  }
+
+  return chain;
 }

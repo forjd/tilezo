@@ -36,6 +36,7 @@ describe("BlockService", () => {
 
     await service.unblock("user_1", "user_2");
     expect(await service.isBlockedEitherDirection("user_1", "user_2")).toBe(false);
+    await expect(service.list("user_1")).resolves.toEqual([]);
   });
 
   test("rejects self-blocks", async () => {
@@ -70,6 +71,13 @@ describe("DrizzleBlockStore", () => {
 
     await expect(store.isBlocked("user_1", "user_2")).resolves.toBe(true);
     await expect(store.isBlockedEitherDirection("user_1", "user_2")).resolves.toBe(false);
+  });
+
+  test("inserts and deletes block rows", async () => {
+    const store = new DrizzleBlockStore(queryDouble([[], []]));
+
+    await expect(store.blockUser("user_1", "user_2")).resolves.toBeUndefined();
+    await expect(store.unblockUser("user_1", "user_2")).resolves.toBeUndefined();
   });
 });
 

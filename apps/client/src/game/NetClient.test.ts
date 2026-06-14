@@ -157,6 +157,21 @@ describe("NetClient", () => {
 
     expect(disconnects).toBe(1);
   });
+
+  test("closes and forgets the active socket on explicit disconnect", async () => {
+    installBrowserFakes("http:");
+    const client = new NetClient();
+
+    const connected = client.connect();
+    const socket = currentSocket();
+    socket.open();
+    await connected;
+
+    client.disconnect();
+
+    expect(socket.readyState).toBe(3);
+    expect(() => client.send({ type: "ping", sentAt: "now" })).toThrow("WebSocket is not open");
+  });
 });
 
 function installBrowserFakes(protocol: "http:" | "https:", host?: string) {

@@ -62,4 +62,29 @@ describe("loadConversation", () => {
       },
     ]);
   });
+
+  test("throws the unread server error message on failure", async () => {
+    globalThis.fetch = (async () =>
+      Response.json(
+        { error: { message: "Could not count unread direct messages" } },
+        { status: 400 },
+      )) as unknown as typeof fetch;
+
+    await expect(loadUnreadCounts()).rejects.toThrow("Could not count unread direct messages");
+  });
+
+  test("returns empty arrays when message payloads are absent", async () => {
+    globalThis.fetch = (async () => Response.json({})) as unknown as typeof fetch;
+
+    await expect(loadConversation("user_2")).resolves.toEqual([]);
+    await expect(loadUnreadCounts()).resolves.toEqual([]);
+  });
+
+  test("throws fallback errors when direct message error responses are malformed", async () => {
+    globalThis.fetch = (async () =>
+      new Response("not json", { status: 503 })) as unknown as typeof fetch;
+
+    await expect(loadConversation("user_2")).rejects.toThrow("Could not load messages");
+    await expect(loadUnreadCounts()).rejects.toThrow("Could not load unread messages");
+  });
 });

@@ -28,14 +28,18 @@ describe("FriendsPanel", () => {
 
     panel.show();
     const form = panel.element.children[1] as unknown as FakeElement;
+    const message = panel.element.children[2] as unknown as FakeElement;
     const input = form.children[0] as FakeElement;
     input.value = " Kai ";
     form.dispatch("submit", { preventDefault() {} });
+    panel.showError("Could not add friend");
 
     expect(panel.element.classList.contains("hidden")).toBe(false);
     expect(refreshes).toBe(1);
     expect(added).toEqual(["Kai"]);
     expect(input.value).toBe("");
+    expect(message.textContent).toBe("Could not add friend");
+    expect(message.classList.contains("visible")).toBe(true);
   });
 
   test("renders friends and routes join/message/remove actions", () => {

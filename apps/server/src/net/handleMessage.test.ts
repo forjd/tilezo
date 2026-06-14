@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { createRectRoomLayout } from "@tilezo/engine";
 import { DEFAULT_AVATAR_APPEARANCE, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
+import type { PersistenceStore } from "../db/persistence";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
+import type { Logger } from "../observability/logger";
+import type { Metrics } from "../observability/metrics";
 import { RoomManager } from "../rooms/RoomManager";
 import {
   consumeRateLimit,
@@ -145,6 +148,29 @@ describe("handleMessage", () => {
     ).toBe(true);
   });
 
+  test("skips personal room provisioning when the socket has no username", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1" });
+    let seeded = false;
+
+    handleMessage(ws, JSON.stringify({ type: "room.list.request" }), {
+      rooms,
+      publish() {},
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {
+          seeded = true;
+        },
+      },
+    });
+    await flushAsyncMessages();
+
+    expect(seeded).toBe(false);
+    expect(ws.sent[0]?.type).toBe("room.list");
+  });
+
   test("persists the last joined room", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket({ userId: "user_db_1", username: "Dan" });
@@ -224,6 +250,7 @@ describe("handleMessage", () => {
   test("rejects unavailable public rooms without leaving the current room", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const metrics = createMetricsDouble();
 
     handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
       rooms,
@@ -234,6 +261,7 @@ describe("handleMessage", () => {
     handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "private-room" }), {
       rooms,
       publish() {},
+      metrics,
     });
 
     expect(ws.data.roomId).toBe("lobby");
@@ -241,6 +269,41 @@ describe("handleMessage", () => {
     expect(ws.sent).toEqual([
       { type: "error", code: "ROOM_NOT_FOUND", message: "Room is not available" },
     ]);
+    expect(metrics.seenCounters).toContain("room.join.unavailable");
+  });
+
+  test("rejects rooms that disappear between access check and join", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("unstable", "Unstable"));
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const cleared: string[] = [];
+    const originalGetOrCreate = rooms.getOrCreate.bind(rooms);
+    rooms.getOrCreate = ((roomId: string, userId?: string) =>
+      roomId === "unstable"
+        ? undefined
+        : originalGetOrCreate(roomId, userId)) as typeof rooms.getOrCreate;
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "unstable" }), {
+      rooms,
+      publish() {},
+      logger: createLoggerDouble(),
+      metrics: createMetricsDouble(),
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {},
+        async clearLastRoomIdForUser(userId: string) {
+          cleared.push(userId);
+        },
+      } as unknown as PersistenceStore,
+    });
+    await flushAsyncMessages();
+
+    expect(ws.sent).toEqual([
+      { type: "error", code: "ROOM_NOT_FOUND", message: "Room is not available" },
+    ]);
+    expect(cleared).toEqual(["user_db_1"]);
   });
 
   test("rejects knock-only public rooms without leaving the current room", async () => {
@@ -378,6 +441,28 @@ describe("handleMessage", () => {
     ]);
   });
 
+  test("does not republish unchanged chat typing states", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: ServerMessage[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+
+    for (let index = 0; index < 2; index += 1) {
+      handleMessage(ws, JSON.stringify({ type: "chat.typing", isTyping: true }), {
+        rooms,
+        publish(_topic, message) {
+          published.push(message);
+        },
+      });
+    }
+
+    expect(published).toHaveLength(1);
+  });
+
   test("includes appearance in room snapshots and broadcasts updates", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket({
@@ -463,6 +548,229 @@ describe("handleMessage", () => {
         message: "Join a room before updating your character",
       },
     ]);
+  });
+
+  test("rejects appearance updates when the authoritative room refuses them", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      appearance: DEFAULT_AVATAR_APPEARANCE,
+    });
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    const room = rooms.get("lobby") as unknown as {
+      updateAppearance: () => boolean;
+    };
+    room.updateAppearance = () => false;
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "avatar.appearance.update",
+        appearance: { ...DEFAULT_AVATAR_APPEARANCE, hair: "bob" },
+      }),
+      {
+        rooms,
+        publish() {},
+        logger: createLoggerDouble(),
+        metrics: createMetricsDouble(),
+      },
+    );
+
+    expect(ws.data.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
+    expect(ws.sent).toEqual([
+      {
+        type: "error",
+        code: "NOT_IN_ROOM",
+        message: "Join a room before updating your character",
+      },
+    ]);
+  });
+
+  test("rate limits each websocket message kind before doing work", async () => {
+    const cases: Array<{
+      kind: keyof typeof RATE_LIMITS;
+      message: Record<string, unknown>;
+      counter: string;
+      errorMessage?: string;
+    }> = [
+      {
+        kind: "default",
+        message: { type: "room.list.request" },
+        counter: "rate_limited.room_list",
+        errorMessage: "Slow down before refreshing rooms again",
+      },
+      {
+        kind: "default",
+        message: { type: "room.join", roomId: "lobby" },
+        counter: "rate_limited.room_join",
+        errorMessage: "Slow down before changing rooms again",
+      },
+      {
+        kind: "movement",
+        message: { type: "avatar.move.request", target: { x: 1, y: 1 } },
+        counter: "rate_limited.movement",
+        errorMessage: "Slow down before moving again",
+      },
+      {
+        kind: "default",
+        message: { type: "avatar.appearance.update", appearance: DEFAULT_AVATAR_APPEARANCE },
+        counter: "rate_limited.appearance",
+        errorMessage: "Slow down before updating your character again",
+      },
+      {
+        kind: "chat",
+        message: { type: "chat.say", text: "hello" },
+        counter: "rate_limited.chat",
+        errorMessage: "Slow down before chatting again",
+      },
+      {
+        kind: "typing",
+        message: { type: "chat.typing", isTyping: true },
+        counter: "rate_limited.typing",
+      },
+      {
+        kind: "dm",
+        message: { type: "dm.send", toUserId: "user_db_2", text: "hi" },
+        counter: "rate_limited.dm",
+        errorMessage: "Slow down before sending another message",
+      },
+      {
+        kind: "typing",
+        message: { type: "dm.typing", toUserId: "user_db_2", isTyping: true },
+        counter: "rate_limited.dm_typing",
+        errorMessage: "Slow down before sending typing updates",
+      },
+      {
+        kind: "default",
+        message: { type: "dm.read", friendId: "user_db_2" },
+        counter: "rate_limited.dm_read",
+        errorMessage: "Slow down before marking messages read",
+      },
+      {
+        kind: "dm",
+        message: { type: "dm.edit", messageId: "dm_1", text: "updated" },
+        counter: "rate_limited.dm_edit",
+        errorMessage: "Slow down before editing another message",
+      },
+      {
+        kind: "dm",
+        message: { type: "dm.delete", messageId: "dm_1" },
+        counter: "rate_limited.dm_delete",
+        errorMessage: "Slow down before deleting another message",
+      },
+      {
+        kind: "default",
+        message: { type: "ping", sentAt: "2026-05-10T00:00:00.000Z" },
+        counter: "rate_limited.ping",
+        errorMessage: "Slow down before pinging again",
+      },
+    ];
+
+    for (const item of cases) {
+      const rooms = await RoomManager.create();
+      const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+      const metrics = createMetricsDouble();
+
+      handleMessage(ws, JSON.stringify(item.message), {
+        rooms,
+        publish() {},
+        logger: createLoggerDouble(),
+        metrics,
+        userRateLimits: exhaustedRateLimitStore(ws.data.userId, item.kind),
+      });
+
+      expect(metrics.seenCounters).toContain(item.counter);
+      if (item.errorMessage) {
+        expect(ws.sent).toContainEqual({
+          type: "error",
+          code: "RATE_LIMITED",
+          message: item.errorMessage,
+        });
+      } else {
+        expect(ws.sent).toEqual([]);
+      }
+    }
+  });
+
+  test("resends a snapshot when the same socket rejoins its current room", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const metrics = createMetricsDouble();
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+      logger: createLoggerDouble(),
+      metrics,
+    });
+
+    expect(ws.sent.map((message) => message.type)).toEqual(["room.snapshot", "room.list"]);
+    expect(metrics.seenCounters).toContain("room.join.snapshot_resent");
+  });
+
+  test("rejects stale or missing room references on socket data", async () => {
+    const rooms = await RoomManager.create();
+    const missingRoom = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      roomId: "missing",
+    });
+    const missingUser = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      roomId: "lobby",
+    });
+    rooms.getOrCreate("lobby");
+
+    handleMessage(missingRoom, JSON.stringify({ type: "chat.say", text: "hello" }), {
+      rooms,
+      publish() {},
+      logger: createLoggerDouble(),
+      metrics: createMetricsDouble(),
+    });
+    handleMessage(missingUser, JSON.stringify({ type: "chat.say", text: "hello" }), {
+      rooms,
+      publish() {},
+      logger: createLoggerDouble(),
+      metrics: createMetricsDouble(),
+    });
+
+    expect(missingRoom.sent).toEqual([
+      { type: "error", code: "NOT_IN_ROOM", message: "Join a room before chatting" },
+    ]);
+    expect(missingUser.sent).toEqual([
+      { type: "error", code: "NOT_IN_ROOM", message: "Join a room before chatting" },
+    ]);
+  });
+
+  test("closes the socket when sending hits backpressure", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    let closed = false;
+    ws.send = () => -1;
+    ws.close = () => {
+      closed = true;
+    };
+
+    handleMessage(ws, JSON.stringify({ type: "ping", sentAt: "2026-05-10T00:00:00.000Z" }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(closed).toBe(true);
   });
 });
 
@@ -590,6 +898,67 @@ describe("handleOpen", () => {
         },
       },
     });
+  });
+
+  test("registers and unregisters sockets in the per-user socket store", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_1",
+    });
+    const userSockets = new Map();
+
+    handleOpen(ws, {
+      rooms,
+      publish() {},
+      userSockets,
+    });
+    handleClose(ws, rooms, () => {}, undefined, undefined, undefined, userSockets);
+
+    expect(userSockets.has("user_db_1")).toBe(false);
+  });
+
+  test("silently drops rejected resume rooms and logs clear failures", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("room_knock", "Knock Room"), {
+      access: "knock",
+      ownerUserId: "user_db_2",
+      visibility: "public",
+    });
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_1",
+      resumeRoomId: "room_knock",
+    });
+    let warning: string | undefined;
+
+    handleOpen(ws, {
+      rooms,
+      publish() {},
+      logger: {
+        ...createLoggerDouble(),
+        warn(event: string) {
+          warning = event;
+        },
+      } as unknown as Logger,
+      metrics: createMetricsDouble(),
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {},
+        async clearLastRoomIdForUser() {
+          throw new Error("db down");
+        },
+      } as unknown as PersistenceStore,
+    });
+    await flushAsyncMessages();
+
+    expect(ws.sent).toEqual([{ type: "connected", userId: "user_db_1" }]);
+    expect(ws.data.roomId).toBeUndefined();
+    expect(warning).toBe("persistence.room_session.clear_failed");
   });
 });
 
@@ -794,6 +1163,64 @@ describe("duplicate connections and movement guards", () => {
 
     expect(saved).toEqual(["studio", "lobby", "studio"]);
   });
+
+  test("skips stale room session saves before touching persistence", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    let saveAttempts = 0;
+    const joinVersions = new Map<string, number>();
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {
+        joinVersions.set("user_db_1", 99);
+      },
+      joinVersions,
+      metrics: createMetricsDouble(),
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {},
+        async saveLastRoomIdForUser() {
+          saveAttempts += 1;
+        },
+      },
+    });
+    await flushAsyncMessages();
+
+    expect(saveAttempts).toBe(0);
+  });
+
+  test("logs room session save failures without failing the join", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    let warning: string | undefined;
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+      logger: {
+        ...createLoggerDouble(),
+        warn(event: string) {
+          warning = event;
+        },
+      } as unknown as Logger,
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {},
+        async saveLastRoomIdForUser() {
+          throw new Error("db down");
+        },
+      },
+    });
+    await flushAsyncMessages();
+
+    expect(ws.sent[0]).toMatchObject({ type: "room.snapshot", roomId: "lobby" });
+    expect(warning).toBe("persistence.room_session.save_failed");
+  });
 });
 
 describe("direct messages", () => {
@@ -883,6 +1310,132 @@ describe("direct messages", () => {
           isTyping: true,
         },
       },
+    ]);
+  });
+
+  test("does not republish unchanged direct message typing states", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: ServerMessage[] = [];
+    const directMessages = {
+      async assertCanMessage() {},
+    } as unknown as DirectMessageService;
+
+    for (let index = 0; index < 2; index += 1) {
+      handleMessage(
+        ws,
+        JSON.stringify({ type: "dm.typing", toUserId: "user_db_2", isTyping: true }),
+        {
+          rooms,
+          publish(_topic, message) {
+            published.push(message);
+          },
+          directMessages,
+        },
+      );
+      await flushAsyncMessages();
+    }
+
+    expect(published).toHaveLength(1);
+  });
+
+  test("rejects unauthenticated direct message operations", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1" });
+    const messages = [
+      { type: "dm.send", toUserId: "user_db_2", text: "hi" },
+      { type: "dm.typing", toUserId: "user_db_2", isTyping: true },
+      { type: "dm.read", friendId: "user_db_2" },
+      { type: "dm.edit", messageId: "dm_1", text: "updated" },
+      { type: "dm.delete", messageId: "dm_1" },
+    ];
+
+    for (const message of messages) {
+      handleMessage(ws, JSON.stringify(message), { rooms, publish() {} });
+    }
+
+    expect(ws.sent.map((message) => (message.type === "error" ? message.code : undefined))).toEqual(
+      [
+        "UNAUTHENTICATED",
+        "UNAUTHENTICATED",
+        "UNAUTHENTICATED",
+        "UNAUTHENTICATED",
+        "UNAUTHENTICATED",
+      ],
+    );
+  });
+
+  test("reports unavailable direct message services", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const messages = [
+      { type: "dm.send", toUserId: "user_db_2", text: "hi" },
+      { type: "dm.typing", toUserId: "user_db_2", isTyping: true },
+      { type: "dm.read", friendId: "user_db_2" },
+      { type: "dm.edit", messageId: "dm_1", text: "updated" },
+      { type: "dm.delete", messageId: "dm_1" },
+    ];
+
+    for (const message of messages) {
+      handleMessage(ws, JSON.stringify(message), { rooms, publish() {} });
+      await flushAsyncMessages();
+    }
+
+    expect(ws.sent).toEqual(
+      messages.map(() => ({
+        type: "error",
+        code: "DM_UNAVAILABLE",
+        message: "Direct messages are unavailable",
+      })),
+    );
+  });
+
+  test("surfaces unexpected direct message service failures as generic errors", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const directMessages = {
+      async send() {
+        throw new Error("send failed");
+      },
+      async assertCanMessage() {
+        throw new Error("typing failed");
+      },
+      async markRead() {
+        throw new Error("read failed");
+      },
+      async edit() {
+        throw new Error("edit failed");
+      },
+      async delete() {
+        throw new Error("delete failed");
+      },
+    } as unknown as DirectMessageService;
+    const messages = [
+      { type: "dm.send", toUserId: "user_db_2", text: "hi" },
+      { type: "dm.typing", toUserId: "user_db_2", isTyping: true },
+      { type: "dm.read", friendId: "user_db_2" },
+      { type: "dm.edit", messageId: "dm_1", text: "updated" },
+      { type: "dm.delete", messageId: "dm_1" },
+    ];
+
+    for (const message of messages) {
+      handleMessage(ws, JSON.stringify(message), {
+        rooms,
+        publish() {},
+        directMessages,
+        logger: createLoggerDouble(),
+      });
+      await flushAsyncMessages();
+    }
+
+    expect(
+      ws.sent.map((message) => (message.type === "error" ? message.message : undefined)),
+    ).toEqual([
+      "Could not send your message",
+      "Could not send typing update",
+      "Could not mark messages read",
+      "Could not edit message",
+      "Could not delete message",
     ]);
   });
 
@@ -1070,6 +1623,54 @@ describe("direct messages", () => {
       message: "You can only change your own messages",
     });
   });
+
+  test("surfaces direct message delete rejections as errors", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const directMessages = {
+      async delete() {
+        throw new DirectMessageError("DM_NOT_OWNED", "You can only delete your own messages");
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.delete", messageId: "dm_1" }), {
+      rooms,
+      publish() {},
+      directMessages,
+      metrics: createMetricsDouble(),
+    });
+    await flushAsyncMessages();
+
+    expect(ws.sent).toContainEqual({
+      type: "error",
+      code: "DM_NOT_OWNED",
+      message: "You can only delete your own messages",
+    });
+  });
+
+  test("surfaces direct message read rejections as errors", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const directMessages = {
+      async markRead() {
+        throw new DirectMessageError("NOT_FRIENDS", "You can only read friend messages");
+      },
+    } as unknown as DirectMessageService;
+
+    handleMessage(ws, JSON.stringify({ type: "dm.read", friendId: "user_db_2" }), {
+      rooms,
+      publish() {},
+      directMessages,
+      metrics: createMetricsDouble(),
+    });
+    await flushAsyncMessages();
+
+    expect(ws.sent).toContainEqual({
+      type: "error",
+      code: "NOT_FRIENDS",
+      message: "You can only read friend messages",
+    });
+  });
 });
 
 describe("consumeRateLimit", () => {
@@ -1139,11 +1740,46 @@ function createSocket(data: SocketData = { userId: "user_1" }) {
     unsubscribe(topic: string) {
       unsubscribed.push(topic);
     },
+    close() {},
   } as unknown as ServerWebSocket<SocketData> & {
     sent: ServerMessage[];
     subscribed: string[];
     unsubscribed: string[];
   };
+}
+
+function exhaustedRateLimitStore(userId: string, kind: keyof typeof RATE_LIMITS) {
+  return new Map([
+    [
+      userId,
+      {
+        [kind]: { tokens: 0, updatedAt: Date.now() },
+      },
+    ],
+  ]);
+}
+
+function createMetricsDouble() {
+  const seenCounters: string[] = [];
+
+  return {
+    seenCounters,
+    increment(counter: string) {
+      seenCounters.push(counter);
+    },
+    observe() {},
+    socketOpened() {},
+    socketClosed() {},
+  } as unknown as Metrics & { seenCounters: string[] };
+}
+
+function createLoggerDouble(): Logger {
+  return {
+    debug() {},
+    error() {},
+    info() {},
+    warn() {},
+  } as unknown as Logger;
 }
 
 function createTestLayout(id: string, name: string) {

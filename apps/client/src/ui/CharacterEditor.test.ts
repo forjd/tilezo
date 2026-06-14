@@ -55,9 +55,14 @@ describe("CharacterEditor", () => {
     editor.show(appearance);
     const form = editor.element.children[2] as unknown as FakeElement;
     const pantsColor = form.children[6]?.children[1] as FakeElement;
+    const actions = form.children[9] as FakeElement;
+    const submit = actions.children[1] as FakeElement;
+
+    editor.setSubmitLabel("Save character");
 
     expect(editor.element.classList.contains("hidden")).toBe(false);
     expect(pantsColor.value).toBe("#77684b");
+    expect(submit.textContent).toBe("Save character");
   });
 
   test("mounts an avatar preview that updates when controls change", () => {
@@ -120,12 +125,16 @@ describe("CharacterEditor", () => {
     });
     const form = editor.element.children[2] as unknown as FakeElement;
     const hairChoices = form.children[0]?.children[2] as FakeElement;
+    const shirtSwatches = form.children[4]?.children[2] as FakeElement;
     const afro = hairChoices.children.find((choice) => choice.dataset.value === "afro");
+    const blueShirt = shirtSwatches.children.find((choice) => choice.dataset.color === "#2f5f7f");
     const editorState = editor as unknown as { preview: { appearance: AvatarAppearance } };
 
     afro?.click();
+    blueShirt?.click();
 
     expect(editorState.preview.appearance.hair).toBe("afro");
+    expect(editorState.preview.appearance.shirtColor).toBe("#2f5f7f");
   });
 });
 

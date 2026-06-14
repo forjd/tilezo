@@ -83,6 +83,30 @@ describe("RoomClient", () => {
     await expect(listRoomTemplates()).rejects.toThrow("Nope");
     expect(requests).toEqual(["http://localhost:4567/room-templates"]);
   });
+
+  test("returns an empty template list when the payload is absent", async () => {
+    globalThis.fetch = (async () => Response.json({})) as unknown as typeof fetch;
+
+    await expect(listRoomTemplates()).resolves.toEqual([]);
+  });
+
+  test("throws fallback errors when room error responses are malformed", async () => {
+    globalThis.fetch = (async () =>
+      new Response("not json", { status: 500 })) as unknown as typeof fetch;
+
+    await expect(listRoomTemplates()).rejects.toThrow("Room templates failed");
+    await expect(
+      createRoom({
+        name: "Tile Lab",
+        description: "Build space",
+        templateId: "compact-studio",
+        visibility: "public",
+        access: "open",
+        capacity: 12,
+        doorY: 3,
+      }),
+    ).rejects.toThrow("Room creation failed");
+  });
 });
 
 function restorePublicApiUrl(): void {

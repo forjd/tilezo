@@ -214,6 +214,16 @@ describe("updateAppearance", () => {
       },
     ]);
   });
+
+  test("throws a friendly appearance error for malformed error responses", async () => {
+    delete Bun.env.PUBLIC_API_URL;
+    globalThis.fetch = (async () =>
+      new Response("not json", { status: 500 })) as unknown as typeof fetch;
+
+    await expect(updateAppearance(DEFAULT_AVATAR_APPEARANCE)).rejects.toThrow(
+      "Character update failed",
+    );
+  });
 });
 
 function restorePublicApiUrl(): void {

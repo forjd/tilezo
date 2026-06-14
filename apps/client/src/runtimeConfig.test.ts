@@ -60,6 +60,19 @@ describe("loadRuntimeConfig", () => {
 
     expect(windowRef.TILEZO_CONFIG).toEqual({ PUBLIC_API_URL: "http://existing.test" });
   });
+
+  test("skips runtime config loading outside the browser", async () => {
+    Reflect.deleteProperty(globalThis, "window");
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return Response.json({});
+    }) as unknown as typeof fetch;
+
+    await loadRuntimeConfig();
+
+    expect(fetchCalls).toBe(0);
+  });
 });
 
 function restoreWindow(): void {

@@ -359,6 +359,25 @@ describe("RoomScene", () => {
       restore();
     }
   });
+
+  test("destroys avatars, tiles, world, and pointer listeners", () => {
+    const app = createApp();
+    const moves: unknown[] = [];
+    const scene = new RoomScene(app, (target) => moves.push(target));
+
+    scene.loadSnapshot(snapshot([user("user_1", "Dan", { x: 0, y: 0 })]));
+    const state = sceneState(scene);
+    const world = app.stage.children[0];
+
+    scene.destroy();
+    app.canvas.click({ clientX: 384, clientY: 348 });
+
+    expect(state.avatars.size).toBe(0);
+    expect(state.tiles.view.destroyed).toBe(true);
+    expect(state.tiles.wallView.destroyed).toBe(true);
+    expect(world?.destroyed).toBe(true);
+    expect(moves).toEqual([]);
+  });
 });
 
 function snapshot(users: RoomSnapshotMessage["users"]): RoomSnapshotMessage {

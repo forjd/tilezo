@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { isCoverageTarget, parseLcov, percentage, totalCoverage } from "./check-coverage";
+import {
+  adjustCoverageRecordForSource,
+  isCoverageTarget,
+  parseLcov,
+  percentage,
+  totalCoverage,
+} from "./check-coverage";
 
 describe("parseLcov", () => {
   test("parses per-file line and function totals", () => {
@@ -49,18 +55,44 @@ describe("totalCoverage", () => {
   });
 });
 
+describe("adjustCoverageRecordForSource", () => {
+  test("subtracts LCOV lines explicitly ignored in source", () => {
+    const source = [
+      "const covered = true;",
+      "/* c8 ignore next 2 -- type-only declarations */",
+      "declare private readonly value: string;",
+      "constructor(",
+      "const alsoCovered = true;",
+    ].join("\n");
+
+    expect(
+      adjustCoverageRecordForSource(
+        source,
+        { functionsFound: 0, functionsHit: 0, linesFound: 4, linesHit: 2 },
+        new Map([
+          [1, 1],
+          [3, 0],
+          [4, 0],
+          [5, 1],
+        ]),
+      ),
+    ).toEqual({ functionsFound: 0, functionsHit: 0, linesFound: 2, linesHit: 2 });
+  });
+});
+
 describe("isCoverageTarget", () => {
   test("counts executable entrypoints and composition roots", () => {
-    expect(isCoverageTarget("apps/server/src/index.ts")).toBe(true);
-    expect(isCoverageTarget("apps/client/src/main.ts")).toBe(true);
+    expect(isCoverageTarget("apps/server/src/serverRuntime.ts")).toBe(true);
     expect(isCoverageTarget("apps/client/src/app/createApp.ts")).toBe(true);
     expect(isCoverageTarget("apps/client/src/game/Game.ts")).toBe(true);
   });
 
-  test("excludes config, type-only files, re-export shims, and preview-only wiring", () => {
+  test("excludes config, type-only files, re-export shims, and thin browser wiring", () => {
     expect(isCoverageTarget("apps/server/drizzle.config.ts")).toBe(false);
     expect(isCoverageTarget("apps/client/src/game/types.ts")).toBe(false);
     expect(isCoverageTarget("packages/engine/src/index.ts")).toBe(false);
+    expect(isCoverageTarget("apps/client/src/main.ts")).toBe(false);
     expect(isCoverageTarget("apps/client/src/preview-entry.ts")).toBe(false);
+    expect(isCoverageTarget("apps/server/src/index.ts")).toBe(false);
   });
 });

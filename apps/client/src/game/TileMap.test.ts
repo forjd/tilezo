@@ -20,6 +20,7 @@ describe("TileMap", () => {
     const map = new TileMap();
 
     map.load([
+      { x: -1, y: 1, z: 0, walkable: true },
       { x: -1, y: 2, z: 0, walkable: true },
       { x: 0, y: 0, z: 0, walkable: true },
       { x: 0, y: 1, z: 0, walkable: true },
@@ -30,6 +31,16 @@ describe("TileMap", () => {
     expect(map.isWalkable({ x: -1, y: 2 })).toBe(true);
     expect(map.getAttachedDoorTile()).toEqual({ x: -1, y: 2 });
     expect(map.wallView.children).toHaveLength(1);
+  });
+
+  test("destroys tile containers", () => {
+    const map = new TileMap();
+
+    map.load([{ x: 0, y: 0, z: 0, walkable: true }]);
+    map.destroy();
+
+    expect(map.view.destroyed).toBe(true);
+    expect(map.wallView.destroyed).toBe(true);
   });
 
   test("positions the hover highlight only for known tiles", () => {

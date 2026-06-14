@@ -33,6 +33,41 @@ describe("ensurePersonalRoom", () => {
 
     expect(store.seededRoomIds).toEqual([personalRoomId("user_1")]);
   });
+
+  test("records provisioning failures without throwing", async () => {
+    const rooms = new RoomManager([]);
+    const metrics = new Metrics();
+    const warnings: unknown[] = [];
+
+    await expect(
+      ensurePersonalRoom(
+        { id: "user_1", username: "Dan" },
+        {
+          logger: {
+            warn(_event: string, fields: Record<string, unknown>) {
+              warnings.push(fields);
+            },
+          } as unknown as Parameters<typeof ensurePersonalRoom>[1]["logger"],
+          metrics,
+          persistence: {
+            async getRoom() {
+              return undefined;
+            },
+            async seedRoom() {
+              throw new Error("database unavailable");
+            },
+          },
+          rooms,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(rooms.hasAccessibleLayout(personalRoomId("user_1"), "user_1")).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(
+      metrics.snapshot({ activeRooms: 0, rooms: [], layouts: { public: 0, private: 0 } }).counters,
+    ).toMatchObject({ "room.private.provision_failed": 1 });
+  });
 });
 
 function createPersistenceStore() {

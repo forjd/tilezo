@@ -75,4 +75,19 @@ describe("FriendClient", () => {
       },
     ]);
   });
+
+  test("returns an empty list when the friends payload is absent", async () => {
+    globalThis.fetch = (async () => Response.json({})) as unknown as typeof fetch;
+
+    await expect(listFriends()).resolves.toEqual([]);
+  });
+
+  test("throws fallback errors when error responses are malformed", async () => {
+    globalThis.fetch = (async () =>
+      new Response("not json", { status: 500 })) as unknown as typeof fetch;
+
+    await expect(listFriends()).rejects.toThrow("Friends failed");
+    await expect(addFriend("Kai")).rejects.toThrow("Friend add failed");
+    await expect(removeFriend("user/2")).rejects.toThrow("Friend remove failed");
+  });
 });

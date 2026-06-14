@@ -3,6 +3,7 @@ import {
   AVATAR_HAIR_STYLES,
   createRandomAvatarAppearance,
   DEFAULT_AVATAR_APPEARANCE,
+  MAX_RAW_MESSAGE_BYTES,
   parseClientMessage,
   parseRawClientMessage,
   parseServerMessage,
@@ -56,6 +57,10 @@ describe("protocol parser", () => {
     expect(parseClientMessage({ type: "chat.say", text: "ab\u202Ecd\u200B ef" })).toEqual({
       ok: true,
       value: { type: "chat.say", text: "abcd ef" },
+    });
+    expect(parseClientMessage({ type: "chat.say", text: "a\u0001b\u007Fc\u0085d" })).toEqual({
+      ok: true,
+      value: { type: "chat.say", text: "abcd" },
     });
     // A message that is only zero-width/control characters collapses to empty and is rejected.
     expect(parseClientMessage({ type: "chat.say", text: "\u200B\u202E\t" }).ok).toBe(false);
@@ -111,6 +116,10 @@ describe("protocol parser", () => {
 
   test("rejects malformed raw messages", () => {
     expect(parseRawClientMessage("{bad json").ok).toBe(false);
+    expect(parseRawClientMessage("x".repeat(MAX_RAW_MESSAGE_BYTES + 1))).toEqual({
+      ok: false,
+      error: "Message is too large",
+    });
   });
 
   test("rejects invalid payloads", () => {

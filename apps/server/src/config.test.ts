@@ -140,6 +140,7 @@ describe("getConfig", () => {
   });
 
   test("rejects invalid TRUST_PROXY values", () => {
+    expect(getConfig({ TRUST_PROXY: "false" }).trustProxy).toBe(false);
     expect(() => getConfig({ TRUST_PROXY: "maybe" })).toThrow(
       "TRUST_PROXY must be a boolean (true/false)",
     );

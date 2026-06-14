@@ -48,6 +48,10 @@ describe("room creation templates", () => {
   });
 
   test("rejects blank names and unknown templates", () => {
+    expect(parseCreateRoomInput(undefined)).toEqual({
+      ok: false,
+      message: "Room details are required",
+    });
     expect(parseCreateRoomInput({ name: "", templateId: "compact-studio" })).toEqual({
       ok: false,
       message: "Room name is required",
@@ -80,5 +84,19 @@ describe("room creation templates", () => {
     });
     expect(layout.tiles).toContainEqual({ x: -1, y: 1, z: 0, walkable: true });
     expect(layout.tiles).toContainEqual({ x: 9, y: 0, z: 0, walkable: false });
+  });
+
+  test("throws when creating from an unknown template id", () => {
+    expect(() =>
+      createRoomLayoutFromTemplate("room_1", {
+        name: "Tile Lab",
+        description: "",
+        templateId: "unknown",
+        visibility: "public",
+        access: "open",
+        capacity: 10,
+        doorY: 1,
+      }),
+    ).toThrow("Unknown room template: unknown");
   });
 });

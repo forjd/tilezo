@@ -295,4 +295,24 @@ describe("Avatar", () => {
     expect((state.chatBubbles.at(-1)?.text.text ?? "").split("\n").length).toBeGreaterThan(1);
     expect(state.chatBubbles.at(-1)?.width).toBeLessThanOrEqual(348);
   });
+
+  test("truncates overflowing wrapped chat with an ellipsis", () => {
+    const avatar = new Avatar("user_1", "Dan", { x: 0, y: 0 });
+    const state = avatar as unknown as {
+      chatBubbles: { text: { text: string } }[];
+    };
+
+    avatar.say(
+      [
+        "one two three four five six",
+        "seven eight nine ten eleven twelve",
+        "thirteen fourteen fifteen sixteen seventeen",
+        "eighteen nineteen twenty twentyone twentytwo",
+      ].join(" "),
+    );
+
+    const lines = (state.chatBubbles.at(-1)?.text.text ?? "").split("\n");
+    expect(lines).toHaveLength(4);
+    expect(lines.at(-1)?.endsWith("...")).toBe(true);
+  });
 });

@@ -53,4 +53,19 @@ describe("BlockClient", () => {
     ]);
     expect(calls[0]?.init?.body).toBe(JSON.stringify({ userId: "user_2" }));
   });
+
+  test("returns an empty list when the response shape is missing users", async () => {
+    globalThis.fetch = (async () => Response.json({})) as unknown as typeof fetch;
+
+    await expect(listBlockedUsers()).resolves.toEqual([]);
+  });
+
+  test("throws fallback errors when error responses are malformed", async () => {
+    globalThis.fetch = (async () =>
+      new Response("not json", { status: 500 })) as unknown as typeof fetch;
+
+    await expect(listBlockedUsers()).rejects.toThrow("Blocked users failed");
+    await expect(blockUser("user_2")).rejects.toThrow("Block failed");
+    await expect(unblockUser("user/2")).rejects.toThrow("Unblock failed");
+  });
 });

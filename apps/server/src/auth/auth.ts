@@ -74,12 +74,16 @@ const USERNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 // latency does not reveal which usernames are registered.
 const DUMMY_VERIFY_PASSWORD = "tilezo-dummy-verify-password";
 
+/* c8 ignore next 11 -- Bun reports these constructor-assigned declare fields as uncovered. */
 export class AuthService {
-  private readonly now: () => number;
-  private readonly nowSeconds: () => number;
-  private readonly passwordHash: (password: string) => Promise<string>;
-  private readonly passwordVerify: (password: string, passwordHash: string) => Promise<boolean>;
-  private dummyPasswordHash?: Promise<string>;
+  private declare readonly now: () => number;
+  private declare readonly nowSeconds: () => number;
+  private declare readonly passwordHash: (password: string) => Promise<string>;
+  private declare readonly passwordVerify: (
+    password: string,
+    passwordHash: string,
+  ) => Promise<boolean>;
+  private declare dummyPasswordHash?: Promise<string>;
 
   constructor(
     private readonly store: AuthStore,

@@ -36,6 +36,8 @@ describe("grid and pathfinding", () => {
     expect(grid.isWalkable({ x: 0, y: 0 })).toBe(true);
     expect(grid.isWalkable({ x: 1, y: 1 })).toBe(false);
     expect(grid.isWalkable({ x: 10, y: 10 })).toBe(false);
+    expect(grid.has({ x: 0, y: 0 })).toBe(true);
+    expect(grid.has({ x: 10, y: 10 })).toBe(false);
   });
 
   test("rect rooms can attach one walkable door tile outside the left wall", () => {

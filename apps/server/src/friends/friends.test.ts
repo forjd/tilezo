@@ -142,6 +142,7 @@ describe("FriendService", () => {
     await service.add("user_1", "Kai");
     await service.add("user_2", "Dan");
 
+    await expect(service.areFriends("user_1", "user_2")).resolves.toBe(true);
     expect((await service.list("user_1")).map((friend) => friend.id)).toEqual(["user_2"]);
     expect((await service.list("user_2")).map((friend) => friend.id)).toEqual(["user_1"]);
   });
@@ -166,6 +167,9 @@ describe("DrizzleFriendStore", () => {
     ).toBe(3);
     await new DrizzleFriendStore(queryDouble([[], []])).addFriend("user_1", "user_2");
     await new DrizzleFriendStore(queryDouble([[]])).removeFriend("user_1", "user_2");
+    await expect(
+      new DrizzleFriendStore(queryDouble([[{ userId: "user_1" }]])).areFriends("user_1", "user_2"),
+    ).resolves.toBe(true);
 
     // First query returns the friendship rows, the second resolves the friend users.
     const list = await new DrizzleFriendStore(

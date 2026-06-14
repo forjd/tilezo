@@ -135,6 +135,20 @@ describe("DirectMessageService", () => {
     expect(store.saved).toHaveLength(0);
   });
 
+  test("reports whether a user can message and rethrows unexpected policy failures", async () => {
+    const friendly = new DirectMessageService(createStore(), async () => true);
+    const blocked = new DirectMessageService(createStore(), async () => false);
+    const failing = new DirectMessageService(createStore(), async () => {
+      throw new Error("friend store unavailable");
+    });
+
+    await expect(friendly.canMessage("user_1", "user_2")).resolves.toBe(true);
+    await expect(blocked.canMessage("user_1", "user_2")).resolves.toBe(false);
+    await expect(failing.canMessage("user_1", "user_2")).rejects.toThrow(
+      "friend store unavailable",
+    );
+  });
+
   test("returns conversation history for friends and blocks it for non-friends", async () => {
     const store = createStore();
     const friendly = new DirectMessageService(store, async () => true);

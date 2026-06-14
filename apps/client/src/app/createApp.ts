@@ -23,7 +23,81 @@ import { FriendsPanel } from "../ui/FriendsPanel";
 import { LoginForm } from "../ui/LoginForm";
 import { RoomBrowser } from "../ui/RoomBrowser";
 
-export function createApp(root: HTMLElement): void {
+type GameModule = typeof import("../game/Game");
+type AppTimeout = ReturnType<typeof setTimeout>;
+type AppInterval = ReturnType<typeof setInterval>;
+
+type CreateAppDependencies = {
+  addFriend: typeof addFriend;
+  authenticate: typeof authenticate;
+  blockUser: typeof blockUser;
+  clearInterval: (timer: AppInterval | undefined) => void;
+  clearTimeout: (timer: AppTimeout | undefined) => void;
+  createChatPanel: () => ChatPanel;
+  createCharacterEditor: (
+    options: ConstructorParameters<typeof CharacterEditor>[0],
+  ) => CharacterEditor;
+  createClientLogger: () => Pick<ClientLogger, "event">;
+  createDirectMessagePanel: (
+    options: ConstructorParameters<typeof DirectMessagePanel>[0],
+  ) => DirectMessagePanel;
+  createDisconnectedDialog: (
+    options: ConstructorParameters<typeof DisconnectedDialog>[0],
+  ) => DisconnectedDialog;
+  createFriendsPanel: (options: ConstructorParameters<typeof FriendsPanel>[0]) => FriendsPanel;
+  createLoginForm: (onSubmit: ConstructorParameters<typeof LoginForm>[0]) => LoginForm;
+  createRoom: typeof createRoom;
+  createRoomBrowser: (options: ConstructorParameters<typeof RoomBrowser>[0]) => RoomBrowser;
+  createRoomDialog: (
+    options: ConstructorParameters<typeof CreateRoomDialog>[0],
+  ) => CreateRoomDialog;
+  fetchSession: typeof fetchSession;
+  listFriends: typeof listFriends;
+  listRoomTemplates: typeof listRoomTemplates;
+  loadConversation: typeof loadConversation;
+  loadGame: () => Promise<GameModule>;
+  loadUnreadCounts: typeof loadUnreadCounts;
+  removeFriend: typeof removeFriend;
+  requestLogout: typeof requestLogout;
+  setInterval: (callback: () => void, ms: number) => AppInterval;
+  setTimeout: (callback: () => void, ms: number) => AppTimeout;
+  updateAppearance: typeof updateAppearance;
+};
+
+const defaultCreateAppDependencies: CreateAppDependencies = {
+  addFriend,
+  authenticate,
+  blockUser,
+  clearInterval: (timer) => clearInterval(timer as never),
+  clearTimeout: (timer) => clearTimeout(timer as never),
+  createChatPanel: () => new ChatPanel(),
+  createCharacterEditor: (options) => new CharacterEditor(options),
+  createClientLogger: () => new ClientLogger(),
+  createDirectMessagePanel: (options) => new DirectMessagePanel(options),
+  createDisconnectedDialog: (options) => new DisconnectedDialog(options),
+  createFriendsPanel: (options) => new FriendsPanel(options),
+  createLoginForm: (onSubmit) => new LoginForm(onSubmit),
+  createRoom,
+  createRoomBrowser: (options) => new RoomBrowser(options),
+  createRoomDialog: (options) => new CreateRoomDialog(options),
+  fetchSession,
+  listFriends,
+  listRoomTemplates,
+  loadConversation,
+  loadGame: () => import("../game/Game"),
+  loadUnreadCounts,
+  removeFriend,
+  requestLogout,
+  setInterval: (callback, ms) => setInterval(callback, ms) as AppInterval,
+  setTimeout: (callback, ms) => setTimeout(callback, ms) as AppTimeout,
+  updateAppearance,
+};
+
+export function createApp(
+  root: HTMLElement,
+  dependencies: Partial<CreateAppDependencies> = {},
+): void {
+  const deps: CreateAppDependencies = { ...defaultCreateAppDependencies, ...dependencies };
   const shell = document.createElement("main");
   const stage = document.createElement("div");
   const topBar = document.createElement("header");
@@ -37,15 +111,15 @@ export function createApp(root: HTMLElement): void {
   const createRoomButton = document.createElement("button");
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
-  const chat = new ChatPanel();
-  const clientLogger = new ClientLogger();
+  const chat = deps.createChatPanel();
+  const clientLogger = deps.createClientLogger();
   // The auth token lives only in an HttpOnly cookie; the page keeps just the user profile.
   let user: AuthUser | undefined;
   let game: Game | undefined;
   let gameStarted = false;
   let joinedRoom = false;
-  let reconnectTimeout: ReturnType<typeof setTimeout> | undefined;
-  let countdownInterval: ReturnType<typeof setInterval> | undefined;
+  let reconnectTimeout: AppTimeout | undefined;
+  let countdownInterval: AppInterval | undefined;
   let reconnecting = false;
   const unreadCounts = new Map<string, number>();
 
@@ -78,7 +152,7 @@ export function createApp(root: HTMLElement): void {
   topActions.append(browseRooms, friendsButton, createRoomButton, editCharacter, logOut);
   topBar.append(brand, topActions, status);
 
-  const roomBrowser = new RoomBrowser({
+  const roomBrowser = deps.createRoomBrowser({
     onJoin(roomId) {
       status.textContent = "joining room";
       game?.joinRoom(roomId);
@@ -90,14 +164,14 @@ export function createApp(root: HTMLElement): void {
     },
   });
 
-  const friendsPanel = new FriendsPanel({
+  const friendsPanel = deps.createFriendsPanel({
     async onAdd(username) {
       if (!user) {
         return;
       }
 
       try {
-        const result = await addFriend(username);
+        const result = await deps.addFriend(username);
         await refreshFriends();
         status.textContent = result.status === "accepted" ? "friend added" : "friend request sent";
       } catch (error) {
@@ -126,7 +200,7 @@ export function createApp(root: HTMLElement): void {
       }
 
       try {
-        await removeFriend(friendId);
+        await deps.removeFriend(friendId);
         await refreshFriends();
         status.textContent = "friend removed";
       } catch (error) {
@@ -141,7 +215,7 @@ export function createApp(root: HTMLElement): void {
       }
 
       try {
-        await blockUser(friend.id);
+        await deps.blockUser(friend.id);
         await refreshFriends();
 
         if (directMessagePanel.isOpenFor(friend.id)) {
@@ -162,7 +236,7 @@ export function createApp(root: HTMLElement): void {
       return game;
     }
 
-    const { Game } = await import("../game/Game");
+    const { Game } = await deps.loadGame();
     game = new Game({
       stage,
       chat,
@@ -243,7 +317,7 @@ export function createApp(root: HTMLElement): void {
     }
   }
 
-  const directMessagePanel = new DirectMessagePanel({
+  const directMessagePanel = deps.createDirectMessagePanel({
     onSend(friendId, text) {
       return game?.sendDirectMessage(friendId, text) ?? false;
     },
@@ -262,7 +336,7 @@ export function createApp(root: HTMLElement): void {
     },
   });
 
-  const disconnectedDialog = new DisconnectedDialog({
+  const disconnectedDialog = deps.createDisconnectedDialog({
     onRetry() {
       void reconnectAfterDisconnect("resume");
     },
@@ -271,7 +345,7 @@ export function createApp(root: HTMLElement): void {
     },
   });
 
-  const characterEditor = new CharacterEditor({
+  const characterEditor = deps.createCharacterEditor({
     initialAppearance: DEFAULT_AVATAR_APPEARANCE,
     async onSubmit(appearance) {
       if (!user) {
@@ -281,7 +355,7 @@ export function createApp(root: HTMLElement): void {
       status.textContent = "saving character";
 
       try {
-        const savedAppearance = await updateAppearance(appearance);
+        const savedAppearance = await deps.updateAppearance(appearance);
         user.appearance = savedAppearance;
         characterEditor.hide();
 
@@ -312,12 +386,12 @@ export function createApp(root: HTMLElement): void {
     },
   });
 
-  const login = new LoginForm(async ({ mode, username, password }) => {
+  const login = deps.createLoginForm(async ({ mode, username, password }) => {
     login.hide();
     status.textContent = mode === "register" ? "creating account" : "logging in";
 
     try {
-      user = await authenticate({ mode, username, password });
+      user = await deps.authenticate({ mode, username, password });
       void clientLogger.event(`auth.${mode}.succeeded`, { userId: user.id });
       logOut.classList.remove("hidden");
       friendsButton.classList.remove("hidden");
@@ -334,7 +408,7 @@ export function createApp(root: HTMLElement): void {
     }
   });
 
-  const createRoomDialog = new CreateRoomDialog({
+  const createRoomDialog = deps.createRoomDialog({
     async onSubmit(room) {
       if (!user) {
         return;
@@ -343,7 +417,7 @@ export function createApp(root: HTMLElement): void {
       status.textContent = "creating room";
 
       try {
-        const created = await createRoom(room);
+        const created = await deps.createRoom(room);
         createRoomDialog.hide();
         roomBrowser.hide();
 
@@ -413,8 +487,8 @@ export function createApp(root: HTMLElement): void {
       game?.stop();
     }
 
-    await requestLogout();
-    createApp(root);
+    await deps.requestLogout();
+    createApp(root, deps);
   }
 
   shell.append(
@@ -447,7 +521,7 @@ export function createApp(root: HTMLElement): void {
   }
 
   async function restoreExistingSession(): Promise<void> {
-    const existing = await fetchSession();
+    const existing = await deps.fetchSession();
 
     if (!existing) {
       return;
@@ -478,11 +552,11 @@ export function createApp(root: HTMLElement): void {
     let remaining = retryInSeconds;
 
     disconnectedDialog.showDisconnected(message, remaining);
-    countdownInterval = setInterval(() => {
+    countdownInterval = deps.setInterval(() => {
       remaining -= 1;
       disconnectedDialog.setCountdown(Math.max(0, remaining));
     }, 1000);
-    reconnectTimeout = setTimeout(() => {
+    reconnectTimeout = deps.setTimeout(() => {
       void reconnectAfterDisconnect("resume");
     }, retryInSeconds * 1000);
   }
@@ -529,7 +603,7 @@ export function createApp(root: HTMLElement): void {
     status.textContent = "loading room templates";
 
     try {
-      createRoomDialog.show(await listRoomTemplates());
+      createRoomDialog.show(await deps.listRoomTemplates());
       status.textContent = "create room";
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "Room templates failed";
@@ -544,7 +618,7 @@ export function createApp(root: HTMLElement): void {
     status.textContent = "loading messages";
 
     try {
-      const history = await loadConversation(friend.id);
+      const history = await deps.loadConversation(friend.id);
       directMessagePanel.open(friend, history, user.id);
       friendsPanel.hide();
       status.textContent = `messaging ${friend.username}`;
@@ -559,7 +633,7 @@ export function createApp(root: HTMLElement): void {
     }
 
     try {
-      const [friends, unread] = await Promise.all([listFriends(), loadUnreadCounts()]);
+      const [friends, unread] = await Promise.all([deps.listFriends(), deps.loadUnreadCounts()]);
       unreadCounts.clear();
 
       for (const item of unread) {
@@ -599,12 +673,12 @@ export function createApp(root: HTMLElement): void {
 
   function clearReconnectSchedule(): void {
     if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout);
+      deps.clearTimeout(reconnectTimeout);
       reconnectTimeout = undefined;
     }
 
     if (countdownInterval) {
-      clearInterval(countdownInterval);
+      deps.clearInterval(countdownInterval);
       countdownInterval = undefined;
     }
   }

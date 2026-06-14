@@ -2,10 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ChatPanel } from "./ChatPanel";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+const originalSetTimeout = globalThis.setTimeout;
+const originalClearTimeout = globalThis.clearTimeout;
 
 describe("ChatPanel", () => {
   afterEach(() => {
     restoreDocument();
+    restoreTimers();
   });
 
   test("starts hidden and becomes visible", () => {
@@ -75,6 +78,7 @@ describe("ChatPanel", () => {
 
   test("emits typing status from input changes and message sends", () => {
     installDocument();
+    const timers = installTimers();
     const panel = new ChatPanel();
     const statuses: boolean[] = [];
     const input = getInput(panel);
@@ -82,11 +86,12 @@ describe("ChatPanel", () => {
     panel.onTypingChange((isTyping) => statuses.push(isTyping));
     input.value = "h";
     input.dispatch("input", {});
+    timers.at(-1)?.();
     input.value = "hi";
     input.dispatch("input", {});
     input.dispatch("keydown", { key: "Enter" });
 
-    expect(statuses).toEqual([true, false]);
+    expect(statuses).toEqual([true, false, true, false]);
   });
 
   test("appends chat messages and scrolls the list", () => {
@@ -136,6 +141,23 @@ function restoreDocument() {
   } else {
     Reflect.deleteProperty(globalThis, "document");
   }
+}
+
+function installTimers(): Array<() => void> {
+  const timers: Array<() => void> = [];
+
+  globalThis.setTimeout = ((callback: () => void) => {
+    timers.push(callback);
+    return timers.length;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+
+  return timers;
+}
+
+function restoreTimers(): void {
+  globalThis.setTimeout = originalSetTimeout;
+  globalThis.clearTimeout = originalClearTimeout;
 }
 
 type FakeEvent = {

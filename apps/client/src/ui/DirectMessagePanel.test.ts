@@ -4,6 +4,8 @@ import { DirectMessagePanel } from "./DirectMessagePanel";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
 const originalPrompt = globalThis.prompt;
+const originalSetTimeout = globalThis.setTimeout;
+const originalClearTimeout = globalThis.clearTimeout;
 
 function dm(over: Partial<DirectMessage>): DirectMessage {
   return {
@@ -21,6 +23,7 @@ describe("DirectMessagePanel", () => {
   afterEach(() => {
     restoreDocument();
     globalThis.prompt = originalPrompt;
+    restoreTimers();
   });
 
   test("opens a conversation, renders history, and aligns own messages", () => {
@@ -108,6 +111,7 @@ describe("DirectMessagePanel", () => {
 
   test("emits local typing changes and clears them after send", () => {
     installDocument();
+    const timers = installTimers();
     const typing: Array<{ friendId: string; isTyping: boolean }> = [];
     const panel = new DirectMessagePanel({
       onSend: () => undefined,
@@ -121,11 +125,14 @@ describe("DirectMessagePanel", () => {
     const input = form.children[0] as FakeElement;
     input.value = "hey";
     input.dispatch("input", {});
+    timers.at(-1)?.();
     input.value = "hey there";
     input.dispatch("input", {});
     form.dispatch("submit", { preventDefault() {} });
 
     expect(typing).toEqual([
+      { friendId: "user_2", isTyping: true },
+      { friendId: "user_2", isTyping: false },
       { friendId: "user_2", isTyping: true },
       { friendId: "user_2", isTyping: false },
     ]);
@@ -145,6 +152,37 @@ describe("DirectMessagePanel", () => {
     expect(panel.append(dm({ text: "sent" }))).toBe(true);
     expect(typingStatus.textContent).toBe("");
     expect(typingStatus.classList.contains("visible")).toBe(false);
+  });
+
+  test("hides the conversation and clears typing state", () => {
+    installDocument();
+    const typing: Array<{ friendId: string; isTyping: boolean }> = [];
+    const panel = new DirectMessagePanel({
+      onSend: () => undefined,
+      onTypingChange(friendId, isTyping) {
+        typing.push({ friendId, isTyping });
+      },
+    });
+    panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
+    const form = panel.element.children[3] as unknown as FakeElement;
+    const input = form.children[0] as FakeElement;
+    const typingStatus = panel.element.children[2] as unknown as FakeElement;
+
+    input.value = "hey";
+    input.dispatch("input", {});
+    panel.setFriendTyping("user_2", true);
+    panel.hide();
+
+    expect(panel.element.classList.contains("hidden")).toBe(true);
+    expect(panel.isOpenFor("user_2")).toBe(false);
+    expect(typingStatus.textContent).toBe("");
+    expect(typingStatus.classList.contains("visible")).toBe(false);
+    expect(panel.append(dm({ text: "after close" }))).toBe(false);
+    expect(panel.markRead(["dm_1"])).toBe(false);
+    expect(typing).toEqual([
+      { friendId: "user_2", isTyping: true },
+      { friendId: "user_2", isTyping: false },
+    ]);
   });
 
   test("marks own messages read from receipts", () => {
@@ -236,6 +274,23 @@ function restoreDocument() {
   } else {
     Reflect.deleteProperty(globalThis, "document");
   }
+}
+
+function installTimers(): Array<() => void> {
+  const timers: Array<() => void> = [];
+
+  globalThis.setTimeout = ((callback: () => void) => {
+    timers.push(callback);
+    return timers.length;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+
+  return timers;
+}
+
+function restoreTimers(): void {
+  globalThis.setTimeout = originalSetTimeout;
+  globalThis.clearTimeout = originalClearTimeout;
 }
 
 type FakeEvent = { preventDefault?: () => void; target?: FakeElement };

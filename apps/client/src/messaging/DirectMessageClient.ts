@@ -34,9 +34,9 @@ export async function loadUnreadCounts(): Promise<DirectMessageUnreadCount[]> {
   >(response);
 
   if (!response.ok) {
-    throw new Error(
-      body && "error" in body ? body.error?.message : "Could not load unread messages",
-    );
+    const message =
+      body && "error" in body ? body.error?.message : "Could not load unread messages";
+    throw new Error(message);
   }
 
   return Array.isArray((body as { unread?: unknown }).unread)

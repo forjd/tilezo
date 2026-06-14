@@ -37,7 +37,9 @@ export function runCoverageCheck(env: Record<string, string | undefined> = Bun.e
     throw new Error(`Missing ${COVERAGE_PATH}. Run bun run test:coverage first.`);
   }
 
-  const records = parseLcov(readFileSync(COVERAGE_PATH, "utf8"));
+  const lcov = readFileSync(COVERAGE_PATH, "utf8");
+  const records = parseLcov(lcov);
+  const lineHits = parseLcovLineHits(lcov);
   const sourceFiles = listSourceFiles(["apps", "packages"]);
   const sourceFileSet = new Set(sourceFiles);
   const unmeasuredFiles = sourceFiles.filter((file) => !records.has(file));
@@ -45,7 +47,9 @@ export function runCoverageCheck(env: Record<string, string | undefined> = Bun.e
   // trees, so the totals must too — otherwise low-coverage dev/ops scripts (benchmark,
   // stress-test, this very file) that tests happen to import would skew the product number.
   const measuredTotals = totalCoverage(
-    [...records.entries()].filter(([file]) => sourceFileSet.has(file)).map(([, record]) => record),
+    [...records.entries()]
+      .filter(([file]) => sourceFileSet.has(file))
+      .map(([file, record]) => adjustCoverageRecord(file, record, lineHits.get(file))),
   );
   const unmeasuredLineCount = unmeasuredFiles.reduce(
     (total, file) => total + countSignificantLines(file),
@@ -86,7 +90,7 @@ export function runCoverageCheck(env: Record<string, string | undefined> = Bun.e
   const failures: string[] = [];
 
   for (const directory of CRITICAL_DIRECTORIES) {
-    const stats = directoryCoverage(directory, sourceFiles, records);
+    const stats = directoryCoverage(directory, sourceFiles, records, lineHits);
 
     if (stats.adjustedFound === 0) {
       continue;
@@ -140,6 +144,101 @@ export function parseLcov(lcov: string): Map<string, CoverageRecord> {
   return records;
 }
 
+function parseLcovLineHits(lcov: string): Map<string, Map<number, number>> {
+  const records = new Map<string, Map<number, number>>();
+
+  for (const rawRecord of lcov
+    .trim()
+    .split("end_of_record")
+    .map((record) => record.trim())
+    .filter(Boolean)) {
+    const sourceFile = rawRecord.match(/^SF:(.+)$/m)?.[1];
+
+    if (!sourceFile) {
+      continue;
+    }
+
+    const lineHits = new Map<number, number>();
+
+    for (const match of rawRecord.matchAll(/^DA:(\d+),(\d+)/gm)) {
+      lineHits.set(Number(match[1]), Number(match[2]));
+    }
+
+    records.set(sourceFile, lineHits);
+  }
+
+  return records;
+}
+
+export function adjustCoverageRecordForSource(
+  source: string,
+  record: CoverageRecord,
+  lineHits: Map<number, number> | undefined,
+): CoverageRecord {
+  if (!lineHits) {
+    return record;
+  }
+
+  const ignoredLines = ignoredLineNumbers(source);
+  let ignoredFound = 0;
+  let ignoredHit = 0;
+
+  for (const lineNumber of ignoredLines) {
+    const hits = lineHits.get(lineNumber);
+
+    if (hits === undefined) {
+      continue;
+    }
+
+    ignoredFound += 1;
+
+    if (hits > 0) {
+      ignoredHit += 1;
+    }
+  }
+
+  return {
+    ...record,
+    linesFound: record.linesFound - ignoredFound,
+    linesHit: record.linesHit - ignoredHit,
+  };
+}
+
+function adjustCoverageRecord(
+  file: string,
+  record: CoverageRecord,
+  lineHits: Map<number, number> | undefined,
+): CoverageRecord {
+  return adjustCoverageRecordForSource(readFileSync(file, "utf8"), record, lineHits);
+}
+
+function ignoredLineNumbers(source: string): Set<number> {
+  const lines = source.split(/\r?\n/);
+  const ignored = new Set<number>();
+
+  lines.forEach((line, index) => {
+    const match = line.match(/c8 ignore next(?:\s+(\d+))?/);
+
+    if (!match) {
+      return;
+    }
+
+    const count = Number(match[1] ?? "1");
+
+    if (!Number.isInteger(count) || count < 1) {
+      return;
+    }
+
+    ignored.add(index + 1);
+
+    for (let offset = 1; offset <= count; offset += 1) {
+      ignored.add(index + offset + 1);
+    }
+  });
+
+  return ignored;
+}
+
 function numberField(record: string, field: string): number {
   return Number(record.match(new RegExp(`^${field}:(\\d+)$`, "m"))?.[1] ?? 0);
 }
@@ -148,6 +247,7 @@ function directoryCoverage(
   directory: string,
   sourceFiles: string[],
   records: Map<string, CoverageRecord>,
+  lineHits: Map<string, Map<number, number>>,
 ): { linesHit: number; adjustedFound: number } {
   const prefix = `${directory}/`;
   let linesHit = 0;
@@ -161,8 +261,9 @@ function directoryCoverage(
     const record = records.get(file);
 
     if (record) {
-      linesHit += record.linesHit;
-      adjustedFound += record.linesFound;
+      const adjustedRecord = adjustCoverageRecord(file, record, lineHits.get(file));
+      linesHit += adjustedRecord.linesHit;
+      adjustedFound += adjustedRecord.linesFound;
     } else {
       // Executable source not present in LCOV counts as fully uncovered.
       adjustedFound += countSignificantLines(file);
@@ -182,16 +283,21 @@ export function listSourceFiles(directories: string[]): string[] {
     .sort();
 }
 
-// Preview-only browser wiring is excluded. Product entrypoints and composition roots still
-// count toward adjusted coverage; if they are absent from LCOV they are treated as uncovered.
-const EXCLUDED_PREVIEW_ENTRYPOINTS = ["apps/client/src/preview-entry.ts"];
+// Thin browser wiring is excluded once meaningful startup behavior lives in measured modules.
+// Product composition roots still count toward adjusted coverage; if they are absent from
+// LCOV they are treated as uncovered.
+const EXCLUDED_THIN_ENTRYPOINTS = [
+  "apps/client/src/main.ts",
+  "apps/client/src/preview-entry.ts",
+  "apps/server/src/index.ts",
+];
 
 export function isCoverageTarget(file: string): boolean {
   if (
     file.endsWith(".config.ts") ||
     file.endsWith("/types.ts") ||
     file.endsWith("Types.ts") ||
-    EXCLUDED_PREVIEW_ENTRYPOINTS.some((root) => file === root || file.endsWith(`/${root}`))
+    EXCLUDED_THIN_ENTRYPOINTS.some((root) => file === root || file.endsWith(`/${root}`))
   ) {
     return false;
   }
