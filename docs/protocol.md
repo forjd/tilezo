@@ -148,6 +148,61 @@ update succeeds.
 }
 ```
 
+### `room.item.place.request`
+
+Place a furniture definition in the current room. Only the room owner can edit furniture.
+
+```json
+{
+  "type": "room.item.place.request",
+  "itemType": "crate_table",
+  "position": {
+    "x": 2,
+    "y": 1
+  },
+  "rotation": 0
+}
+```
+
+### `room.item.move.request`
+
+Move or rotate a placed room item.
+
+```json
+{
+  "type": "room.item.move.request",
+  "itemId": "item_...",
+  "position": {
+    "x": 3,
+    "y": 1
+  },
+  "rotation": 1
+}
+```
+
+### `room.item.pickup.request`
+
+Remove a placed room item.
+
+```json
+{
+  "type": "room.item.pickup.request",
+  "itemId": "item_..."
+}
+```
+
+### `room.item.interact.request`
+
+Use a supported item action such as toggling a lamp.
+
+```json
+{
+  "type": "room.item.interact.request",
+  "itemId": "item_...",
+  "action": "toggle"
+}
+```
+
 ### `ping`
 
 Simple ping/pong support.
@@ -183,7 +238,19 @@ Sent after a successful join or automatic room resume.
   "type": "room.snapshot",
   "roomId": "lobby",
   "users": [],
-  "tiles": []
+  "tiles": [],
+  "items": [
+    {
+      "id": "item_...",
+      "itemType": "crate_table",
+      "x": 2,
+      "y": 1,
+      "z": 0,
+      "rotation": 0,
+      "state": {}
+    }
+  ],
+  "canEditItems": true
 }
 ```
 
@@ -314,6 +381,76 @@ Broadcast after the server accepts a typing state update.
   "userId": "user_...",
   "username": "Tom",
   "isTyping": true
+}
+```
+
+### `room.item.placed`
+
+Broadcast after the server accepts and persists a placed room item.
+
+```json
+{
+  "type": "room.item.placed",
+  "item": {
+    "id": "item_...",
+    "itemType": "crate_table",
+    "x": 2,
+    "y": 1,
+    "z": 0,
+    "rotation": 0,
+    "state": {}
+  }
+}
+```
+
+### `room.item.moved`
+
+Broadcast after the server accepts and persists an item move or rotation.
+
+```json
+{
+  "type": "room.item.moved",
+  "item": {
+    "id": "item_...",
+    "itemType": "crate_table",
+    "x": 3,
+    "y": 1,
+    "z": 0,
+    "rotation": 1,
+    "state": {}
+  }
+}
+```
+
+### `room.item.picked_up`
+
+Broadcast after the server accepts and persists item pickup.
+
+```json
+{
+  "type": "room.item.picked_up",
+  "itemId": "item_..."
+}
+```
+
+### `room.item.state_updated`
+
+Broadcast after an item interaction changes item state.
+
+```json
+{
+  "type": "room.item.state_updated",
+  "item": {
+    "id": "item_...",
+    "itemType": "glass_lamp",
+    "x": 1,
+    "y": 1,
+    "z": 0,
+    "rotation": 0,
+    "state": {
+      "on": true
+    }
+  }
 }
 ```
 

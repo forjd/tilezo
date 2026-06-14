@@ -20,6 +20,30 @@ describe("RoomScene", () => {
     expect(sceneState(scene).avatars.has("user_2")).toBe(true);
   });
 
+  test("renders room items and applies item updates", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.loadSnapshot({
+      ...snapshot([]),
+      items: [roomItem("item_1", { x: 0, y: 0 })],
+    });
+    scene.handleServerMessage({
+      type: "room.item.moved",
+      item: roomItem("item_1", { x: 1, y: 0, rotation: 1 }),
+    });
+    scene.handleServerMessage({
+      type: "room.item.placed",
+      item: roomItem("item_2", { itemType: "woven_rug", x: 0, y: 0 }),
+    });
+    scene.handleServerMessage({ type: "room.item.picked_up", itemId: "item_1" });
+
+    const state = sceneState(scene);
+    expect(state.furniture.has("item_1")).toBe(false);
+    expect(state.furniture.has("item_2")).toBe(true);
+    expect(state.furnitureLayer.children).toHaveLength(1);
+  });
+
   test("renders doorway avatar bodies behind walls while overlays stay above", () => {
     const app = createApp();
     const scene = new RoomScene(app, () => {});
@@ -36,6 +60,7 @@ describe("RoomScene", () => {
 
     expect(world?.children).toEqual([
       state.tiles.view,
+      state.furnitureLayer,
       state.doorAvatarLayer,
       state.tiles.wallView,
       state.avatarLayer,
@@ -220,6 +245,27 @@ describe("RoomScene", () => {
     expect(interactions).toBe(3);
   });
 
+  test("routes tile activation to furniture edit mode instead of movement", () => {
+    const app = createApp();
+    const moves: unknown[] = [];
+    const edits: unknown[] = [];
+    const scene = new RoomScene(
+      app,
+      (target) => moves.push(target),
+      undefined,
+      (request) => edits.push(request),
+    );
+
+    scene.loadSnapshot(snapshot([]));
+    scene.setFurnitureEditMode({ type: "place", itemType: "crate_table", rotation: 2 });
+    app.canvas.click({ clientX: 384, clientY: 348 });
+
+    expect(moves).toEqual([]);
+    expect(edits).toEqual([
+      { type: "place", itemType: "crate_table", rotation: 2, position: { x: 0, y: 0 } },
+    ]);
+  });
+
   test("makes the room canvas keyboard-focusable", () => {
     const app = createApp();
 
@@ -389,6 +435,8 @@ function snapshot(users: RoomSnapshotMessage["users"]): RoomSnapshotMessage {
       { x: 0, y: 0, z: 0, walkable: true },
       { x: 1, y: 0, z: 0, walkable: false },
     ],
+    items: [],
+    canEditItems: false,
   };
 }
 
@@ -406,6 +454,24 @@ function snapshotWithDoor(users: RoomSnapshotMessage["users"]): RoomSnapshotMess
       { x: 1, y: 1, z: 0, walkable: true },
       { x: 1, y: 2, z: 0, walkable: true },
     ],
+    items: [],
+    canEditItems: false,
+  };
+}
+
+function roomItem(
+  id: string,
+  patch: Partial<RoomSnapshotMessage["items"][number]> = {},
+): RoomSnapshotMessage["items"][number] {
+  return {
+    id,
+    itemType: "crate_table",
+    x: 0,
+    y: 0,
+    z: 0,
+    rotation: 0,
+    state: {},
+    ...patch,
   };
 }
 
@@ -445,6 +511,8 @@ function sceneState(scene: RoomScene): {
   avatarLayer: Container;
   doorAvatarLayer: Container;
   avatarOverlayLayer: Container;
+  furniture: Map<string, unknown>;
+  furnitureLayer: Container;
   hover?: unknown;
   tiles: { view: Container; wallView: Container };
 } {
@@ -456,6 +524,8 @@ function sceneState(scene: RoomScene): {
     avatarLayer: Container;
     doorAvatarLayer: Container;
     avatarOverlayLayer: Container;
+    furniture: Map<string, unknown>;
+    furnitureLayer: Container;
     hover?: unknown;
     tiles: { view: Container; wallView: Container };
   };

@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./appearance": "./src/appearance.ts",
+    "./furniture": "./src/furniture.ts",
     "./messages": "./src/messages.ts"
   },
   "dependencies": {

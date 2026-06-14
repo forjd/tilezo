@@ -1,5 +1,6 @@
 import type { RoomTile, TilePosition } from "@tilezo/engine";
 import type { AvatarAppearance } from "./appearance";
+import type { RoomItem } from "./furniture";
 
 export type RoomJoinMessage = {
   type: "room.join";
@@ -58,6 +59,31 @@ export type AvatarAppearanceUpdateMessage = {
   appearance: AvatarAppearance;
 };
 
+export type RoomItemPlaceRequestMessage = {
+  type: "room.item.place.request";
+  itemType: string;
+  position: TilePosition;
+  rotation: number;
+};
+
+export type RoomItemMoveRequestMessage = {
+  type: "room.item.move.request";
+  itemId: string;
+  position: TilePosition;
+  rotation: number;
+};
+
+export type RoomItemPickupRequestMessage = {
+  type: "room.item.pickup.request";
+  itemId: string;
+};
+
+export type RoomItemInteractRequestMessage = {
+  type: "room.item.interact.request";
+  itemId: string;
+  action: string;
+};
+
 export type PingMessage = {
   type: "ping";
   sentAt: string;
@@ -75,6 +101,10 @@ export type ClientMessage =
   | DirectMessageEditMessage
   | DirectMessageDeleteMessage
   | AvatarAppearanceUpdateMessage
+  | RoomItemPlaceRequestMessage
+  | RoomItemMoveRequestMessage
+  | RoomItemPickupRequestMessage
+  | RoomItemInteractRequestMessage
   | PingMessage;
 
 export type ConnectedMessage = {
@@ -95,6 +125,8 @@ export type RoomSnapshotMessage = {
   roomId: string;
   users: RoomUserSnapshot[];
   tiles: RoomTile[];
+  items: RoomItem[];
+  canEditItems: boolean;
 };
 
 export type PublicRoomSummary = {
@@ -144,6 +176,26 @@ export type ChatTypingStatusMessage = {
   userId: string;
   username: string;
   isTyping: boolean;
+};
+
+export type RoomItemPlacedMessage = {
+  type: "room.item.placed";
+  item: RoomItem;
+};
+
+export type RoomItemMovedMessage = {
+  type: "room.item.moved";
+  item: RoomItem;
+};
+
+export type RoomItemPickedUpMessage = {
+  type: "room.item.picked_up";
+  itemId: string;
+};
+
+export type RoomItemStateUpdatedMessage = {
+  type: "room.item.state_updated";
+  item: RoomItem;
 };
 
 export type DirectMessage = {
@@ -211,6 +263,10 @@ export type ServerMessage =
   | AvatarAppearanceUpdatedMessage
   | ChatMessage
   | ChatTypingStatusMessage
+  | RoomItemPlacedMessage
+  | RoomItemMovedMessage
+  | RoomItemPickedUpMessage
+  | RoomItemStateUpdatedMessage
   | DirectMessage
   | DirectMessageTypingStatusMessage
   | DirectMessageReadReceiptMessage

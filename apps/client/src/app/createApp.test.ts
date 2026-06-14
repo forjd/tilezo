@@ -73,6 +73,8 @@ describe("createApp", () => {
       roomId: "studio",
       users: [],
       tiles: [],
+      items: [],
+      canEditItems: true,
     };
     game.options.onRoomJoined(snapshot);
     harness.createRoomDialogs[0]?.cancel();
@@ -328,6 +330,7 @@ function createAppHarness(
   const createRoomDialogs: FakeCreateRoomDialog[] = [];
   const directMessagePanels: FakeDirectMessagePanel[] = [];
   const disconnectedDialogs: FakeDisconnectedDialog[] = [];
+  const furniturePanels: FakeFurniturePanel[] = [];
   const games: FakeGame[] = [];
   const timeouts: TimerDouble[] = [];
   const intervals: TimerDouble[] = [];
@@ -421,6 +424,11 @@ function createAppHarness(
       directMessagePanels.push(panel);
       return panel as never;
     },
+    createFurniturePanel(options) {
+      const panel = new FakeFurniturePanel(options);
+      furniturePanels.push(panel);
+      return panel as never;
+    },
     createDisconnectedDialog(options) {
       const dialog = new FakeDisconnectedDialog(options);
       disconnectedDialogs.push(dialog);
@@ -460,6 +468,7 @@ function createAppHarness(
     createRoomDialogs,
     directMessagePanels,
     disconnectedDialogs,
+    furniturePanels,
     games,
     services,
     timeouts,
@@ -593,6 +602,38 @@ class FakeGame {
 
   deleteDirectMessage(): boolean {
     return true;
+  }
+
+  setFurnitureEditMode(): void {}
+
+  pickupRoomItem(): boolean {
+    return true;
+  }
+}
+
+class FakeFurniturePanel {
+  readonly element = new FakeElement("section");
+  readonly canEditValues: boolean[] = [];
+  readonly itemSets: unknown[] = [];
+  hidden = 0;
+  shown = 0;
+
+  constructor(readonly options: unknown) {}
+
+  hide(): void {
+    this.hidden += 1;
+  }
+
+  setCanEdit(canEdit: boolean): void {
+    this.canEditValues.push(canEdit);
+  }
+
+  setItems(items: unknown): void {
+    this.itemSets.push(items);
+  }
+
+  show(): void {
+    this.shown += 1;
   }
 }
 

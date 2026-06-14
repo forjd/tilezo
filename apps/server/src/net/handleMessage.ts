@@ -1,6 +1,10 @@
 import {
   DEFAULT_AVATAR_APPEARANCE,
+  getFurnitureDefinition,
   parseRawClientMessage,
+  type RoomItem,
+  type RoomItemMoveRequestMessage,
+  type RoomItemPlaceRequestMessage,
   type ServerMessage,
 } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
@@ -10,7 +14,9 @@ import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
 import type { PresenceTracker } from "../presence/presence";
 import { ensurePersonalRoom, personalRoomId } from "../rooms/personalRoom";
+import type { Room } from "../rooms/Room";
 import type { RoomManager } from "../rooms/RoomManager";
+import { createId } from "../util/ids";
 import { encodeServerMessage } from "../util/safeJson";
 import type { SocketData } from "./socketTypes";
 
@@ -173,6 +179,50 @@ export function handleMessage(
           appearance: parsed.value.appearance,
         });
         context.metrics?.increment("appearance.accepted");
+        break;
+      }
+
+      case "room.item.place.request": {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.room_item_place");
+          sendError(ws, "RATE_LIMITED", "Slow down before editing furniture again");
+          return;
+        }
+
+        void placeRoomItem(ws, parsed.value, context);
+        break;
+      }
+
+      case "room.item.move.request": {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.room_item_move");
+          sendError(ws, "RATE_LIMITED", "Slow down before editing furniture again");
+          return;
+        }
+
+        void moveRoomItem(ws, parsed.value, context);
+        break;
+      }
+
+      case "room.item.pickup.request": {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.room_item_pickup");
+          sendError(ws, "RATE_LIMITED", "Slow down before editing furniture again");
+          return;
+        }
+
+        void pickupRoomItem(ws, parsed.value.itemId, context);
+        break;
+      }
+
+      case "room.item.interact.request": {
+        if (!consumeRateLimit(ws, "default", undefined, context.userRateLimits)) {
+          context.metrics?.increment("rate_limited.room_item_interact");
+          sendError(ws, "RATE_LIMITED", "Slow down before using furniture again");
+          return;
+        }
+
+        void interactWithRoomItem(ws, parsed.value.itemId, parsed.value.action, context);
         break;
       }
 
@@ -461,12 +511,7 @@ async function joinRoom(
       // Same socket re-joining its current room: just resend the snapshot. The last-room
       // session row is already persisted from the original join, so skip the DB write to
       // avoid an upsert per frame when a client spams room.join for its current room.
-      send(ws, {
-        type: "room.snapshot",
-        roomId: room.id,
-        users: room.getUsers(),
-        tiles: room.getSnapshot().tiles,
-      });
+      sendRoomSnapshot(ws, room, context);
       send(ws, {
         type: "room.list",
         rooms: context.rooms.listPublicRooms(room.id, ws.data.userId),
@@ -536,12 +581,7 @@ async function joinRoom(
       context.presence?.moveUserToRoom(ws.data.userId, ws.data.connectionId, room.id);
     }
     ws.subscribe(roomTopic(room.id));
-    send(ws, {
-      type: "room.snapshot",
-      roomId: room.id,
-      users: room.getUsers(),
-      tiles: room.getSnapshot().tiles,
-    });
+    sendRoomSnapshot(ws, room, context);
 
     if (isReconnect) {
       context.metrics?.increment("room.reconnected");
@@ -602,6 +642,248 @@ async function ensureOwnPersonalRoom(
       rooms: context.rooms,
     },
   );
+}
+
+function sendRoomSnapshot(ws: ServerWebSocket<SocketData>, room: Room, context: Context): void {
+  const snapshot = room.getSnapshot();
+
+  send(ws, {
+    type: "room.snapshot",
+    roomId: snapshot.roomId,
+    users: snapshot.users,
+    tiles: snapshot.tiles,
+    items: snapshot.items,
+    canEditItems: context.rooms.canEditRoom(room.id, ws.data.userId),
+  });
+}
+
+async function placeRoomItem(
+  ws: ServerWebSocket<SocketData>,
+  message: RoomItemPlaceRequestMessage,
+  context: Context,
+): Promise<void> {
+  const room = getEditableJoinedRoom(ws, context);
+
+  if (!room) {
+    return;
+  }
+
+  const definition = getFurnitureDefinition(message.itemType);
+
+  if (!definition) {
+    context.metrics?.increment("room_item.place.rejected.unknown_type");
+    sendError(ws, "UNKNOWN_ITEM_TYPE", "Furniture type is not available");
+    return;
+  }
+
+  const item: RoomItem = {
+    id: createId("item"),
+    itemType: definition.id,
+    x: message.position.x,
+    y: message.position.y,
+    z: 0,
+    rotation: message.rotation,
+    state: { ...definition.defaultState },
+  };
+  const placed = room.placeItem(item);
+
+  if (!placed) {
+    context.metrics?.increment("room_item.place.rejected.invalid_placement");
+    sendError(ws, "INVALID_ITEM_PLACEMENT", "Furniture cannot be placed there");
+    return;
+  }
+
+  if (!(await saveRoomItem(room.id, placed, ws, context))) {
+    room.pickupItem(placed.id);
+    return;
+  }
+
+  context.rooms.rememberRoomItem(room.id, placed);
+  context.publish(roomTopic(room.id), { type: "room.item.placed", item: placed });
+  context.metrics?.increment("room_item.place.accepted");
+}
+
+async function moveRoomItem(
+  ws: ServerWebSocket<SocketData>,
+  message: RoomItemMoveRequestMessage,
+  context: Context,
+): Promise<void> {
+  const room = getEditableJoinedRoom(ws, context);
+
+  if (!room) {
+    return;
+  }
+
+  const previous = room.getItem(message.itemId);
+
+  if (!previous) {
+    context.metrics?.increment("room_item.move.rejected.not_found");
+    sendError(ws, "ITEM_NOT_FOUND", "Furniture item is not in this room");
+    return;
+  }
+
+  const moved = room.moveItem(message.itemId, {
+    x: message.position.x,
+    y: message.position.y,
+    rotation: message.rotation,
+  });
+
+  if (!moved) {
+    context.metrics?.increment("room_item.move.rejected.invalid_placement");
+    sendError(ws, "INVALID_ITEM_PLACEMENT", "Furniture cannot be moved there");
+    return;
+  }
+
+  if (!(await saveRoomItem(room.id, moved, ws, context))) {
+    room.moveItem(previous.id, previous);
+    return;
+  }
+
+  context.rooms.rememberRoomItem(room.id, moved);
+  context.publish(roomTopic(room.id), { type: "room.item.moved", item: moved });
+  context.metrics?.increment("room_item.move.accepted");
+}
+
+async function pickupRoomItem(
+  ws: ServerWebSocket<SocketData>,
+  itemId: string,
+  context: Context,
+): Promise<void> {
+  const room = getEditableJoinedRoom(ws, context);
+
+  if (!room) {
+    return;
+  }
+
+  const pickedUp = room.pickupItem(itemId);
+
+  if (!pickedUp) {
+    context.metrics?.increment("room_item.pickup.rejected.not_found");
+    sendError(ws, "ITEM_NOT_FOUND", "Furniture item is not in this room");
+    return;
+  }
+
+  if (!(await deleteRoomItem(pickedUp.id, ws, context))) {
+    room.placeItem(pickedUp);
+    return;
+  }
+
+  context.rooms.forgetRoomItem(room.id, pickedUp.id);
+  context.publish(roomTopic(room.id), { type: "room.item.picked_up", itemId: pickedUp.id });
+  context.metrics?.increment("room_item.pickup.accepted");
+}
+
+async function interactWithRoomItem(
+  ws: ServerWebSocket<SocketData>,
+  itemId: string,
+  action: string,
+  context: Context,
+): Promise<void> {
+  const room = getJoinedRoom(ws, context.rooms);
+
+  if (!room) {
+    context.metrics?.increment("room_item.interact.rejected.not_in_room");
+    sendError(ws, "NOT_IN_ROOM", "Join a room before using furniture");
+    return;
+  }
+
+  const previous = room.getItem(itemId);
+
+  if (!previous) {
+    context.metrics?.increment("room_item.interact.rejected.not_found");
+    sendError(ws, "ITEM_NOT_FOUND", "Furniture item is not in this room");
+    return;
+  }
+
+  const definition = getFurnitureDefinition(previous.itemType);
+
+  if (!definition || definition.interactionKind !== "toggle" || action !== "toggle") {
+    context.metrics?.increment("room_item.interact.rejected.unsupported");
+    sendError(ws, "UNSUPPORTED_ITEM_ACTION", "Furniture action is not available");
+    return;
+  }
+
+  const updated = room.updateItemState(itemId, {
+    ...previous.state,
+    on: previous.state.on !== true,
+  });
+
+  if (!updated) {
+    context.metrics?.increment("room_item.interact.rejected.not_found");
+    sendError(ws, "ITEM_NOT_FOUND", "Furniture item is not in this room");
+    return;
+  }
+
+  if (!(await saveRoomItem(room.id, updated, ws, context))) {
+    room.updateItemState(previous.id, previous.state);
+    return;
+  }
+
+  context.rooms.rememberRoomItem(room.id, updated);
+  context.publish(roomTopic(room.id), { type: "room.item.state_updated", item: updated });
+  context.metrics?.increment("room_item.interact.accepted");
+}
+
+function getEditableJoinedRoom(
+  ws: ServerWebSocket<SocketData>,
+  context: Context,
+): Room | undefined {
+  const room = getJoinedRoom(ws, context.rooms);
+
+  if (!room) {
+    context.metrics?.increment("room_item.edit.rejected.not_in_room");
+    sendError(ws, "NOT_IN_ROOM", "Join a room before editing furniture");
+    return undefined;
+  }
+
+  if (!context.rooms.canEditRoom(room.id, ws.data.userId)) {
+    context.metrics?.increment("room_item.edit.rejected.forbidden");
+    sendError(ws, "ROOM_EDIT_FORBIDDEN", "Only the room owner can edit furniture");
+    return undefined;
+  }
+
+  return room;
+}
+
+async function saveRoomItem(
+  roomId: string,
+  item: RoomItem,
+  ws: ServerWebSocket<SocketData>,
+  context: Context,
+): Promise<boolean> {
+  try {
+    await context.persistence?.saveRoomItem?.(roomId, item);
+    return true;
+  } catch (error) {
+    context.logger?.warn("room_item.persistence.save_failed", {
+      ...socketFields(ws),
+      itemId: item.id,
+      error,
+    });
+    context.metrics?.increment("room_item.persistence.save_failed");
+    sendError(ws, "FURNITURE_PERSISTENCE_FAILED", "Could not save furniture change");
+    return false;
+  }
+}
+
+async function deleteRoomItem(
+  itemId: string,
+  ws: ServerWebSocket<SocketData>,
+  context: Context,
+): Promise<boolean> {
+  try {
+    await context.persistence?.deleteRoomItem?.(itemId);
+    return true;
+  } catch (error) {
+    context.logger?.warn("room_item.persistence.delete_failed", {
+      ...socketFields(ws),
+      itemId,
+      error,
+    });
+    context.metrics?.increment("room_item.persistence.delete_failed");
+    sendError(ws, "FURNITURE_PERSISTENCE_FAILED", "Could not save furniture change");
+    return false;
+  }
 }
 
 async function saveLastRoomId(

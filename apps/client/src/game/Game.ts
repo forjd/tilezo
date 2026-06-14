@@ -1,4 +1,5 @@
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
+import type { RoomItem } from "@tilezo/protocol/furniture";
 import type {
   ClientMessage,
   DirectMessage,
@@ -12,7 +13,7 @@ import type {
 import { Application } from "pixi.js";
 import type { ChatPanel } from "../ui/ChatPanel";
 import { NetClient } from "./NetClient";
-import { RoomScene } from "./RoomScene";
+import { type FurnitureEditMode, type FurnitureEditRequest, RoomScene } from "./RoomScene";
 
 type GameOptions = {
   stage: HTMLElement;
@@ -25,6 +26,7 @@ type GameOptions = {
   onDirectRead: (message: DirectMessageReadReceiptMessage) => void;
   onDirectEdited: (message: DirectMessageEditedMessage) => void;
   onDirectDeleted: (message: DirectMessageDeletedMessage) => void;
+  onFurnitureItemsChanged: (items: RoomItem[]) => void;
   onDisconnected: () => void;
 };
 
@@ -35,6 +37,7 @@ type GameDependencies = {
     app: Application,
     onMoveRequest: (target: { x: number; y: number }) => void,
     onInteraction: () => void,
+    onFurnitureEditRequest: (request: FurnitureEditRequest) => void,
   ) => RoomScene;
   globalTarget?: Pick<typeof globalThis, "addEventListener" | "removeEventListener">;
 };
@@ -51,6 +54,7 @@ export class Game {
   private scene?: RoomScene;
   private connected = false;
   private initialized = false;
+  private currentItems: RoomItem[] = [];
 
   constructor(
     private readonly options: GameOptions,
@@ -60,7 +64,8 @@ export class Game {
     this.net = dependencies.createNetClient?.() ?? new NetClient();
     this.createRoomScene =
       dependencies.createRoomScene ??
-      ((app, onMoveRequest, onInteraction) => new RoomScene(app, onMoveRequest, onInteraction));
+      ((app, onMoveRequest, onInteraction, onFurnitureEditRequest) =>
+        new RoomScene(app, onMoveRequest, onInteraction, onFurnitureEditRequest));
     this.globalTarget = dependencies.globalTarget ?? globalThis;
   }
 
@@ -83,6 +88,7 @@ export class Game {
           this.sendIfConnected({ type: "avatar.move.request", target });
         },
         () => this.options.chat.focusInput(),
+        (request) => this.sendFurnitureEditRequest(request),
       );
 
       this.cleanup.push(this.net.onStatus(this.options.setStatus));
@@ -102,6 +108,8 @@ export class Game {
           if (message.type === "room.snapshot") {
             this.options.setStatus(`joined ${message.roomId}`);
             this.options.onRoomJoined(message);
+            this.currentItems = message.items.map(cloneRoomItem);
+            this.options.onFurnitureItemsChanged(this.currentItems.map(cloneRoomItem));
             this.refreshRooms();
           }
 
@@ -131,6 +139,18 @@ export class Game {
 
           if (message.type === "dm.deleted") {
             this.options.onDirectDeleted(message);
+          }
+
+          if (
+            message.type === "room.item.placed" ||
+            message.type === "room.item.moved" ||
+            message.type === "room.item.state_updated"
+          ) {
+            this.upsertItem(message.item);
+          }
+
+          if (message.type === "room.item.picked_up") {
+            this.removeItem(message.itemId);
           }
 
           if (message.type === "error") {
@@ -209,6 +229,14 @@ export class Game {
     return this.sendIfConnected({ type: "dm.delete", messageId });
   }
 
+  setFurnitureEditMode(mode?: FurnitureEditMode): void {
+    this.scene?.setFurnitureEditMode(mode);
+  }
+
+  pickupRoomItem(itemId: string): boolean {
+    return this.sendIfConnected({ type: "room.item.pickup.request", itemId });
+  }
+
   async reconnect(): Promise<void> {
     // Drop stale avatars before reconnecting so the player does not see a frozen copy of
     // the previous room while the server re-sends a snapshot (or, in edge cases where no
@@ -249,4 +277,48 @@ export class Game {
       return false;
     }
   }
+
+  private sendFurnitureEditRequest(request: FurnitureEditRequest): void {
+    if (request.type === "place") {
+      this.sendIfConnected({
+        type: "room.item.place.request",
+        itemType: request.itemType,
+        position: request.position,
+        rotation: request.rotation,
+      });
+      return;
+    }
+
+    this.sendIfConnected({
+      type: "room.item.move.request",
+      itemId: request.itemId,
+      position: request.position,
+      rotation: request.rotation,
+    });
+  }
+
+  private upsertItem(item: RoomItem): void {
+    const nextItem = cloneRoomItem(item);
+    const existingIndex = this.currentItems.findIndex((candidate) => candidate.id === item.id);
+
+    if (existingIndex >= 0) {
+      this.currentItems[existingIndex] = nextItem;
+    } else {
+      this.currentItems.push(nextItem);
+    }
+
+    this.options.onFurnitureItemsChanged(this.currentItems.map(cloneRoomItem));
+  }
+
+  private removeItem(itemId: string): void {
+    this.currentItems = this.currentItems.filter((item) => item.id !== itemId);
+    this.options.onFurnitureItemsChanged(this.currentItems.map(cloneRoomItem));
+  }
+}
+
+function cloneRoomItem(item: RoomItem): RoomItem {
+  return {
+    ...item,
+    state: { ...item.state },
+  };
 }

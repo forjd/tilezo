@@ -1,7 +1,8 @@
 import type { RoomLayout } from "@tilezo/engine";
+import type { RoomItem } from "@tilezo/protocol";
 import { asc, eq } from "drizzle-orm";
 import type { TilezoDatabase } from "./db";
-import { rooms, userRoomSessions } from "./schema";
+import { roomItems, rooms, userRoomSessions } from "./schema";
 
 export type RoomVisibility = "public" | "private";
 export type RoomAccess = "open" | "knock";
@@ -48,6 +49,9 @@ export type PersistenceStore = {
   listRooms?(): Promise<PersistedRoomLayout[]>;
   listPublicRooms?(): Promise<RoomLayout[]>;
   listOwnedRooms?(ownerUserId: string): Promise<OwnedRoomLayout[]>;
+  listRoomItems?(roomId: string): Promise<RoomItem[]>;
+  saveRoomItem?(roomId: string, item: RoomItem): Promise<void>;
+  deleteRoomItem?(itemId: string): Promise<void>;
   getLastRoomIdForUser?(userId: string): Promise<string | undefined>;
   saveLastRoomIdForUser?(userId: string, roomId: string): Promise<void>;
   clearLastRoomIdForUser?(userId: string): Promise<void>;
@@ -220,6 +224,63 @@ export class DrizzlePersistenceStore implements PersistenceStore {
       .where(eq(rooms.ownerUserId, ownerUserId))
       .orderBy(asc(rooms.name), asc(rooms.id));
     return storedRooms.map((room) => ({ layout: room.layout, ownerUserId }));
+  }
+
+  async listRoomItems(roomId: string): Promise<RoomItem[]> {
+    const storedItems = await this.db
+      .select({
+        id: roomItems.id,
+        itemType: roomItems.itemType,
+        x: roomItems.x,
+        y: roomItems.y,
+        z: roomItems.z,
+        rotation: roomItems.rotation,
+        state: roomItems.state,
+      })
+      .from(roomItems)
+      .where(eq(roomItems.roomId, roomId))
+      .orderBy(asc(roomItems.y), asc(roomItems.x), asc(roomItems.z), asc(roomItems.id));
+
+    return storedItems.map((item) => ({
+      id: item.id,
+      itemType: item.itemType,
+      x: item.x,
+      y: item.y,
+      z: item.z,
+      rotation: item.rotation,
+      state: item.state,
+    }));
+  }
+
+  async saveRoomItem(roomId: string, item: RoomItem): Promise<void> {
+    await this.db
+      .insert(roomItems)
+      .values({
+        id: item.id,
+        roomId,
+        itemType: item.itemType,
+        x: item.x,
+        y: item.y,
+        z: item.z,
+        rotation: item.rotation,
+        state: item.state,
+      })
+      .onConflictDoUpdate({
+        target: roomItems.id,
+        set: {
+          itemType: item.itemType,
+          x: item.x,
+          y: item.y,
+          z: item.z,
+          rotation: item.rotation,
+          state: item.state,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async deleteRoomItem(itemId: string): Promise<void> {
+    await this.db.delete(roomItems).where(eq(roomItems.id, itemId));
   }
 
   async getLastRoomIdForUser(userId: string): Promise<string | undefined> {

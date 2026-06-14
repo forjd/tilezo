@@ -221,6 +221,57 @@ describe("protocol parser", () => {
     ).toBe(false);
   });
 
+  test("accepts furniture edit messages", () => {
+    expect(
+      parseClientMessage({
+        type: "room.item.place.request",
+        itemType: " crate_table ",
+        position: { x: 2, y: 1 },
+        rotation: 0,
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 2, y: 1 },
+        rotation: 0,
+      },
+    });
+    expect(
+      parseClientMessage({
+        type: "room.item.move.request",
+        itemId: " item_1 ",
+        position: { x: 1, y: 2 },
+        rotation: 3,
+      }).ok,
+    ).toBe(true);
+    expect(
+      parseClientMessage({
+        type: "room.item.pickup.request",
+        itemId: " item_1 ",
+      }),
+    ).toEqual({
+      ok: true,
+      value: { type: "room.item.pickup.request", itemId: "item_1" },
+    });
+    expect(
+      parseClientMessage({
+        type: "room.item.interact.request",
+        itemId: "item_1",
+        action: "toggle",
+      }).ok,
+    ).toBe(true);
+    expect(
+      parseClientMessage({
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 1, y: 1 },
+        rotation: 4,
+      }).ok,
+    ).toBe(false);
+  });
+
   test("creates randomized avatar appearances from supported options", () => {
     const appearance = createRandomAvatarAppearance(
       createSequenceRandom([0.99, 0, 0.2, 0.75, 0.5, 0.99, 0, 0.8, 0.8]),
@@ -274,6 +325,40 @@ describe("parseServerMessage", () => {
             { x: 0, y: 0 },
             { x: 1, y: 0 },
           ],
+        },
+      }).ok,
+    ).toBe(true);
+    expect(
+      parseServerMessage({
+        type: "room.snapshot",
+        roomId: "lobby",
+        users: [],
+        tiles: [],
+        items: [
+          {
+            id: "item_1",
+            itemType: "crate_table",
+            x: 1,
+            y: 1,
+            z: 0,
+            rotation: 0,
+            state: {},
+          },
+        ],
+        canEditItems: true,
+      }).ok,
+    ).toBe(true);
+    expect(
+      parseServerMessage({
+        type: "room.item.placed",
+        item: {
+          id: "item_1",
+          itemType: "crate_table",
+          x: 1,
+          y: 1,
+          z: 0,
+          rotation: 0,
+          state: {},
         },
       }).ok,
     ).toBe(true);

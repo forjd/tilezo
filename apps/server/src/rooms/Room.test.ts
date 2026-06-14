@@ -70,6 +70,61 @@ describe("Room", () => {
     expect(room.moveUser("user_1", { x: 2, y: 2 })).toBeNull();
   });
 
+  test("placed blocking furniture is included in snapshots and blocks movement", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 4, 3, { x: 0, y: 0 }));
+
+    room.join({ id: "user_1", username: "Dan" });
+    const item = room.placeItem({
+      id: "item_1",
+      itemType: "crate_table",
+      x: 2,
+      y: 0,
+      z: 0,
+      rotation: 0,
+      state: {},
+    });
+
+    expect(item).toMatchObject({ id: "item_1", itemType: "crate_table", x: 2, y: 0 });
+    if (!item) {
+      throw new Error("expected furniture item to be placed");
+    }
+
+    expect(room.getSnapshot().items).toEqual([item]);
+    expect(room.moveUser("user_1", { x: 2, y: 0 })).toBeNull();
+  });
+
+  test("rejects invalid furniture placement over users and allows pickup", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }));
+
+    room.join({ id: "user_1", username: "Dan" });
+
+    expect(
+      room.placeItem({
+        id: "item_1",
+        itemType: "crate_table",
+        x: 1,
+        y: 1,
+        z: 0,
+        rotation: 0,
+        state: {},
+      }),
+    ).toBeUndefined();
+
+    const item = room.placeItem({
+      id: "item_2",
+      itemType: "woven_rug",
+      x: 1,
+      y: 1,
+      z: 0,
+      rotation: 0,
+      state: {},
+    });
+
+    expect(item).toBeDefined();
+    expect(room.pickupItem("item_2")).toEqual(item);
+    expect(room.getSnapshot().items).toEqual([]);
+  });
+
   test("movement updates authoritative user position after the path completes", () => {
     let now = 1_000;
     const room = new Room(createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 0, y: 0 }), () => now);

@@ -119,6 +119,7 @@ select {
 
 .edit-character-button,
 .create-room-button,
+.furniture-button,
 .room-browser-button,
 .friends-button,
 .log-out-button {
@@ -500,6 +501,7 @@ select {
 }
 
 .room-browser,
+.furniture-panel,
 .friends-panel {
   position: absolute;
   top: 86px;
@@ -522,6 +524,12 @@ select {
 .friends-panel {
   left: auto;
   right: 20px;
+}
+
+.furniture-panel {
+  left: 20px;
+  top: 142px;
+  width: min(340px, calc(100vw - 40px));
 }
 
 .dm-panel {
@@ -668,6 +676,96 @@ select {
   gap: 8px;
   overflow: auto;
   padding: 12px;
+}
+
+.furniture-controls {
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.furniture-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.furniture-select {
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: 2px solid #6f6a60;
+  border-radius: 4px;
+  background: #fbfaf0;
+  color: #24211d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.furniture-rotate-button,
+.furniture-place-button {
+  width: 72px;
+  height: 36px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.furniture-list {
+  display: grid;
+  gap: 8px;
+}
+
+.furniture-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 2px solid #716d64;
+  border-radius: 7px;
+  background: #fbfaf0;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    2px 2px 0 rgba(31, 45, 47, 0.18);
+}
+
+.furniture-item.selected {
+  border-color: #2f7f9d;
+  background: #e7f2ef;
+}
+
+.furniture-item-details {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.furniture-item-details strong {
+  overflow: hidden;
+  color: #302c27;
+  font-size: 13px;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.furniture-item-details span {
+  color: #5f5a51;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.furniture-item-actions {
+  display: grid;
+  gap: 5px;
+}
+
+.furniture-item-action {
+  width: 70px;
+  height: 28px;
+  margin: 0;
+  font-size: 10px;
 }
 
 .friends-add-form {
@@ -906,6 +1004,7 @@ select {
 
   .edit-character-button,
   .create-room-button,
+  .furniture-button,
   .room-browser-button,
   .friends-button,
   .log-out-button {
@@ -919,12 +1018,17 @@ select {
   }
 
   .room-browser,
+  .furniture-panel,
   .friends-panel {
     top: 118px;
     left: 12px;
     right: auto;
     width: calc(100vw - 24px);
     max-height: calc(100vh - 136px);
+  }
+
+  .furniture-panel {
+    top: 118px;
   }
 
   .friend-item {

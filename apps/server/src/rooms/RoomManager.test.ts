@@ -126,6 +126,47 @@ describe("RoomManager", () => {
     expect(manager.canJoinRoom("room_knock", "user_1")).toEqual({ ok: true });
   });
 
+  test("hydrates cached room items and exposes owner edit permissions", () => {
+    const layout = createRectRoomLayout("room_public", "Public Room", 4, 4, { x: 1, y: 1 });
+    const manager = new RoomManager(
+      { publicLayouts: [layout], privateLayouts: [] },
+      {
+        roomItems: new Map([
+          [
+            "room_public",
+            [
+              {
+                id: "item_1",
+                itemType: "crate_table",
+                x: 2,
+                y: 1,
+                z: 0,
+                rotation: 0,
+                state: {},
+              },
+            ],
+          ],
+        ]),
+      },
+    );
+
+    manager.addRoom(layout, { ownerUserId: "user_1", visibility: "public" });
+
+    expect(manager.canEditRoom("room_public", "user_1")).toBe(true);
+    expect(manager.canEditRoom("room_public", "user_2")).toBe(false);
+    expect(manager.getOrCreate("room_public")?.getSnapshot().items).toEqual([
+      {
+        id: "item_1",
+        itemType: "crate_table",
+        x: 2,
+        y: 1,
+        z: 0,
+        rotation: 0,
+        state: {},
+      },
+    ]);
+  });
+
   test("reports room metrics for the debug endpoint", () => {
     const manager = new RoomManager([
       createRectRoomLayout("lobby", "Lobby", 3, 3, { x: 1, y: 1 }),

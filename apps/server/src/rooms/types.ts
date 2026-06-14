@@ -1,5 +1,5 @@
 import type { RoomLayout, TilePosition } from "@tilezo/engine";
-import type { AvatarAppearance, RoomUserSnapshot } from "@tilezo/protocol";
+import type { AvatarAppearance, RoomItem, RoomUserSnapshot } from "@tilezo/protocol";
 
 export type RoomUser = {
   id: string;
@@ -13,4 +13,5 @@ export type RoomSnapshot = {
   roomId: string;
   users: RoomUserSnapshot[];
   tiles: RoomLayout["tiles"];
+  items: RoomItem[];
 };

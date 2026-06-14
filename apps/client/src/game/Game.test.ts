@@ -50,6 +50,13 @@ describe("Game", () => {
     chat.typingHandler?.(true);
     scene.requestMove({ x: 2, y: 1 });
     scene.requestInteraction();
+    game.setFurnitureEditMode({ type: "place", itemType: "crate_table", rotation: 0 });
+    scene.requestFurnitureEdit({
+      type: "place",
+      itemType: "crate_table",
+      rotation: 0,
+      position: { x: 1, y: 1 },
+    });
     game.joinRoom("studio");
     game.refreshRooms();
     game.updateAppearance({ ...DEFAULT_AVATAR_APPEARANCE, hair: "bob" });
@@ -61,6 +68,12 @@ describe("Game", () => {
 
     expect(chat.focusCount).toBe(1);
     expect(net.sent).toContainEqual({ type: "avatar.move.request", target: { x: 2, y: 1 } });
+    expect(net.sent).toContainEqual({
+      type: "room.item.place.request",
+      itemType: "crate_table",
+      position: { x: 1, y: 1 },
+      rotation: 0,
+    });
     expect(net.sent).toContainEqual({ type: "room.join", roomId: "studio" });
     expect(net.sent).toContainEqual({ type: "chat.say", text: "hello room" });
     expect(net.sent).toContainEqual({ type: "chat.typing", isTyping: true });
@@ -71,6 +84,8 @@ describe("Game", () => {
       roomId: "studio",
       users: [],
       tiles: [],
+      items: [],
+      canEditItems: true,
     };
     const dm = {
       type: "dm.message",
@@ -94,6 +109,32 @@ describe("Game", () => {
       sentAt: "2026-06-13T00:00:00.000Z",
     });
     net.emitMessage(dm);
+    net.emitMessage({
+      type: "room.item.placed",
+      item: {
+        id: "item_1",
+        itemType: "crate_table",
+        x: 1,
+        y: 1,
+        z: 0,
+        rotation: 0,
+        state: {},
+      },
+    });
+    net.emitMessage({
+      type: "room.item.moved",
+      item: {
+        id: "item_1",
+        itemType: "crate_table",
+        x: 2,
+        y: 1,
+        z: 0,
+        rotation: 1,
+        state: {},
+      },
+    });
+    expect(game.pickupRoomItem("item_1")).toBe(true);
+    net.emitMessage({ type: "room.item.picked_up", itemId: "item_1" });
     net.emitMessage({
       type: "dm.typing",
       fromUserId: "user_2",
@@ -135,6 +176,7 @@ describe("Game", () => {
     expect(events.directReads).toHaveLength(1);
     expect(events.directEdits).toHaveLength(1);
     expect(events.directDeletes).toHaveLength(1);
+    expect(events.furnitureItems.at(-1)).toEqual([]);
     expect(events.statuses).toContain("NOPE: Nope");
 
     console.error = (() => {}) as typeof console.error;
@@ -245,7 +287,8 @@ function createDependencies(options: { createRoomScene?: false } = {}): GameDepe
             app: unknown,
             onMoveRequest: (target: { x: number; y: number }) => void,
             onInteraction: () => void,
-          ) => new FakeRoomScene(app, onMoveRequest, onInteraction),
+            onFurnitureEditRequest: (request: unknown) => void,
+          ) => new FakeRoomScene(app, onMoveRequest, onInteraction, onFurnitureEditRequest),
         }),
   } as unknown as GameDependenciesForTest;
 }
@@ -375,6 +418,7 @@ class FakeRoomScene {
     _app: unknown,
     readonly requestMove: (target: { x: number; y: number }) => void,
     readonly requestInteraction: () => void,
+    readonly requestFurnitureEdit: (request: unknown) => void,
   ) {
     sceneInstances.push(this);
   }
@@ -396,6 +440,8 @@ class FakeRoomScene {
   resize(): void {
     this.resizeCount += 1;
   }
+
+  setFurnitureEditMode(): void {}
 
   update(deltaSeconds: number): void {
     this.updates.push(deltaSeconds);
@@ -478,6 +524,7 @@ function createGameEvents() {
   const directReads: unknown[] = [];
   const directEdits: unknown[] = [];
   const directDeletes: unknown[] = [];
+  const furnitureItems: unknown[] = [];
   let disconnected = 0;
 
   return {
@@ -490,6 +537,7 @@ function createGameEvents() {
     directReads,
     directTyping,
     joined,
+    furnitureItems,
     options: {
       onDirectDeleted(message: unknown) {
         directDeletes.push(message);
@@ -508,6 +556,9 @@ function createGameEvents() {
       },
       onDisconnected() {
         disconnected += 1;
+      },
+      onFurnitureItemsChanged(items: unknown) {
+        furnitureItems.push(items);
       },
       onRoomJoined(snapshot: unknown) {
         joined.push(snapshot);

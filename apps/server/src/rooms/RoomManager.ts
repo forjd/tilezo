@@ -1,5 +1,5 @@
 import { createRectRoomLayoutWithDoorTile, type RoomLayout } from "@tilezo/engine";
-import type { PublicRoomSummary } from "@tilezo/protocol";
+import type { PublicRoomSummary, RoomItem } from "@tilezo/protocol";
 import {
   loadOrSeedPublicRooms,
   type OwnedRoomLayout,
@@ -29,6 +29,7 @@ export class RoomManager {
   private readonly rooms = new Map<string, Room>();
   private readonly publicLayouts: Map<string, RoomLayout>;
   private readonly privateLayouts = new Map<string, OwnedRoomLayout>();
+  private readonly roomItems = new Map<string, RoomItem[]>();
   // Secondary index of private layouts by owner so listing a user's accessible rooms is
   // O(rooms they own) rather than O(every private room in the directory).
   private readonly privateLayoutsByOwner = new Map<string, Map<string, OwnedRoomLayout>>();
@@ -37,11 +38,18 @@ export class RoomManager {
 
   constructor(
     directory: RoomLayout | RoomLayout[] | RoomDirectory,
-    options: { bots?: readonly RoomBotDefinition[] } = {},
+    options: {
+      bots?: readonly RoomBotDefinition[];
+      roomItems?: ReadonlyMap<string, readonly RoomItem[]>;
+    } = {},
   ) {
     const roomDirectory = normalizeRoomDirectory(directory);
     this.publicLayouts = new Map(roomDirectory.publicLayouts.map((layout) => [layout.id, layout]));
     this.bots = options.bots ?? [];
+
+    for (const [roomId, items] of options.roomItems ?? []) {
+      this.roomItems.set(roomId, items.map(cloneRoomItem));
+    }
 
     for (const layout of roomDirectory.publicLayouts) {
       this.roomRules.set(layout.id, { roomId: layout.id, access: "open" });
@@ -65,8 +73,12 @@ export class RoomManager {
     options: { persistence?: PersistenceStore; bots?: readonly RoomBotDefinition[] } = {},
   ) {
     const fallbackLayouts = await loadPublicRoomLayouts();
-    return new RoomManager(await loadOrSeedPublicRooms(options.persistence, fallbackLayouts), {
+    const directory = await loadOrSeedPublicRooms(options.persistence, fallbackLayouts);
+    const roomItems = await loadRoomItems(options.persistence, directory);
+
+    return new RoomManager(directory, {
       bots: options.bots,
+      roomItems,
     });
   }
 
@@ -87,7 +99,7 @@ export class RoomManager {
       return existing;
     }
 
-    const room = new Room(layout);
+    const room = new Room(layout, undefined, this.roomItems.get(roomId) ?? []);
     seedRoomBots(room, roomId, this.bots);
     this.rooms.set(roomId, room);
     return room;
@@ -127,6 +139,7 @@ export class RoomManager {
   addPrivateRoom(layout: RoomLayout, ownerUserId: string): void {
     this.indexPrivateLayout({ layout, ownerUserId });
     this.roomRules.set(layout.id, { roomId: layout.id, ownerUserId, access: "open" });
+    this.roomItems.set(layout.id, this.roomItems.get(layout.id) ?? []);
   }
 
   addRoom(
@@ -150,10 +163,44 @@ export class RoomManager {
         ownerUserId: options.ownerUserId,
         access,
       });
+      this.roomItems.set(layout.id, this.roomItems.get(layout.id) ?? []);
       return;
     }
 
     this.publicLayouts.set(layout.id, layout);
+    this.roomItems.set(layout.id, this.roomItems.get(layout.id) ?? []);
+  }
+
+  canEditRoom(roomId: string, userId: string | undefined): boolean {
+    const rule = this.roomRules.get(roomId);
+    return Boolean(rule?.ownerUserId && userId && rule.ownerUserId === userId);
+  }
+
+  rememberRoomItem(roomId: string, item: RoomItem): void {
+    const items = this.roomItems.get(roomId) ?? [];
+    const existingIndex = items.findIndex((candidate) => candidate.id === item.id);
+    const nextItem = cloneRoomItem(item);
+
+    if (existingIndex >= 0) {
+      items[existingIndex] = nextItem;
+    } else {
+      items.push(nextItem);
+    }
+
+    this.roomItems.set(roomId, items.sort(compareRoomItems));
+  }
+
+  forgetRoomItem(roomId: string, itemId: string): void {
+    const items = this.roomItems.get(roomId);
+
+    if (!items) {
+      return;
+    }
+
+    this.roomItems.set(
+      roomId,
+      items.filter((item) => item.id !== itemId),
+    );
   }
 
   private indexPrivateLayout(room: OwnedRoomLayout): void {
@@ -272,6 +319,48 @@ async function loadPublicRoomLayouts(): Promise<RoomLayout[]> {
       raw.spawn.y,
       raw.blocked ?? [],
     ),
+  );
+}
+
+async function loadRoomItems(
+  store: PersistenceStore | undefined,
+  directory: RoomDirectory,
+): Promise<Map<string, RoomItem[]>> {
+  const itemsByRoom = new Map<string, RoomItem[]>();
+
+  if (!store?.listRoomItems) {
+    return itemsByRoom;
+  }
+
+  const roomIds = [
+    ...directory.publicLayouts.map((layout) => layout.id),
+    ...directory.privateLayouts.map((room) => room.layout.id),
+  ];
+
+  for (const roomId of roomIds) {
+    try {
+      itemsByRoom.set(roomId, (await store.listRoomItems(roomId)).map(cloneRoomItem));
+    } catch (error) {
+      console.warn("Room item persistence unavailable; starting room without furniture", {
+        roomId,
+        error,
+      });
+    }
+  }
+
+  return itemsByRoom;
+}
+
+function cloneRoomItem(item: RoomItem): RoomItem {
+  return {
+    ...item,
+    state: { ...item.state },
+  };
+}
+
+function compareRoomItems(left: RoomItem, right: RoomItem): number {
+  return (
+    left.y - right.y || left.x - right.x || left.z - right.z || left.id.localeCompare(right.id)
   );
 }
 

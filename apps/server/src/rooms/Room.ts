@@ -1,5 +1,11 @@
 import { findPath, type RoomLayout, TileGrid, type TilePosition } from "@tilezo/engine";
-import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol";
+import {
+  DEFAULT_AVATAR_APPEARANCE,
+  getFurnitureDefinition,
+  getFurnitureFootprintTiles,
+  isValidFurnitureRotation,
+  type RoomItem,
+} from "@tilezo/protocol";
 import type { RoomSnapshot, RoomUser } from "./types";
 
 const MOVEMENT_MILLISECONDS_PER_TILE = 360;
@@ -14,16 +20,26 @@ type UserMovement = {
 export class Room {
   readonly id: string;
 
-  private readonly grid: TileGrid;
+  private grid: TileGrid;
+  private readonly baseGrid: TileGrid;
+  private readonly items = new Map<string, RoomItem>();
   private readonly movements = new Map<string, UserMovement>();
   private readonly users = new Map<string, RoomUser>();
 
   constructor(
     private readonly layout: RoomLayout,
     private readonly clock: Clock = Date.now,
+    items: readonly RoomItem[] = [],
   ) {
     this.id = layout.id;
+    this.baseGrid = new TileGrid(layout);
     this.grid = new TileGrid(layout);
+
+    for (const item of items) {
+      this.items.set(item.id, cloneRoomItem(item));
+    }
+
+    this.rebuildGrid();
   }
 
   join(
@@ -144,6 +160,7 @@ export class Room {
       roomId: this.id,
       users: this.getUsers(),
       tiles: this.layout.tiles,
+      items: this.getItems(),
     };
   }
 
@@ -168,8 +185,84 @@ export class Room {
 
   getWalkableTiles(): TilePosition[] {
     return this.layout.tiles
-      .filter((tile) => tile.walkable)
+      .filter((tile) => this.grid.isWalkable(tile))
       .map((tile) => ({ x: tile.x, y: tile.y }));
+  }
+
+  getItems(): RoomItem[] {
+    return [...this.items.values()].map(cloneRoomItem).sort(compareRoomItems);
+  }
+
+  getItem(itemId: string): RoomItem | undefined {
+    const item = this.items.get(itemId);
+    return item ? cloneRoomItem(item) : undefined;
+  }
+
+  canPlaceItem(item: RoomItem, options: { ignoreItemId?: string } = {}): boolean {
+    return this.validateItemPlacement(item, options).ok;
+  }
+
+  placeItem(item: RoomItem): RoomItem | undefined {
+    const nextItem = cloneRoomItem(item);
+
+    if (!this.validateItemPlacement(nextItem).ok) {
+      return undefined;
+    }
+
+    this.items.set(nextItem.id, nextItem);
+    this.rebuildGrid();
+    return cloneRoomItem(nextItem);
+  }
+
+  moveItem(itemId: string, patch: Pick<RoomItem, "x" | "y" | "rotation">): RoomItem | undefined {
+    const existing = this.items.get(itemId);
+
+    if (!existing) {
+      return undefined;
+    }
+
+    const nextItem = {
+      ...cloneRoomItem(existing),
+      x: patch.x,
+      y: patch.y,
+      rotation: patch.rotation,
+    };
+
+    if (!this.validateItemPlacement(nextItem, { ignoreItemId: itemId }).ok) {
+      return undefined;
+    }
+
+    this.items.set(itemId, nextItem);
+    this.rebuildGrid();
+    return cloneRoomItem(nextItem);
+  }
+
+  pickupItem(itemId: string): RoomItem | undefined {
+    const item = this.items.get(itemId);
+
+    if (!item) {
+      return undefined;
+    }
+
+    this.items.delete(itemId);
+    this.rebuildGrid();
+    return cloneRoomItem(item);
+  }
+
+  updateItemState(itemId: string, state: Record<string, unknown>): RoomItem | undefined {
+    const item = this.items.get(itemId);
+
+    if (!item) {
+      return undefined;
+    }
+
+    const nextItem = {
+      ...cloneRoomItem(item),
+      state: { ...state },
+    };
+
+    this.items.set(itemId, nextItem);
+    return cloneRoomItem(nextItem);
   }
 
   get isEmpty(): boolean {
@@ -188,6 +281,86 @@ export class Room {
 
     const fallback = this.layout.tiles.find((tile) => tile.walkable);
     return fallback ? { x: fallback.x, y: fallback.y } : { x: 0, y: 0 };
+  }
+
+  private validateItemPlacement(
+    item: RoomItem,
+    options: { ignoreItemId?: string } = {},
+  ): { ok: true } | { ok: false } {
+    const definition = getFurnitureDefinition(item.itemType);
+
+    if (!definition || !isValidFurnitureRotation(definition, item.rotation) || item.z !== 0) {
+      return { ok: false };
+    }
+
+    const occupiedTiles = new Set<string>();
+
+    for (const [existingItemId, existingItem] of this.items) {
+      if (existingItemId === options.ignoreItemId) {
+        continue;
+      }
+
+      const existingDefinition = getFurnitureDefinition(existingItem.itemType);
+
+      if (!existingDefinition) {
+        continue;
+      }
+
+      for (const tile of getFurnitureFootprintTiles(existingItem, existingDefinition)) {
+        occupiedTiles.add(tileKey(tile));
+      }
+    }
+
+    for (const tile of getFurnitureFootprintTiles(item, definition)) {
+      if (tile.x < 0 || !this.baseGrid.isWalkable(tile) || occupiedTiles.has(tileKey(tile))) {
+        return { ok: false };
+      }
+
+      if (!definition.canWalkOn && sameTile(tile, this.layout.spawn)) {
+        return { ok: false };
+      }
+
+      if (!definition.canWalkOn && this.hasUserAt(tile)) {
+        return { ok: false };
+      }
+    }
+
+    return { ok: true };
+  }
+
+  private hasUserAt(position: TilePosition): boolean {
+    this.sweepCompletedMovements();
+
+    for (const user of this.users.values()) {
+      if (sameTile(user.position, position)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private rebuildGrid(): void {
+    const tiles = this.layout.tiles.map((tile) => ({ ...tile }));
+    const tileMap = new Map(tiles.map((tile) => [tileKey(tile), tile]));
+
+    for (const item of this.items.values()) {
+      const definition = getFurnitureDefinition(item.itemType);
+
+      if (!definition || definition.canWalkOn) {
+        continue;
+      }
+
+      for (const tile of getFurnitureFootprintTiles(item, definition)) {
+        const roomTile = tileMap.get(tileKey(tile));
+
+        if (roomTile) {
+          roomTile.walkable = false;
+        }
+      }
+    }
+
+    this.grid = new TileGrid({ ...this.layout, tiles });
   }
 
   private resolveUserPosition(userId: string, user: RoomUser): TilePosition {
@@ -261,4 +434,21 @@ export class Room {
 
 function sameTile(a: TilePosition | undefined, b: TilePosition): boolean {
   return a?.x === b.x && a.y === b.y;
+}
+
+function tileKey(position: TilePosition): string {
+  return `${position.x},${position.y}`;
+}
+
+function cloneRoomItem(item: RoomItem): RoomItem {
+  return {
+    ...item,
+    state: { ...item.state },
+  };
+}
+
+function compareRoomItems(left: RoomItem, right: RoomItem): number {
+  return (
+    left.y - right.y || left.x - right.x || left.z - right.z || left.id.localeCompare(right.id)
+  );
 }

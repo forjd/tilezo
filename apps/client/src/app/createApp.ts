@@ -20,6 +20,7 @@ import { CreateRoomDialog } from "../ui/CreateRoomDialog";
 import { DirectMessagePanel } from "../ui/DirectMessagePanel";
 import { DisconnectedDialog } from "../ui/DisconnectedDialog";
 import { FriendsPanel } from "../ui/FriendsPanel";
+import { FurniturePanel } from "../ui/FurniturePanel";
 import { LoginForm } from "../ui/LoginForm";
 import { RoomBrowser } from "../ui/RoomBrowser";
 
@@ -44,6 +45,9 @@ type CreateAppDependencies = {
   createDisconnectedDialog: (
     options: ConstructorParameters<typeof DisconnectedDialog>[0],
   ) => DisconnectedDialog;
+  createFurniturePanel: (
+    options: ConstructorParameters<typeof FurniturePanel>[0],
+  ) => FurniturePanel;
   createFriendsPanel: (options: ConstructorParameters<typeof FriendsPanel>[0]) => FriendsPanel;
   createLoginForm: (onSubmit: ConstructorParameters<typeof LoginForm>[0]) => LoginForm;
   createRoom: typeof createRoom;
@@ -75,6 +79,7 @@ const defaultCreateAppDependencies: CreateAppDependencies = {
   createClientLogger: () => new ClientLogger(),
   createDirectMessagePanel: (options) => new DirectMessagePanel(options),
   createDisconnectedDialog: (options) => new DisconnectedDialog(options),
+  createFurniturePanel: (options) => new FurniturePanel(options),
   createFriendsPanel: (options) => new FriendsPanel(options),
   createLoginForm: (onSubmit) => new LoginForm(onSubmit),
   createRoom,
@@ -109,6 +114,7 @@ export function createApp(
   const browseRooms = document.createElement("button");
   const friendsButton = document.createElement("button");
   const createRoomButton = document.createElement("button");
+  const furnitureButton = document.createElement("button");
   const editCharacter = document.createElement("button");
   const logOut = document.createElement("button");
   const chat = deps.createChatPanel();
@@ -138,6 +144,9 @@ export function createApp(
   createRoomButton.className = "create-room-button hidden";
   createRoomButton.type = "button";
   createRoomButton.textContent = "Create room";
+  furnitureButton.className = "furniture-button hidden";
+  furnitureButton.type = "button";
+  furnitureButton.textContent = "Furniture";
   editCharacter.className = "edit-character-button hidden";
   editCharacter.type = "button";
   editCharacter.textContent = "Edit character";
@@ -149,7 +158,14 @@ export function createApp(
   status.textContent = "idle";
 
   brand.append(brandTitle, brandSubtitle);
-  topActions.append(browseRooms, friendsButton, createRoomButton, editCharacter, logOut);
+  topActions.append(
+    browseRooms,
+    friendsButton,
+    createRoomButton,
+    furnitureButton,
+    editCharacter,
+    logOut,
+  );
   topBar.append(brand, topActions, status);
 
   const roomBrowser = deps.createRoomBrowser({
@@ -231,6 +247,15 @@ export function createApp(
     },
   });
 
+  const furniturePanel = deps.createFurniturePanel({
+    onModeChange(mode) {
+      game?.setFurnitureEditMode(mode);
+    },
+    onPickup(itemId) {
+      game?.pickupRoomItem(itemId);
+    },
+  });
+
   async function ensureGame(): Promise<Game> {
     if (game) {
       return game;
@@ -252,7 +277,20 @@ export function createApp(
         chat.show();
         revealSignedInChrome({ editCharacter: true });
         roomBrowser.setCurrentRoom(snapshot.roomId);
+        furniturePanel.setCanEdit(snapshot.canEditItems);
+        furniturePanel.setItems(snapshot.items);
+
+        if (snapshot.canEditItems) {
+          furnitureButton.classList.remove("hidden");
+        } else {
+          furnitureButton.classList.add("hidden");
+          furniturePanel.hide();
+        }
+
         roomBrowser.hide();
+      },
+      onFurnitureItemsChanged(items) {
+        furniturePanel.setItems(items);
       },
       onDirectMessage(message) {
         const appended = directMessagePanel.append(message);
@@ -471,6 +509,10 @@ export function createApp(
     void openCreateRoomDialog();
   });
 
+  furnitureButton.addEventListener("click", () => {
+    furniturePanel.show();
+  });
+
   logOut.addEventListener("click", () => {
     void signOut();
   });
@@ -499,6 +541,7 @@ export function createApp(
     createRoomDialog.element,
     roomBrowser.element,
     friendsPanel.element,
+    furniturePanel.element,
     directMessagePanel.element,
     chat.element,
     disconnectedDialog.element,

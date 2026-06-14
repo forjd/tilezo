@@ -1,13 +1,20 @@
 import { screenToTile, tileToScreen } from "@tilezo/engine/iso";
 import type { RoomTile, TilePosition } from "@tilezo/engine/types";
 import type { AvatarAppearance } from "@tilezo/protocol/appearance";
+import type { RoomItem } from "@tilezo/protocol/furniture";
 import type { RoomSnapshotMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { type Application, Container } from "pixi.js";
 import { Avatar, type ChatBubbleLayout } from "./Avatar";
+import { Furniture } from "./Furniture";
 import { ROOM_WALL_HEIGHT, TileMap } from "./TileMap";
 
 type MoveRequestHandler = (target: TilePosition) => void;
 type CanvasInteractionHandler = () => void;
+export type FurnitureEditMode =
+  | { type: "place"; itemType: string; rotation: number }
+  | { type: "move"; itemId: string; rotation: number };
+export type FurnitureEditRequest = FurnitureEditMode & { position: TilePosition };
+type FurnitureEditRequestHandler = (request: FurnitureEditRequest) => void;
 type Point = {
   x: number;
   y: number;
@@ -28,10 +35,13 @@ const CAMERA_SCALE_STORAGE_KEY = "tilezo.roomCameraScale";
 export class RoomScene {
   private readonly world = new Container();
   private readonly tiles = new TileMap();
+  private readonly furnitureLayer = new Container();
   private readonly doorAvatarLayer = new Container();
   private readonly avatarLayer = new Container();
   private readonly avatarOverlayLayer = new Container();
   private readonly avatars = new Map<string, Avatar>();
+  private readonly furniture = new Map<string, Furniture>();
+  private furnitureEditMode?: FurnitureEditMode;
   private hover?: TilePosition;
   private doorTile?: TilePosition;
   private roomBounds?: RoomBounds;
@@ -46,9 +56,11 @@ export class RoomScene {
     private readonly app: Application,
     private readonly onMoveRequest: MoveRequestHandler,
     private readonly onCanvasInteraction?: CanvasInteractionHandler,
+    private readonly onFurnitureEditRequest?: FurnitureEditRequestHandler,
   ) {
     this.world.addChild(
       this.tiles.view,
+      this.furnitureLayer,
       this.doorAvatarLayer,
       this.tiles.wallView,
       this.avatarLayer,
@@ -65,6 +77,7 @@ export class RoomScene {
     this.roomBounds = calculateRoomBounds(snapshot.tiles);
     this.resetCamera();
     this.clear();
+    this.loadItems(snapshot.items);
 
     for (const user of snapshot.users) {
       const avatar = this.addAvatar(user.id, user.username, user.position, user.appearance);
@@ -82,10 +95,15 @@ export class RoomScene {
     for (const avatar of this.avatars.values()) {
       avatar.destroy();
     }
+    for (const item of this.furniture.values()) {
+      item.destroy();
+    }
     this.doorAvatarLayer.removeChildren();
     this.avatarLayer.removeChildren();
     this.avatarOverlayLayer.removeChildren();
+    this.furnitureLayer.removeChildren();
     this.avatars.clear();
+    this.furniture.clear();
   }
 
   handleServerMessage(message: ServerMessage): void {
@@ -110,6 +128,14 @@ export class RoomScene {
       case "avatar.appearance.updated":
         this.avatars.get(message.userId)?.setAppearance(message.appearance);
         break;
+      case "room.item.placed":
+      case "room.item.moved":
+      case "room.item.state_updated":
+        this.upsertItem(message.item);
+        break;
+      case "room.item.picked_up":
+        this.removeItem(message.itemId);
+        break;
       case "chat.message":
         this.avatars.get(message.userId)?.setTyping(false);
         this.avatars.get(message.userId)?.say(message.text);
@@ -131,6 +157,10 @@ export class RoomScene {
 
   resize(): void {
     this.centerRoom();
+  }
+
+  setFurnitureEditMode(mode?: FurnitureEditMode): void {
+    this.furnitureEditMode = mode ? { ...mode } : undefined;
   }
 
   private addAvatar(
@@ -293,6 +323,12 @@ export class RoomScene {
 
       const target = this.eventToTile(event);
 
+      if (this.furnitureEditMode) {
+        this.requestFurnitureEdit(target);
+        this.onCanvasInteraction?.();
+        return;
+      }
+
       if (this.tiles.isWalkable(target)) {
         this.onMoveRequest(target);
       }
@@ -405,6 +441,13 @@ export class RoomScene {
 
   private handleKeyboard(event: KeyboardEvent): void {
     if (event.key === "Enter" || event.key === " ") {
+      if (this.furnitureEditMode && this.hover) {
+        event.preventDefault();
+        this.requestFurnitureEdit(this.hover);
+        this.onCanvasInteraction?.();
+        return;
+      }
+
       if (this.hover && this.tiles.isWalkable(this.hover)) {
         event.preventDefault();
         this.onMoveRequest(this.hover);
@@ -443,9 +486,61 @@ export class RoomScene {
     for (const avatar of this.avatars.values()) {
       avatar.destroy();
     }
+    for (const item of this.furniture.values()) {
+      item.destroy();
+    }
     this.avatars.clear();
+    this.furniture.clear();
     this.tiles.destroy();
     this.world.destroy({ children: true });
+  }
+
+  private loadItems(items: readonly RoomItem[]): void {
+    for (const item of items) {
+      this.upsertItem(item);
+    }
+  }
+
+  private upsertItem(item: RoomItem): void {
+    const existing = this.furniture.get(item.id);
+
+    if (existing) {
+      existing.update(item);
+      this.sortFurniture();
+      return;
+    }
+
+    const furniture = new Furniture(item);
+    this.furniture.set(item.id, furniture);
+    this.furnitureLayer.addChild(furniture.view);
+    this.sortFurniture();
+  }
+
+  private removeItem(itemId: string): void {
+    const item = this.furniture.get(itemId);
+
+    if (!item) {
+      return;
+    }
+
+    item.view.removeFromParent();
+    item.destroy();
+    this.furniture.delete(itemId);
+  }
+
+  private sortFurniture(): void {
+    this.furnitureLayer.children.sort((left, right) => left.zIndex - right.zIndex);
+  }
+
+  private requestFurnitureEdit(position: TilePosition): void {
+    if (!this.furnitureEditMode || !this.tiles.has(position) || position.x < 0) {
+      return;
+    }
+
+    this.onFurnitureEditRequest?.({
+      ...this.furnitureEditMode,
+      position,
+    });
   }
 }
 

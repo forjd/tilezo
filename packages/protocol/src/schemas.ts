@@ -15,6 +15,9 @@ export const MAX_RAW_MESSAGE_BYTES = 8 * 1024;
 export const USERNAME_MAX_LENGTH = 24;
 export const USER_ID_MAX_LENGTH = 64;
 export const ROOM_ID_MAX_LENGTH = 64;
+export const ITEM_ID_MAX_LENGTH = 128;
+export const ITEM_TYPE_MAX_LENGTH = 64;
+export const ITEM_ACTION_MAX_LENGTH = 64;
 export const MESSAGE_ID_MAX_LENGTH = 128;
 export const CHAT_MAX_LENGTH = 240;
 export const DIRECT_MESSAGE_MAX_LENGTH = 600;
@@ -42,6 +45,7 @@ const directMessageText = z
   .pipe(z.string().min(1).max(DIRECT_MESSAGE_MAX_LENGTH));
 
 const tileCoordinate = z.number().int().min(-MAX_TILE_COORDINATE).max(MAX_TILE_COORDINATE);
+const furnitureRotation = z.number().int().min(0).max(3);
 
 export const tilePositionSchema = z.object({
   x: tileCoordinate,
@@ -117,6 +121,31 @@ export const avatarAppearanceUpdateMessageSchema = z.object({
   appearance: avatarAppearanceSchema,
 });
 
+export const roomItemPlaceRequestMessageSchema = z.object({
+  type: z.literal("room.item.place.request"),
+  itemType: trimmedString(ITEM_TYPE_MAX_LENGTH),
+  position: tilePositionSchema,
+  rotation: furnitureRotation,
+});
+
+export const roomItemMoveRequestMessageSchema = z.object({
+  type: z.literal("room.item.move.request"),
+  itemId: trimmedString(ITEM_ID_MAX_LENGTH),
+  position: tilePositionSchema,
+  rotation: furnitureRotation,
+});
+
+export const roomItemPickupRequestMessageSchema = z.object({
+  type: z.literal("room.item.pickup.request"),
+  itemId: trimmedString(ITEM_ID_MAX_LENGTH),
+});
+
+export const roomItemInteractRequestMessageSchema = z.object({
+  type: z.literal("room.item.interact.request"),
+  itemId: trimmedString(ITEM_ID_MAX_LENGTH),
+  action: trimmedString(ITEM_ACTION_MAX_LENGTH),
+});
+
 export const pingMessageSchema = z.object({
   type: z.literal("ping"),
   sentAt: trimmedString(128),
@@ -134,6 +163,10 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   dmEditMessageSchema,
   dmDeleteMessageSchema,
   avatarAppearanceUpdateMessageSchema,
+  roomItemPlaceRequestMessageSchema,
+  roomItemMoveRequestMessageSchema,
+  roomItemPickupRequestMessageSchema,
+  roomItemInteractRequestMessageSchema,
   pingMessageSchema,
 ]);
 
@@ -159,6 +192,16 @@ const publicRoomSummarySchema = z.object({
   joined: z.boolean(),
 });
 
+const roomItemSchema = z.object({
+  id: z.string(),
+  itemType: z.string(),
+  x: tileCoordinate,
+  y: tileCoordinate,
+  z: z.number().int(),
+  rotation: furnitureRotation,
+  state: z.record(z.string(), z.unknown()),
+});
+
 // Server -> client messages are validated on the client so a malformed or skewed
 // payload surfaces as a clean "invalid server message" instead of throwing deep in
 // the scene/avatar code and silently dropping that state update (client desync).
@@ -169,6 +212,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     roomId: z.string(),
     users: z.array(roomUserSnapshotSchema),
     tiles: z.array(roomTileSchema),
+    items: z.array(roomItemSchema),
+    canEditItems: z.boolean(),
   }),
   z.object({ type: z.literal("room.list"), rooms: z.array(publicRoomSummarySchema) }),
   z.object({ type: z.literal("user.joined"), user: roomUserSnapshotSchema }),
@@ -235,6 +280,10 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     username: z.string(),
     isTyping: z.boolean(),
   }),
+  z.object({ type: z.literal("room.item.placed"), item: roomItemSchema }),
+  z.object({ type: z.literal("room.item.moved"), item: roomItemSchema }),
+  z.object({ type: z.literal("room.item.picked_up"), itemId: z.string() }),
+  z.object({ type: z.literal("room.item.state_updated"), item: roomItemSchema }),
   z.object({ type: z.literal("pong"), sentAt: z.string() }),
   z.object({ type: z.literal("error"), code: z.string(), message: z.string() }),
 ]);

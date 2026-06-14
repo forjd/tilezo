@@ -169,6 +169,23 @@ describe("DrizzlePersistenceStore", () => {
     await expect(store.saveLastRoomIdForUser("user_1", "studio")).resolves.toBeUndefined();
     await expect(store.clearLastRoomIdForUser("user_1")).resolves.toBeUndefined();
   });
+
+  test("persists room furniture items", async () => {
+    const item = {
+      id: "item_1",
+      itemType: "crate_table",
+      x: 2,
+      y: 1,
+      z: 0,
+      rotation: 0,
+      state: {},
+    };
+    const store = new DrizzlePersistenceStore(queryDouble([[item], [], []]));
+
+    await expect(store.listRoomItems("room_1")).resolves.toEqual([item]);
+    await expect(store.saveRoomItem("room_1", item)).resolves.toBeUndefined();
+    await expect(store.deleteRoomItem("item_1")).resolves.toBeUndefined();
+  });
 });
 
 function createStore(options: { room?: RoomLayout } = {}) {

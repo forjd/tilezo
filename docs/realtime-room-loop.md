@@ -77,6 +77,27 @@ The server:
 
 The client animates avatars along the accepted path. It does not decide final position.
 
+## Furniture
+
+Room furniture is server-authoritative. Static furniture definitions live in the shared protocol
+package, while placed room item instances are loaded from `room_items` when persistence is
+available.
+
+When the room owner places, moves, rotates, or picks up furniture, the client sends only edit
+intent. The server:
+
+1. Confirms the socket is in the room.
+2. Confirms the authenticated user owns the room.
+3. Validates the furniture type, rotation, footprint, base tiles, spawn safety, user occupancy, and
+   overlap with existing room items.
+4. Updates the in-memory room item state.
+5. Persists the change through the room item store when database persistence is available.
+6. Broadcasts the accepted item change to the room topic.
+
+Blocking furniture rebuilds the room's authoritative pathfinding grid. Walkable floor items and
+seats can be placed without blocking movement; blocking items reject movement through their
+footprint.
+
 ## Chat
 
 When the client sends `chat.say`, the server:
@@ -101,4 +122,4 @@ When a WebSocket closes, the server:
 - Occupied-user tile blocking is not implemented.
 - Diagonal movement is supported when the diagonal tile is walkable and the move does not cut between two blocked adjacent tiles.
 - High-frequency position persistence is intentionally not implemented.
-- Room state is in memory and resets when the server restarts.
+- Live room membership and avatar movement are in memory and reset when the server restarts.

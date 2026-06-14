@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRectRoomLayout } from "@tilezo/engine";
-import { DEFAULT_AVATAR_APPEARANCE, type ServerMessage } from "@tilezo/protocol";
+import { DEFAULT_AVATAR_APPEARANCE, type RoomItem, type ServerMessage } from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
@@ -382,6 +382,105 @@ describe("handleMessage", () => {
     expect(published[0]).toMatchObject({ type: "avatar.moved", userId: "user_db_1" });
     expect(ws.sent).toEqual([
       { type: "error", code: "INVALID_TILE", message: "Target tile is not walkable" },
+    ]);
+  });
+
+  test("lets room owners place persisted furniture that blocks movement", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("owned_room", "Owned Room"), {
+      ownerUserId: "user_db_1",
+      visibility: "public",
+    });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const published: ServerMessage[] = [];
+    const saved: Array<{ roomId: string; item: RoomItem }> = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "owned_room" }), {
+      rooms,
+      publish() {},
+    });
+    expect(ws.sent[0]).toMatchObject({ type: "room.snapshot", canEditItems: true });
+    ws.sent.length = 0;
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 2, y: 1 },
+        rotation: 0,
+      }),
+      {
+        rooms,
+        publish(_topic, message) {
+          published.push(message);
+        },
+        persistence: {
+          async getRoom() {
+            return undefined;
+          },
+          async seedRoom() {},
+          async saveRoomItem(roomId, item) {
+            saved.push({ roomId, item });
+          },
+        },
+      },
+    );
+    await flushAsyncMessages();
+
+    const item = saved[0]?.item;
+    if (!item) {
+      throw new Error("expected furniture item to be saved");
+    }
+
+    expect(saved[0]?.roomId).toBe("owned_room");
+    expect(item).toMatchObject({ itemType: "crate_table", x: 2, y: 1, z: 0, rotation: 0 });
+    expect(published).toContainEqual({ type: "room.item.placed", item });
+
+    handleMessage(ws, JSON.stringify({ type: "avatar.move.request", target: { x: 2, y: 1 } }), {
+      rooms,
+      publish() {},
+    });
+
+    expect(ws.sent).toEqual([
+      { type: "error", code: "INVALID_TILE", message: "Target tile is not walkable" },
+    ]);
+  });
+
+  test("rejects furniture edits from non-owners", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("owned_room", "Owned Room"), {
+      ownerUserId: "user_db_2",
+      visibility: "public",
+    });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "owned_room" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 2, y: 1 },
+        rotation: 0,
+      }),
+      {
+        rooms,
+        publish() {},
+      },
+    );
+
+    expect(ws.sent).toEqual([
+      {
+        type: "error",
+        code: "ROOM_EDIT_FORBIDDEN",
+        message: "Only the room owner can edit furniture",
+      },
     ]);
   });
 
@@ -876,6 +975,8 @@ describe("handleOpen", () => {
           },
         ],
         tiles: studioTiles,
+        items: [],
+        canEditItems: false,
       },
       {
         type: "room.list",
