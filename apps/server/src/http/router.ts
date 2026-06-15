@@ -927,8 +927,7 @@ function metricsAccessAllowed(ctx: RouteContext): boolean {
     return false;
   }
 
-  const provided = ctx.url.searchParams.get("token") ?? readBearerToken(ctx.request);
-  return provided === token;
+  return readBearerToken(ctx.request) === token;
 }
 
 function enforceRateLimit(
