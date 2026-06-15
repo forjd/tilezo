@@ -122,6 +122,29 @@ describe("AuthService", () => {
     expect(await auth.verifyToken(session.token)).toEqual(updated);
   });
 
+  test("sanitizes a corrupt/legacy persisted appearance on read", async () => {
+    const store = createAuthStore();
+    const auth = new AuthService(store, { secret: "test-secret" });
+    const session = await auth.createUser("Dan", "correct horse battery staple");
+
+    // Simulate a legacy or hand-edited row holding retired enum values, bypassing the strict
+    // write-path validation.
+    const stored = store.users[0];
+    if (!stored) {
+      throw new Error("expected a stored user");
+    }
+    stored.appearance = {
+      ...DEFAULT_AVATAR_APPEARANCE,
+      hair: "retired-style",
+      hairColor: "#zzzzzz",
+    } as unknown as AvatarAppearance;
+
+    const verified = await auth.verifyToken(session.token);
+
+    // The retired fields degrade to defaults; reads never surface an invalid appearance.
+    expect(verified?.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
+  });
+
   test("rejects unsupported avatar colors before persistence", async () => {
     const store = createAuthStore();
     const auth = new AuthService(store, { secret: "test-secret" });

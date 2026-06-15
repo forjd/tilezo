@@ -163,6 +163,56 @@ export const DEFAULT_AVATAR_APPEARANCE: AvatarAppearance = {
   shoesColor: "#5b4218",
 };
 
+// Coerces an untrusted/legacy appearance value into a valid one field-by-field, replacing
+// only the fields that are not current enum members with the default. Used at every DB read
+// boundary so a retired or hand-edited style/color cannot poison a room snapshot (the client
+// drops an entire message whose embedded appearance fails strict validation) or render a
+// faceless avatar. Writes still go through the strict `avatarAppearanceSchema`.
+export function sanitizeAppearance(value: unknown): AvatarAppearance {
+  const source = (typeof value === "object" && value !== null ? value : {}) as Partial<
+    Record<keyof AvatarAppearance, unknown>
+  >;
+  return {
+    hair: coerceMember(AVATAR_HAIR_STYLES, source.hair, DEFAULT_AVATAR_APPEARANCE.hair),
+    hairColor: coerceMember(
+      AVATAR_HAIR_COLORS,
+      source.hairColor,
+      DEFAULT_AVATAR_APPEARANCE.hairColor,
+    ),
+    skinTone: coerceMember(AVATAR_SKIN_TONES, source.skinTone, DEFAULT_AVATAR_APPEARANCE.skinTone),
+    shirt: coerceMember(AVATAR_SHIRT_STYLES, source.shirt, DEFAULT_AVATAR_APPEARANCE.shirt),
+    shirtColor: coerceMember(
+      AVATAR_SHIRT_COLORS,
+      source.shirtColor,
+      DEFAULT_AVATAR_APPEARANCE.shirtColor,
+    ),
+    pants: coerceMember(AVATAR_PANTS_STYLES, source.pants, DEFAULT_AVATAR_APPEARANCE.pants),
+    pantsColor: coerceMember(
+      AVATAR_PANTS_COLORS,
+      source.pantsColor,
+      DEFAULT_AVATAR_APPEARANCE.pantsColor,
+    ),
+    shoes: coerceMember(AVATAR_SHOE_STYLES, source.shoes, DEFAULT_AVATAR_APPEARANCE.shoes),
+    shoesColor: coerceMember(
+      AVATAR_SHOE_COLORS,
+      source.shoesColor,
+      DEFAULT_AVATAR_APPEARANCE.shoesColor,
+    ),
+  };
+}
+
+function coerceMember<T extends readonly string[]>(
+  values: T,
+  candidate: unknown,
+  fallback: T[number],
+): T[number] {
+  return (
+    typeof candidate === "string" && (values as readonly string[]).includes(candidate)
+      ? candidate
+      : fallback
+  ) as T[number];
+}
+
 export function createRandomAvatarAppearance(random: () => number = Math.random): AvatarAppearance {
   return {
     hair: pickRandom(AVATAR_HAIR_STYLES, random),

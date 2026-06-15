@@ -9,6 +9,9 @@ import {
   AVATAR_SHOE_STYLES,
   AVATAR_SKIN_TONES,
   type AvatarAppearance,
+  createRandomAvatarAppearance,
+  DEFAULT_AVATAR_APPEARANCE,
+  sanitizeAppearance,
 } from "@tilezo/protocol/appearance";
 import { AvatarPreview } from "./AvatarPreview";
 
@@ -16,6 +19,9 @@ type CharacterEditorOptions = {
   initialAppearance: AvatarAppearance;
   onSubmit: (appearance: AvatarAppearance) => void;
   onCancel?: () => void;
+  // Asks the user to confirm discarding unsaved edits when cancelling. Injectable for tests;
+  // defaults to the native confirm dialog (and to allowing the discard when none is available).
+  confirmDiscard?: () => boolean;
 };
 
 export class CharacterEditor {
@@ -33,8 +39,14 @@ export class CharacterEditor {
   private readonly preview = new AvatarPreview(document);
   private readonly submitButton = document.createElement("button");
   private readonly cancelButton = document.createElement("button");
+  private readonly randomizeButton = document.createElement("button");
+  private readonly resetButton = document.createElement("button");
+  private readonly confirmDiscard: () => boolean;
+  // The last loaded (saved) look, used to detect unsaved edits before a discard.
+  private baseline: AvatarAppearance = DEFAULT_AVATAR_APPEARANCE;
 
   constructor(private readonly options: CharacterEditorOptions) {
+    this.confirmDiscard = options.confirmDiscard ?? defaultConfirmDiscard;
     this.element.className = "character-panel hidden";
     this.element.innerHTML = "";
 
@@ -75,20 +87,39 @@ export class CharacterEditor {
 
     const actions = document.createElement("div");
     actions.className = "character-actions";
+    this.randomizeButton.className = "secondary-button";
+    this.randomizeButton.type = "button";
+    this.randomizeButton.textContent = "Randomize";
+    this.resetButton.className = "secondary-button";
+    this.resetButton.type = "button";
+    this.resetButton.textContent = "Reset";
     this.submitButton.className = "primary-button";
     this.submitButton.type = "submit";
     this.submitButton.textContent = "Enter room";
     this.cancelButton.className = "secondary-button";
     this.cancelButton.type = "button";
     this.cancelButton.textContent = "Cancel";
-    actions.append(this.cancelButton, this.submitButton);
+    actions.append(this.randomizeButton, this.resetButton, this.cancelButton, this.submitButton);
     form.append(actions);
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       this.options.onSubmit(this.readAppearance());
     });
-    this.cancelButton.addEventListener("click", () => this.options.onCancel?.());
+    // Randomize/Reset apply a look without touching the baseline, so they register as
+    // unsaved edits (a later Cancel will confirm before discarding them).
+    this.randomizeButton.addEventListener("click", () => {
+      this.applyAppearance(createRandomAvatarAppearance());
+    });
+    this.resetButton.addEventListener("click", () => {
+      this.applyAppearance(DEFAULT_AVATAR_APPEARANCE);
+    });
+    this.cancelButton.addEventListener("click", () => {
+      if (this.hasUnsavedChanges() && !this.confirmDiscard()) {
+        return;
+      }
+      this.options.onCancel?.();
+    });
     form.addEventListener("input", () => this.updatePreview());
     form.addEventListener("change", () => this.updatePreview());
 
@@ -108,8 +139,25 @@ export class CharacterEditor {
     this.element.classList.add("hidden");
   }
 
+  // Tears down the PIXI/WebGL preview and detaches the panel. Must be called when the editor
+  // is discarded (e.g. on sign-out) so its WebGL context is not leaked — browsers cap live
+  // contexts and force-lose the oldest, which can break the in-room renderer.
+  dispose(): void {
+    this.preview.destroy();
+    this.element.remove();
+  }
+
   setSubmitLabel(label: string): void {
     this.submitButton.textContent = label;
+  }
+
+  // True when the visible controls differ from the last loaded look. Used to warn before a
+  // discard on cancel.
+  hasUnsavedChanges(): boolean {
+    const current = this.readAppearance();
+    return (Object.keys(current) as (keyof AvatarAppearance)[]).some(
+      (key) => current[key] !== this.baseline[key],
+    );
   }
 
   private readAppearance(): AvatarAppearance {
@@ -126,23 +174,27 @@ export class CharacterEditor {
     };
   }
 
+  // Loads a saved look and resets the unsaved-changes baseline.
   private setAppearance(appearance: AvatarAppearance): void {
-    this.ensureSelectOption(this.hair, appearance.hair);
-    this.ensureSelectOption(this.shirt, appearance.shirt);
-    this.ensureSelectOption(this.pants, appearance.pants);
-    this.ensureSelectOption(this.shoes, appearance.shoes);
-    this.hair.value = appearance.hair;
-    this.hairColor.value = appearance.hairColor;
-    this.skinTone.value = appearance.skinTone;
-    this.shirt.value = appearance.shirt;
-    this.shirtColor.value = appearance.shirtColor;
-    this.pants.value = appearance.pants;
-    this.pantsColor.value = appearance.pantsColor;
-    this.shoes.value = appearance.shoes;
-    this.shoesColor.value = appearance.shoesColor;
+    this.baseline = this.applyAppearance(appearance);
+  }
+
+  // Applies an appearance to the controls without changing the baseline. Coerces any
+  // unknown/legacy field to a valid default so every control has a selectable value (defense
+  // in depth — the server already sanitizes appearance on read). Returns the applied look.
+  private applyAppearance(appearance: AvatarAppearance): AvatarAppearance {
+    const safe = sanitizeAppearance(appearance);
+    this.hair.value = safe.hair;
+    this.hairColor.value = safe.hairColor;
+    this.skinTone.value = safe.skinTone;
+    this.shirt.value = safe.shirt;
+    this.shirtColor.value = safe.shirtColor;
+    this.pants.value = safe.pants;
+    this.pantsColor.value = safe.pantsColor;
+    this.shoes.value = safe.shoes;
+    this.shoesColor.value = safe.shoesColor;
     this.updatePreview();
-    this.syncSwatches();
-    this.syncChoiceButtons();
+    return safe;
   }
 
   private updatePreview(): void {
@@ -175,6 +227,7 @@ export class CharacterEditor {
       button.type = "button";
       button.textContent = option.textContent;
       button.setAttribute("data-value", option.value);
+      button.setAttribute("aria-pressed", "false");
       button.addEventListener("click", () => {
         select.value = option.value;
         this.updatePreview();
@@ -200,8 +253,11 @@ export class CharacterEditor {
       const swatch = document.createElement("button");
       swatch.className = "color-swatch";
       swatch.type = "button";
+      // Keep the hex in the tooltip but speak a readable name (a raw hex is meaningless aloud),
+      // and expose selection state through aria-pressed since the input itself is hidden.
       swatch.title = color;
-      swatch.setAttribute("aria-label", `${labelText} ${color}`);
+      swatch.setAttribute("aria-label", `${labelText}: ${describeColor(color)}`);
+      swatch.setAttribute("aria-pressed", "false");
       swatch.setAttribute("data-color", color);
       swatch.style.setProperty("--swatch-color", color);
       swatch.addEventListener("click", () => {
@@ -229,17 +285,6 @@ export class CharacterEditor {
     return select;
   }
 
-  private ensureSelectOption(select: HTMLSelectElement, value: string): void {
-    if (Array.from(select.options).some((option) => option.value === value)) {
-      return;
-    }
-
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = titleCase(value);
-    select.add(option);
-  }
-
   private createColorInput(): HTMLInputElement {
     const input = document.createElement("input");
     input.type = "hidden";
@@ -262,7 +307,9 @@ export class CharacterEditor {
       );
 
       for (const swatch of swatches) {
-        swatch.classList.toggle("selected", swatch.dataset.color === input.value);
+        const selected = swatch.dataset.color === input.value;
+        swatch.classList.toggle("selected", selected);
+        swatch.setAttribute("aria-pressed", String(selected));
       }
     }
   }
@@ -275,7 +322,9 @@ export class CharacterEditor {
       );
 
       for (const choice of choices) {
-        choice.classList.toggle("selected", choice.dataset.value === select.value);
+        const selected = choice.dataset.value === select.value;
+        choice.classList.toggle("selected", selected);
+        choice.setAttribute("aria-pressed", String(selected));
       }
     }
   }
@@ -286,6 +335,64 @@ function titleCase(value: string): string {
     .split("-")
     .map((part) => `${part.slice(0, 1).toLocaleUpperCase("en-US")}${part.slice(1)}`)
     .join(" ");
+}
+
+function defaultConfirmDiscard(): boolean {
+  return typeof globalThis.confirm === "function"
+    ? globalThis.confirm("Discard your unsaved character changes?")
+    : true;
+}
+
+const HUE_NAMES: readonly { max: number; name: string }[] = [
+  { max: 15, name: "red" },
+  { max: 45, name: "orange" },
+  { max: 70, name: "yellow" },
+  { max: 160, name: "green" },
+  { max: 200, name: "teal" },
+  { max: 255, name: "blue" },
+  { max: 300, name: "purple" },
+  { max: 345, name: "pink" },
+];
+
+// Maps a palette hex to a coarse, human-readable colour name so assistive tech announces
+// something meaningful ("dark brown") instead of a raw hex code. Returns the input unchanged
+// for anything that is not a 6-digit hex.
+export function describeColor(hex: string): string {
+  if (!/^#[\da-fA-F]{6}$/.test(hex)) {
+    return hex;
+  }
+
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 510;
+  const tone = lightness <= 0.3 ? "dark " : lightness >= 0.72 ? "light " : "";
+
+  if (max - min <= 18) {
+    if (lightness <= 0.18) return "black";
+    if (lightness >= 0.82) return "white";
+    return "gray";
+  }
+
+  let hue: number;
+  if (max === r) {
+    hue = (((g - b) / (max - min)) % 6) * 60;
+  } else if (max === g) {
+    hue = ((b - r) / (max - min) + 2) * 60;
+  } else {
+    hue = ((r - g) / (max - min) + 4) * 60;
+  }
+  hue = (hue + 360) % 360;
+
+  let name = HUE_NAMES.find((bucket) => hue < bucket.max)?.name ?? "red";
+  // A dark orange reads as brown, which matches the palette's many wood/earth tones.
+  if (name === "orange" && lightness < 0.5) {
+    name = "brown";
+  }
+
+  return `${tone}${name}`.trim();
 }
 
 const COLOR_PALETTES = {

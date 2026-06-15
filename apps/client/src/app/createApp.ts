@@ -595,6 +595,10 @@ export function createApp(
   function disposePanels(): void {
     chat.dispose?.();
     directMessagePanel.dispose?.();
+    // The character editor and friends panel each own PIXI/WebGL avatar previews; sign-out
+    // rebuilds the whole shell, so dispose them here or their WebGL contexts leak.
+    characterEditor.dispose?.();
+    friendsPanel.dispose?.();
   }
 
   async function signOut(): Promise<void> {

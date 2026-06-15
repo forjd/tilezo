@@ -222,6 +222,12 @@ export class FriendsPanel {
     return item;
   }
 
+  // Tears down every friend-row avatar preview. Called on sign-out so their PIXI/WebGL
+  // contexts are not leaked when the app shell is rebuilt.
+  dispose(): void {
+    this.destroyPreviews();
+  }
+
   private destroyPreviews(): void {
     for (const destroy of this.previewDestroyers.splice(0)) {
       destroy();

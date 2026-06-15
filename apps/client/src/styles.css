@@ -476,6 +476,14 @@ select {
   outline-offset: 1px;
 }
 
+/* Keyboard focus ring in blue, distinct from the yellow selected outline so focus and
+   selection can be told apart when both apply. */
+.option-choice:focus-visible,
+.color-swatch:focus-visible {
+  outline: 2px solid #2f7f9d;
+  outline-offset: 2px;
+}
+
 .primary-button {
   height: 42px;
   margin-top: 2px;

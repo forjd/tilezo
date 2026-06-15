@@ -4,6 +4,7 @@ import {
   type AvatarAppearance,
   avatarAppearanceSchema,
   createRandomAvatarAppearance,
+  sanitizeAppearance,
 } from "@tilezo/protocol";
 import { eq, sql } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
@@ -499,7 +500,11 @@ function toAuthUser(user: AuthUser): AuthUser {
   return {
     id: user.id,
     username: user.username,
-    appearance: { ...user.appearance },
+    // Normalize on read: persisted jsonb is only `$type`-cast (compile-time), so a legacy or
+    // hand-edited row could hold a retired enum value. This is the single read choke point for
+    // AuthService (verifyToken/login/createUser/updateAppearance and the HTTP GET that reuses
+    // verifyToken), so coercing here keeps invalid appearances out of sessions and room snapshots.
+    appearance: sanitizeAppearance(user.appearance),
     dollars: user.dollars,
   };
 }

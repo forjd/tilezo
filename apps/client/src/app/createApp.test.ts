@@ -245,6 +245,10 @@ describe("createApp", () => {
     await flushAsyncMessages();
     expect(harness.logoutCalls).toBe(1);
     expect(game.stopped).toBe(1);
+    // Sign-out must dispose the previewing panels (their PIXI/WebGL contexts) before the shell
+    // is rebuilt, or each logout/login cycle leaks a context.
+    expect(harness.characterEditors[0]?.disposed).toBe(1);
+    expect(harness.friendsPanels[0]?.disposed).toBe(1);
   });
 
   test("surfaces startup, login, character, template, and room creation failures", async () => {
@@ -976,10 +980,17 @@ class FakeFriendsPanel {
   setUnreadCount(friendId: string, count: number): void {
     this.unreadCalls.push({ friendId, count });
   }
+
+  disposed = 0;
+
+  dispose(): void {
+    this.disposed += 1;
+  }
 }
 
 class FakeCharacterEditor {
   readonly element = new FakeElement("section");
+  disposed = 0;
   readonly shown: AvatarAppearance[] = [];
   readonly labels: string[] = [];
   hidden = 0;
@@ -1012,6 +1023,10 @@ class FakeCharacterEditor {
 
   setSubmitLabel(label: string): void {
     this.labels.push(label);
+  }
+
+  dispose(): void {
+    this.disposed += 1;
   }
 }
 

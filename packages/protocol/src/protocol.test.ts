@@ -9,6 +9,7 @@ import {
   parseRawClientMessage,
   parseRawServerMessage,
   parseServerMessage,
+  sanitizeAppearance,
 } from ".";
 
 describe("protocol parser", () => {
@@ -320,6 +321,62 @@ describe("protocol parser", () => {
       shoesColor: "#9f4f3f",
     });
     expect(parseClientMessage({ type: "avatar.appearance.update", appearance }).ok).toBe(true);
+  });
+
+  test("strips unknown keys from appearance updates instead of rejecting them", () => {
+    // Locks in the intentional strip-and-accept contract: a future switch to .passthrough()
+    // (which would leak attacker-controlled keys downstream) must fail this assertion. Do not
+    // switch the schema to .strict() — the server only consumes the stripped parsed value.
+    const result = parseClientMessage({
+      type: "avatar.appearance.update",
+      appearance: { ...DEFAULT_AVATAR_APPEARANCE, evilField: "x" },
+      extraTop: 1,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        type: "avatar.appearance.update",
+        appearance: { ...DEFAULT_AVATAR_APPEARANCE },
+      },
+    });
+  });
+
+  test("clamps random appearance selection for out-of-range and non-finite values", () => {
+    const upper = createRandomAvatarAppearance(() => 1);
+    const lower = createRandomAvatarAppearance(() => -0.5);
+    const nan = createRandomAvatarAppearance(() => Number.NaN);
+    const infinite = createRandomAvatarAppearance(() => Number.POSITIVE_INFINITY);
+
+    for (const appearance of [upper, lower, nan, infinite]) {
+      expect(parseClientMessage({ type: "avatar.appearance.update", appearance }).ok).toBe(true);
+    }
+
+    // () => 1 selects the last catalog entry; the negative and non-finite seeds all clamp to
+    // the first ("short").
+    expect(upper.hair).toBe("locs");
+    expect(lower.hair).toBe("short");
+    expect(nan.hair).toBe("short");
+    expect(infinite.hair).toBe("short");
+  });
+
+  test("sanitizeAppearance coerces unknown fields to defaults and keeps valid ones", () => {
+    expect(sanitizeAppearance(null)).toEqual(DEFAULT_AVATAR_APPEARANCE);
+    expect(sanitizeAppearance("nope")).toEqual(DEFAULT_AVATAR_APPEARANCE);
+    expect(
+      sanitizeAppearance({
+        ...DEFAULT_AVATAR_APPEARANCE,
+        hair: "retired",
+        hairColor: "#zzzzzz",
+        shirt: "jacket",
+      }),
+    ).toEqual({ ...DEFAULT_AVATAR_APPEARANCE, shirt: "jacket" });
+    expect(
+      parseClientMessage({
+        type: "avatar.appearance.update",
+        appearance: sanitizeAppearance({ hair: 42 }),
+      }).ok,
+    ).toBe(true);
   });
 
   test("keeps the expanded avatar catalog available to consumers", () => {

@@ -1,4 +1,4 @@
-import type { AvatarAppearance } from "@tilezo/protocol";
+import { type AvatarAppearance, sanitizeAppearance } from "@tilezo/protocol";
 import { and, asc, count, eq, inArray, or } from "drizzle-orm";
 import { normalizeUsername } from "../auth/auth";
 import type { TilezoDatabase } from "../db/db";
@@ -193,7 +193,7 @@ export class DrizzleFriendStore implements FriendStore {
       })
       .from(users)
       .where(eq(users.usernameKey, normalizeUsername(username)));
-    return user;
+    return user ? toFriendUser(user) : undefined;
   }
 
   async addFriend(userId: string, friendUserId: string): Promise<FriendshipStatus> {
@@ -281,7 +281,7 @@ export class DrizzleFriendStore implements FriendStore {
       return [];
     }
 
-    return await this.db
+    const friendRows = await this.db
       .select({
         id: users.id,
         username: users.username,
@@ -290,8 +290,9 @@ export class DrizzleFriendStore implements FriendStore {
       .from(users)
       .where(inArray(users.id, friendIds))
       .orderBy(asc(users.usernameKey))
-      // c8 ignore next 3 -- query builder terminal call is covered by Drizzle store list tests.
+      // c8 ignore next 2 -- query builder terminal call is covered by Drizzle store list tests.
       .limit(FRIEND_LIST_QUERY_LIMIT);
+    return friendRows.map(toFriendUser);
   }
 
   // c8 ignore next 18 -- direct-message policy covers public behavior; store adapter status lookup is a thin Drizzle mapper.
@@ -341,4 +342,10 @@ export class FriendError extends Error {
 
 export function friendshipPair(userId: string, friendUserId: string): [string, string] {
   return userId < friendUserId ? [userId, friendUserId] : [friendUserId, userId];
+}
+
+// Normalize appearance on read so a legacy/hand-edited row cannot break friend-list avatar
+// previews, which share the strict client schema and renderer.
+function toFriendUser(row: FriendUser): FriendUser {
+  return { ...row, appearance: sanitizeAppearance(row.appearance) };
 }

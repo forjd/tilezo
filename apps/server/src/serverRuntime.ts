@@ -244,6 +244,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
           handleMessage(ws, message, {
             rooms,
             publish,
+            auth,
             persistence,
             directMessages,
             logger,

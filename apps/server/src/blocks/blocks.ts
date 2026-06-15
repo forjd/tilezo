@@ -1,4 +1,4 @@
-import type { AvatarAppearance } from "@tilezo/protocol";
+import { type AvatarAppearance, sanitizeAppearance } from "@tilezo/protocol";
 import { and, asc, eq, gt, or } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
 import { blockedUsers, users } from "../db/schema";
@@ -177,7 +177,9 @@ function toSummary(row: BlockedUserRow): BlockedUserSummary {
   return {
     id: row.id,
     username: row.username,
-    appearance: row.appearance,
+    // Normalize on read so a legacy/hand-edited appearance row cannot break the blocked-list
+    // avatar previews (which share the strict client schema and renderer).
+    appearance: sanitizeAppearance(row.appearance),
     blockedAt: row.blockedAt.toISOString(),
   };
 }

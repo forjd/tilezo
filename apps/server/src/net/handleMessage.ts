@@ -1,4 +1,5 @@
 import {
+  type AvatarAppearance,
   DEFAULT_AVATAR_APPEARANCE,
   getFurnitureDefinition,
   parseRawClientMessage,
@@ -21,9 +22,16 @@ import { createId } from "../util/ids";
 import { encodeServerMessage } from "../util/safeJson";
 import type { SocketData } from "./socketTypes";
 
+// Minimal structural slice of AuthService used to persist appearance from the socket path,
+// so the handler does not couple to the full auth surface and is trivial to fake in tests.
+type AppearancePersister = {
+  updateAppearance(userId: string, appearance: AvatarAppearance): Promise<unknown>;
+};
+
 type Context = {
   rooms: RoomManager;
   publish: (topic: string, message: ServerMessage) => void;
+  auth?: AppearancePersister;
   persistence?: PersistenceStore;
   directMessages?: DirectMessageService;
   economy?: EconomyStore;
@@ -155,32 +163,7 @@ export function handleMessage(
           return;
         }
 
-        const room = getJoinedRoom(ws, context.rooms);
-
-        if (!room) {
-          context.metrics?.increment("appearance.rejected.not_in_room");
-          context.logger?.warn("room.appearance.not_in_room", socketFields(ws));
-          sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
-          return;
-        }
-
-        if (!room.updateAppearance(ws.data.userId, parsed.value.appearance)) {
-          context.metrics?.increment("appearance.rejected.not_in_room");
-          context.logger?.warn("room.appearance.rejected", socketFields(ws));
-          sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
-          return;
-        }
-
-        // Only mirror the appearance onto the socket after the authoritative room update
-        // succeeds, so a rejected update cannot leave the local copy out of sync.
-        ws.data.appearance = parsed.value.appearance;
-
-        context.publish(roomTopic(room.id), {
-          type: "avatar.appearance.updated",
-          userId: ws.data.userId,
-          appearance: parsed.value.appearance,
-        });
-        context.metrics?.increment("appearance.accepted");
+        void updateAvatarAppearance(ws, parsed.value.appearance, context);
         break;
       }
 
@@ -660,6 +643,77 @@ function sendRoomSnapshot(ws: ServerWebSocket<SocketData>, room: Room, context: 
     items: snapshot.items,
     canEditItems: context.rooms.canEditRoom(room.id, ws.data.userId),
   });
+}
+
+async function updateAvatarAppearance(
+  ws: ServerWebSocket<SocketData>,
+  appearance: AvatarAppearance,
+  context: Context,
+): Promise<void> {
+  const room = getJoinedRoom(ws, context.rooms);
+
+  if (!room) {
+    context.metrics?.increment("appearance.rejected.not_in_room");
+    context.logger?.warn("room.appearance.not_in_room", socketFields(ws));
+    sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
+    return;
+  }
+
+  // Persist before broadcasting so a socket-only update can never change the avatar for everyone
+  // in the room without also being saved (mirrors the saveRoomItem persist-before-broadcast
+  // contract). The standard client also calls PUT /me/appearance to refresh its local profile;
+  // persisting here makes the socket path self-sufficient instead of relying on that ordering.
+  if (!(await saveUserAppearance(ws, appearance, context))) {
+    return;
+  }
+
+  // Re-validate membership after the persist await: during the DB write the socket may have been
+  // superseded by a newer connection or the user may have left the room. Re-fetching through
+  // getJoinedRoom re-applies the connection-supersede guarantee (a plain room.updateAppearance
+  // only checks map membership), so a stale socket cannot drive a broadcast.
+  const current = getJoinedRoom(ws, context.rooms);
+
+  if (!current?.updateAppearance(ws.data.userId, appearance)) {
+    context.metrics?.increment("appearance.rejected.not_in_room");
+    context.logger?.warn("room.appearance.rejected", socketFields(ws));
+    sendError(ws, "NOT_IN_ROOM", "Join a room before updating your character");
+    return;
+  }
+
+  // Only mirror the appearance onto the socket after the authoritative persist + room update
+  // succeed, so a rejected update cannot leave the local copy out of sync.
+  ws.data.appearance = appearance;
+
+  context.publish(roomTopic(current.id), {
+    type: "avatar.appearance.updated",
+    userId: ws.data.userId,
+    appearance,
+  });
+  context.metrics?.increment("appearance.accepted");
+}
+
+async function saveUserAppearance(
+  ws: ServerWebSocket<SocketData>,
+  appearance: AvatarAppearance,
+  context: Context,
+): Promise<boolean> {
+  if (!context.auth) {
+    // No auth/DB wired (in-memory dev runtime or unit tests): keep live-broadcast-only behavior.
+    return true;
+  }
+
+  try {
+    await context.auth.updateAppearance(ws.data.userId, appearance);
+    return true;
+  } catch (error) {
+    context.metrics?.increment("appearance.persistence.save_failed");
+    context.logger?.warn("room.appearance.persistence.save_failed", {
+      ...socketFields(ws),
+      error,
+    });
+    sendError(ws, "APPEARANCE_PERSISTENCE_FAILED", "Could not save your character");
+    return false;
+  }
 }
 
 async function placeRoomItem(

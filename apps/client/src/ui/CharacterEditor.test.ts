@@ -5,7 +5,7 @@ import {
   type AvatarAppearance,
   DEFAULT_AVATAR_APPEARANCE,
 } from "@tilezo/protocol/appearance";
-import { CharacterEditor } from "./CharacterEditor";
+import { CharacterEditor, describeColor } from "./CharacterEditor";
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
 
@@ -56,7 +56,7 @@ describe("CharacterEditor", () => {
     const form = editor.element.children[2] as unknown as FakeElement;
     const pantsColor = form.children[6]?.children[1] as FakeElement;
     const actions = form.children[9] as FakeElement;
-    const submit = actions.children[1] as FakeElement;
+    const submit = actions.children[3] as FakeElement;
 
     editor.setSubmitLabel("Save character");
 
@@ -136,7 +136,135 @@ describe("CharacterEditor", () => {
     expect(editorState.preview.appearance.hair).toBe("afro");
     expect(editorState.preview.appearance.shirtColor).toBe("#2f5f7f");
   });
+
+  test("dispose tears down the preview and detaches the panel", () => {
+    installDocument();
+    const editor = new CharacterEditor({
+      initialAppearance: DEFAULT_AVATAR_APPEARANCE,
+      onSubmit() {},
+    });
+    const editorState = editor as unknown as { preview: { destroy: () => void } };
+    let destroyed = 0;
+    editorState.preview.destroy = () => {
+      destroyed += 1;
+    };
+
+    editor.dispose();
+
+    expect(destroyed).toBe(1);
+    expect((editor.element as unknown as FakeElement).removed).toBe(true);
+  });
+
+  test("cancel invokes onCancel directly when there are no unsaved changes", () => {
+    installDocument();
+    let cancels = 0;
+    let submits = 0;
+    const editor = new CharacterEditor({
+      initialAppearance: DEFAULT_AVATAR_APPEARANCE,
+      onSubmit: () => {
+        submits += 1;
+      },
+      onCancel: () => {
+        cancels += 1;
+      },
+    });
+
+    cancelButton(editor).click();
+
+    expect(cancels).toBe(1);
+    expect(submits).toBe(0);
+  });
+
+  test("cancel confirms before discarding unsaved changes", () => {
+    installDocument();
+    let cancels = 0;
+    let confirmResult = false;
+    const editor = new CharacterEditor({
+      initialAppearance: DEFAULT_AVATAR_APPEARANCE,
+      onSubmit() {},
+      onCancel: () => {
+        cancels += 1;
+      },
+      confirmDiscard: () => confirmResult,
+    });
+    const form = editor.element.children[2] as unknown as FakeElement;
+    const hair = form.children[0]?.children[1] as FakeElement;
+    hair.value = "bob";
+
+    expect(editor.hasUnsavedChanges()).toBe(true);
+
+    cancelButton(editor).click();
+    expect(cancels).toBe(0);
+
+    confirmResult = true;
+    cancelButton(editor).click();
+    expect(cancels).toBe(1);
+  });
+
+  test("randomize and reset apply a look to the controls", () => {
+    installDocument();
+    const editor = new CharacterEditor({
+      initialAppearance: DEFAULT_AVATAR_APPEARANCE,
+      onSubmit() {},
+    });
+    const form = editor.element.children[2] as unknown as FakeElement;
+    const actions = form.children[9] as FakeElement;
+    const randomize = actions.children[0] as FakeElement;
+    const reset = actions.children[1] as FakeElement;
+    const hair = form.children[0]?.children[1] as FakeElement;
+
+    randomize.click();
+    expect([...AVATAR_HAIR_STYLES] as string[]).toContain(hair.value);
+
+    hair.value = "bob";
+    reset.click();
+    expect(hair.value).toBe(DEFAULT_AVATAR_APPEARANCE.hair);
+  });
+
+  test("coerces unknown legacy appearance values to defaults on load", () => {
+    installDocument();
+    const editor = new CharacterEditor({
+      initialAppearance: DEFAULT_AVATAR_APPEARANCE,
+      onSubmit() {},
+    });
+    const form = editor.element.children[2] as unknown as FakeElement;
+    const hair = form.children[0]?.children[1] as FakeElement;
+    const hairColor = form.children[1]?.children[1] as FakeElement;
+
+    editor.show({
+      ...DEFAULT_AVATAR_APPEARANCE,
+      hair: "retired-style" as AvatarAppearance["hair"],
+      hairColor: "#zzzzzz" as AvatarAppearance["hairColor"],
+    });
+
+    expect(hair.value).toBe(DEFAULT_AVATAR_APPEARANCE.hair);
+    expect(hairColor.value).toBe(DEFAULT_AVATAR_APPEARANCE.hairColor);
+    expect(editor.hasUnsavedChanges()).toBe(false);
+  });
+
+  test("describeColor maps palette hexes to readable spoken names", () => {
+    expect(describeColor("not-a-hex")).toBe("not-a-hex");
+    expect(describeColor("#000000")).toBe("black");
+    expect(describeColor("#ffffff")).toBe("white");
+    expect(describeColor("#808080")).toBe("gray");
+    expect(describeColor("#ff0000")).toBe("red");
+    expect(describeColor("#6f3f22")).toBe("dark brown");
+    expect(describeColor("#f0d06a")).toBe("yellow");
+    expect(describeColor("#f2c097")).toBe("light orange");
+    expect(describeColor("#4c8a6a")).toBe("green");
+    expect(describeColor("#2f6f6a")).toBe("teal");
+    expect(describeColor("#394c6a")).toBe("blue");
+    expect(describeColor("#5b3f6f")).toBe("purple");
+    expect(describeColor("#cc4488")).toBe("pink");
+    expect(describeColor("#ff0030")).toBe("red");
+  });
 });
+
+function cancelButton(editor: CharacterEditor): FakeElement {
+  const form = editor.element.children[2] as unknown as FakeElement;
+  const actions = form.children[9] as FakeElement;
+  return actions.children[2] as FakeElement;
+}
 
 function installDocument() {
   Object.defineProperty(globalThis, "document", {
@@ -191,8 +319,14 @@ class FakeElement {
     }
   }
 
+  removed = false;
+
   append(...children: FakeElement[]): void {
     this.children.push(...children);
+  }
+
+  remove(): void {
+    this.removed = true;
   }
 
   add(option: FakeElement): void {

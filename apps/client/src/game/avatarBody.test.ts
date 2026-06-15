@@ -47,10 +47,40 @@ describe("drawAvatarBody", () => {
     }
   });
 
+  test("renders unknown/legacy hair as the short fallback silhouette", () => {
+    const unknown = renderCalls({ hair: "retired-style" as AvatarAppearance["hair"] });
+    const short = renderCalls({ hair: "short" });
+    const buzz = renderCalls({ hair: "buzz" });
+
+    // The fallback reuses the neutral "short" silhouette exactly...
+    expect(unknown).toEqual(short);
+    // ...and is not a no-op (it differs from a real, distinct style).
+    expect(unknown).not.toEqual(buzz);
+  });
+
+  test("renders cuffed pants distinctly from joggers", () => {
+    const cuffed = renderCalls({ pants: "cuffed" });
+    const joggers = renderCalls({ pants: "joggers" });
+
+    expect(cuffed).not.toEqual(joggers);
+    expect(cuffed.length).toBeGreaterThan(joggers.length);
+  });
+
   test("converts invalid CSS colors to white", () => {
     expect(toPixiColor("not-a-color")).toBe(0xffffff);
   });
 });
+
+function renderCalls(variant: AvatarVariant): DrawCall[] {
+  const graphics = new FakeGraphics();
+  drawAvatarBody(graphics as unknown as Graphics, {
+    animationState: variant.animationState ?? "idle",
+    appearance: { ...DEFAULT_AVATAR_APPEARANCE, ...variant },
+    direction: variant.direction ?? "south",
+    stepFrame: variant.stepFrame ?? 0,
+  });
+  return graphics.calls;
+}
 
 type DrawCall = {
   args: unknown[];

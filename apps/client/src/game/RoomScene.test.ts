@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
+import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protocol/appearance";
 import type { RoomSnapshotMessage } from "@tilezo/protocol/messages";
 import { type Application, Container } from "pixi.js";
 import { RoomScene } from "./RoomScene";
@@ -18,6 +18,39 @@ describe("RoomScene", () => {
 
     expect(sceneState(scene).avatars.has("user_1")).toBe(false);
     expect(sceneState(scene).avatars.has("user_2")).toBe(true);
+  });
+
+  test("routes appearance updates to the matching avatar and ignores unknown ids", () => {
+    const app = createApp();
+    const scene = new RoomScene(app, () => {});
+
+    scene.loadSnapshot(snapshot([user("user_1", "Dan", { x: 0, y: 0 })]));
+
+    const nextAppearance: AvatarAppearance = {
+      ...DEFAULT_AVATAR_APPEARANCE,
+      hair: "locs",
+      hairColor: "#2f6f6a",
+    };
+    scene.handleServerMessage({
+      type: "avatar.appearance.updated",
+      userId: "user_1",
+      appearance: nextAppearance,
+    });
+
+    const avatar = sceneState(scene).avatars.get("user_1") as unknown as {
+      appearance: AvatarAppearance;
+    };
+    expect(avatar.appearance).toEqual(nextAppearance);
+
+    // An update for an unknown user id must be a safe no-op (optional-chain miss).
+    expect(() =>
+      scene.handleServerMessage({
+        type: "avatar.appearance.updated",
+        userId: "ghost",
+        appearance: nextAppearance,
+      }),
+    ).not.toThrow();
+    expect(sceneState(scene).avatars.has("ghost")).toBe(false);
   });
 
   test("renders room items and applies item updates", () => {

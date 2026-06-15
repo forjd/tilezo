@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createRectRoomLayout } from "@tilezo/engine";
-import { DEFAULT_AVATAR_APPEARANCE, type RoomItem, type ServerMessage } from "@tilezo/protocol";
+import {
+  type AvatarAppearance,
+  DEFAULT_AVATAR_APPEARANCE,
+  type RoomItem,
+  type ServerMessage,
+} from "@tilezo/protocol";
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import type { EconomyStore } from "../economy/economy";
@@ -1004,6 +1009,7 @@ describe("handleMessage", () => {
         },
       },
     );
+    await flushAsyncMessages();
 
     expect(ws.sent[0]).toMatchObject({
       type: "room.snapshot",
@@ -1052,6 +1058,7 @@ describe("handleMessage", () => {
         publish() {},
       },
     );
+    await flushAsyncMessages();
 
     expect(ws.data.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
     expect(ws.sent).toEqual([
@@ -1095,6 +1102,7 @@ describe("handleMessage", () => {
         metrics: createMetricsDouble(),
       },
     );
+    await flushAsyncMessages();
 
     expect(ws.data.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
     expect(ws.sent).toEqual([
@@ -1104,6 +1112,156 @@ describe("handleMessage", () => {
         message: "Join a room before updating your character",
       },
     ]);
+  });
+
+  test("persists the appearance over the socket path before broadcasting", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      appearance: DEFAULT_AVATAR_APPEARANCE,
+    });
+    const saved: { userId: string; appearance: AvatarAppearance }[] = [];
+    const published: ServerMessage[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+
+    const nextAppearance: AvatarAppearance = { ...DEFAULT_AVATAR_APPEARANCE, hair: "bob" };
+    handleMessage(
+      ws,
+      JSON.stringify({ type: "avatar.appearance.update", appearance: nextAppearance }),
+      {
+        rooms,
+        publish(_topic, message) {
+          published.push(message);
+        },
+        auth: {
+          async updateAppearance(userId, appearance) {
+            saved.push({ userId, appearance });
+            return { id: userId, username: "Dan", appearance, dollars: 0 };
+          },
+        },
+      },
+    );
+    await flushAsyncMessages();
+
+    expect(saved).toEqual([{ userId: "user_db_1", appearance: nextAppearance }]);
+    expect(ws.data.appearance).toEqual(nextAppearance);
+    expect(published).toContainEqual({
+      type: "avatar.appearance.updated",
+      userId: "user_db_1",
+      appearance: nextAppearance,
+    });
+  });
+
+  test("does not broadcast or mirror the appearance when persistence fails", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      appearance: DEFAULT_AVATAR_APPEARANCE,
+    });
+    const published: ServerMessage[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "avatar.appearance.update",
+        appearance: { ...DEFAULT_AVATAR_APPEARANCE, hair: "bob" },
+      }),
+      {
+        rooms,
+        publish(_topic, message) {
+          published.push(message);
+        },
+        logger: createLoggerDouble(),
+        metrics: createMetricsDouble(),
+        auth: {
+          async updateAppearance() {
+            throw new Error("db down");
+          },
+        },
+      },
+    );
+    await flushAsyncMessages();
+
+    expect(ws.data.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
+    expect(published).toEqual([]);
+    expect(ws.sent).toEqual([
+      {
+        type: "error",
+        code: "APPEARANCE_PERSISTENCE_FAILED",
+        message: "Could not save your character",
+      },
+    ]);
+  });
+
+  test("does not broadcast an appearance update when the socket is superseded during the persist await", async () => {
+    const rooms = await RoomManager.create();
+    const socketA = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_a",
+      appearance: DEFAULT_AVATAR_APPEARANCE,
+    });
+    const socketB = createSocket({
+      userId: "user_db_1",
+      username: "Dan",
+      connectionId: "socket_b",
+    });
+    const published: ServerMessage[] = [];
+    const context = {
+      rooms,
+      publish(_topic: string, message: ServerMessage) {
+        published.push(message);
+      },
+      logger: createLoggerDouble(),
+      metrics: createMetricsDouble(),
+    };
+
+    handleMessage(socketA, JSON.stringify({ type: "room.join", roomId: "lobby" }), context);
+    socketA.sent.length = 0;
+    published.length = 0;
+
+    handleMessage(
+      socketA,
+      JSON.stringify({
+        type: "avatar.appearance.update",
+        appearance: { ...DEFAULT_AVATAR_APPEARANCE, hair: "bob" },
+      }),
+      {
+        ...context,
+        auth: {
+          async updateAppearance(userId, appearance) {
+            // A newer connection for the same user takes over the room mid-write.
+            handleMessage(socketB, JSON.stringify({ type: "room.join", roomId: "lobby" }), context);
+            return { id: userId, username: "Dan", appearance, dollars: 0 };
+          },
+        },
+      },
+    );
+    await flushAsyncMessages();
+
+    // The persist still stood, but the now-superseded socket must not drive a broadcast or
+    // mirror its own (stale) socket state.
+    expect(published).not.toContainEqual(
+      expect.objectContaining({ type: "avatar.appearance.updated", userId: "user_db_1" }),
+    );
+    expect(socketA.sent).toContainEqual({
+      type: "error",
+      code: "NOT_IN_ROOM",
+      message: "Join a room before updating your character",
+    });
+    expect(socketA.data.appearance).toEqual(DEFAULT_AVATAR_APPEARANCE);
   });
 
   test("rate limits each websocket message kind before doing work", async () => {

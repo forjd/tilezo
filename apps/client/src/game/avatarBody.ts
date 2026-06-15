@@ -146,9 +146,16 @@ function drawBottoms(
   if (appearance.pants === "cargo") {
     graphics.rect(leftX + 1, -7 + bob - stride, 4, 3).fill({ color: pantsShadow, alpha: 0.55 });
     graphics.rect(rightX + 1, -7 + bob + stride, 4, 3).fill({ color: pantsShadow, alpha: 0.55 });
-  } else if (appearance.pants === "joggers" || appearance.pants === "cuffed") {
+  } else if (appearance.pants === "joggers") {
     graphics.rect(leftX, 0 + bob - stride, legWidth, 2).fill(darken(pantsColor, 0.72));
     graphics.rect(rightX, 0 + bob + stride, legWidth, 2).fill(darken(pantsColor, 0.72));
+  } else if (appearance.pants === "cuffed") {
+    // Rolled cuff: a dark fold with a lighter highlight band above it, distinct from the
+    // single flat elastic band that joggers use.
+    graphics.rect(leftX, 0 + bob - stride, legWidth, 2).fill(darken(pantsColor, 0.72));
+    graphics.rect(rightX, 0 + bob + stride, legWidth, 2).fill(darken(pantsColor, 0.72));
+    graphics.rect(leftX, -2 + bob - stride, legWidth, 1).fill(lighten(pantsColor, 1.12));
+    graphics.rect(rightX, -2 + bob + stride, legWidth, 1).fill(lighten(pantsColor, 1.12));
   } else if (appearance.pants === "leggings") {
     graphics.rect(leftX + 1, -10 + bob - stride, 1, 11).fill({ color: pantsShadow, alpha: 0.25 });
     graphics.rect(rightX + 1, -10 + bob + stride, 1, 11).fill({
@@ -489,21 +496,7 @@ function drawHair(
   graphics.circle(0, headCenterY, headRadius).fill(color);
 
   if (appearance.hair === "short") {
-    // Face oval shows below the hair line
-    graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
-    graphics
-      .circle(3, headCenterY + 2, 7)
-      .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
-
-    if (!facingBack) {
-      // Small fringe over the forehead
-      graphics.rect(-5, headCenterY - 4, 10, 2).fill(color);
-      // Subtle side hair just below the temples
-      graphics.rect(-10, headCenterY - 3, 1, 4).fill(color);
-      graphics.rect(9, headCenterY - 3, 1, 4).fill(color);
-    }
-
-    graphics.rect(-3, headCenterY - 9, 6, 1).fill({ color: highlight, alpha: 0.55 });
+    drawShortHair(graphics, color, highlight, skinTone, headCenterY, headRadius, facingBack);
     return;
   }
 
@@ -723,6 +716,37 @@ function drawHair(
     }
     return;
   }
+
+  // Fallback for any unknown/legacy hair value (e.g. a retired enum value still held by a
+  // persisted row): render the neutral "short" silhouette so the face is never hidden behind a
+  // solid hair-coloured head. Mirrors the chat-bubble face fallback in Avatar.ts.
+  drawShortHair(graphics, color, highlight, skinTone, headCenterY, headRadius, facingBack);
+}
+
+function drawShortHair(
+  graphics: Graphics,
+  color: number,
+  highlight: number,
+  skinTone: number,
+  headCenterY: number,
+  headRadius: number,
+  facingBack: boolean,
+): void {
+  // Face oval shows below the hair line
+  graphics.ellipse(0, headCenterY + 3, headRadius - 1, 7).fill(skinTone);
+  graphics
+    .circle(3, headCenterY + 2, 7)
+    .fill({ color: darken(skinTone, AVATAR_SHADING_STRENGTH), alpha: AVATAR_SHADING_ALPHA });
+
+  if (!facingBack) {
+    // Small fringe over the forehead
+    graphics.rect(-5, headCenterY - 4, 10, 2).fill(color);
+    // Subtle side hair just below the temples
+    graphics.rect(-10, headCenterY - 3, 1, 4).fill(color);
+    graphics.rect(9, headCenterY - 3, 1, 4).fill(color);
+  }
+
+  graphics.rect(-3, headCenterY - 9, 6, 1).fill({ color: highlight, alpha: 0.55 });
 }
 
 export function toPixiColor(value: string): number {
