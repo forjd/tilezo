@@ -24,6 +24,7 @@ export type ServerConfig = {
   websocketUpgradeRateLimitWindowMs: number;
   maxRoomsPerUser: number;
   maxFriendsPerUser: number;
+  maxBlockedUsersPerUser: number;
   maxWebSocketConnectionsPerUser: number;
   maxAuthBodyBytes: number;
   trustProxy: boolean;
@@ -48,6 +49,7 @@ export const DEFAULT_INVENTORY_PURCHASE_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_WEBSOCKET_UPGRADE_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_MAX_ROOMS_PER_USER = 50;
 export const DEFAULT_MAX_FRIENDS_PER_USER = 500;
+export const DEFAULT_MAX_BLOCKED_USERS_PER_USER = 500;
 export const DEFAULT_MAX_WEBSOCKET_CONNECTIONS_PER_USER = 5;
 export const DEFAULT_MAX_AUTH_BODY_BYTES = 4 * 1024;
 
@@ -155,6 +157,11 @@ export function getConfig(env = Bun.env): ServerConfig {
     env.MAX_FRIENDS_PER_USER,
     DEFAULT_MAX_FRIENDS_PER_USER,
   );
+  const maxBlockedUsersPerUser = parsePositiveInteger(
+    "MAX_BLOCKED_USERS_PER_USER",
+    env.MAX_BLOCKED_USERS_PER_USER,
+    DEFAULT_MAX_BLOCKED_USERS_PER_USER,
+  );
   const maxWebSocketConnectionsPerUser = parsePositiveInteger(
     "MAX_WEBSOCKET_CONNECTIONS_PER_USER",
     env.MAX_WEBSOCKET_CONNECTIONS_PER_USER,
@@ -216,6 +223,7 @@ export function getConfig(env = Bun.env): ServerConfig {
     websocketUpgradeRateLimitWindowMs,
     maxRoomsPerUser,
     maxFriendsPerUser,
+    maxBlockedUsersPerUser,
     maxWebSocketConnectionsPerUser,
     maxAuthBodyBytes,
     trustProxy,

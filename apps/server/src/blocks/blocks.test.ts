@@ -18,6 +18,9 @@ function createStore(): BlockStore & { pairs: Set<string> } {
     async isBlockedEitherDirection(userId, otherUserId) {
       return pairs.has(pairKey(userId, otherUserId)) || pairs.has(pairKey(otherUserId, userId));
     },
+    async countBlockedUsers(blockerUserId) {
+      return [...pairs].filter((pair) => pair.startsWith(`${blockerUserId}:`)).length;
+    },
     async listBlockedUsers() {
       return [];
     },
@@ -44,6 +47,16 @@ describe("BlockService", () => {
 
     await expect(service.block("user_1", "user_1")).rejects.toBeInstanceOf(BlockError);
   });
+
+  test("enforces a maximum number of blocked users", async () => {
+    const service = new BlockService(createStore(), { maxBlockedUsers: 1 });
+
+    await service.block("user_1", "user_2");
+    await service.block("user_1", "user_2");
+    await expect(service.block("user_1", "user_3")).rejects.toMatchObject({
+      code: "BLOCK_LIMIT_REACHED",
+    });
+  });
 });
 
 describe("DrizzleBlockStore", () => {
@@ -56,7 +69,9 @@ describe("DrizzleBlockStore", () => {
     };
     const store = new DrizzleBlockStore(queryDouble([[row]]));
 
-    await expect(store.listBlockedUsers("user_1")).resolves.toEqual([
+    await expect(
+      store.listBlockedUsers("user_1", { limit: 10, afterUsername: "ivy" }),
+    ).resolves.toEqual([
       {
         id: "user_2",
         username: "Kai",
