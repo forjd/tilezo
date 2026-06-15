@@ -3,6 +3,9 @@ import type { TilezoDatabase } from "../db/db";
 import { directMessages } from "../db/schema";
 import { createId } from "../util/ids";
 
+// Direct messages are stored as server-readable plaintext so moderation/export/deletion workflows
+// can operate today. This is not end-to-end encrypted; keep the feature friend-gated,
+// block-aware, and documented as private to participants plus operators with database access.
 export type DirectMessageRecord = {
   id: string;
   fromUserId: string;
@@ -112,8 +115,17 @@ export class DirectMessageService {
     return this.store.markConversationRead(readerUserId, otherUserId);
   }
 
-  unreadCounts(userId: string): Promise<DirectMessageUnreadCount[]> {
-    return this.store.listUnreadCounts(userId);
+  async unreadCounts(userId: string): Promise<DirectMessageUnreadCount[]> {
+    const counts = await this.store.listUnreadCounts(userId);
+    const visibleCounts: DirectMessageUnreadCount[] = [];
+
+    for (const count of counts) {
+      if (await this.canMessage(userId, count.friendId)) {
+        visibleCounts.push(count);
+      }
+    }
+
+    return visibleCounts;
   }
 
   async edit(senderUserId: string, messageId: string, text: string): Promise<DirectMessageRecord> {

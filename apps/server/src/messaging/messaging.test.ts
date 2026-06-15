@@ -162,12 +162,22 @@ describe("DirectMessageService", () => {
     await expect(blocked.history("user_1", "user_2")).rejects.toBeInstanceOf(DirectMessageError);
   });
 
-  test("marks conversations read and returns unread counts", async () => {
+  test("marks conversations read and returns unread counts only for allowed conversations", async () => {
     const store = createStore();
-    const service = new DirectMessageService(store, async () => true);
+    const service = new DirectMessageService(
+      store,
+      async (_userId, otherUserId) => otherUserId !== "user_3",
+    );
 
     await service.send("user_2", "user_1", "a");
     await service.send("user_2", "user_1", "b");
+    store.saved.push({
+      id: "dm_blocked",
+      fromUserId: "user_3",
+      toUserId: "user_1",
+      text: "hidden",
+      sentAt: "2026-06-13T00:00:00.000Z",
+    });
 
     expect(await service.unreadCounts("user_1")).toEqual([{ friendId: "user_2", count: 2 }]);
 
