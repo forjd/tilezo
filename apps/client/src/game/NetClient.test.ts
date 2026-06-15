@@ -141,6 +141,24 @@ describe("NetClient", () => {
     expect(() => client.send({ type: "ping", sentAt: "now" })).toThrow("WebSocket is not open");
   });
 
+  test("rejects oversized server messages before emitting them", async () => {
+    installBrowserFakes("http:");
+    const client = new NetClient();
+    const statuses: string[] = [];
+    const received: unknown[] = [];
+    client.onStatus((status) => statuses.push(status));
+    client.onMessage((message) => received.push(message));
+
+    const connected = client.connect();
+    const socket = currentSocket();
+    socket.open();
+    await connected;
+    socket.message("x".repeat(64 * 1024 + 1));
+
+    expect(statuses).toContain("received invalid server message");
+    expect(received).toEqual([]);
+  });
+
   test("reports unexpected disconnects after a socket was open", async () => {
     installBrowserFakes("http:");
     const client = new NetClient();

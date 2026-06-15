@@ -4,8 +4,10 @@ import {
   createRandomAvatarAppearance,
   DEFAULT_AVATAR_APPEARANCE,
   MAX_RAW_MESSAGE_BYTES,
+  MAX_RAW_SERVER_MESSAGE_BYTES,
   parseClientMessage,
   parseRawClientMessage,
+  parseRawServerMessage,
   parseServerMessage,
 } from ".";
 
@@ -371,6 +373,46 @@ describe("parseServerMessage", () => {
     );
     expect(parseServerMessage({ type: "unknown.kind" }).ok).toBe(false);
     expect(parseServerMessage(null).ok).toBe(false);
+  });
+
+  test("rejects oversized and unbounded server payload fields", () => {
+    expect(parseRawServerMessage("x".repeat(MAX_RAW_SERVER_MESSAGE_BYTES + 1))).toEqual({
+      ok: false,
+      error: "Server message is too large",
+    });
+    expect(parseRawServerMessage("{bad json")).toEqual({
+      ok: false,
+      error: "Malformed server JSON",
+    });
+    expect(
+      parseServerMessage({
+        type: "chat.message",
+        userId: "user_1",
+        username: "Dan",
+        text: "x".repeat(241),
+        sentAt: new Date().toISOString(),
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseServerMessage({
+        type: "room.list",
+        rooms: Array.from({ length: 101 }, (_, index) => ({
+          id: `room_${index}`,
+          name: `Room ${index}`,
+          userCount: 0,
+          joined: false,
+        })),
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseServerMessage({
+        type: "dm.read",
+        readerUserId: "user_1",
+        otherUserId: "user_2",
+        messageIds: Array.from({ length: 201 }, (_, index) => `dm_${index}`),
+        readAt: new Date().toISOString(),
+      }).ok,
+    ).toBe(false);
   });
 });
 

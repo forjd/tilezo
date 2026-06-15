@@ -1,5 +1,10 @@
 import type { ClientMessage, ServerMessage } from "./messages";
-import { clientMessageSchema, MAX_RAW_MESSAGE_BYTES, serverMessageSchema } from "./schemas";
+import {
+  clientMessageSchema,
+  MAX_RAW_MESSAGE_BYTES,
+  MAX_RAW_SERVER_MESSAGE_BYTES,
+  serverMessageSchema,
+} from "./schemas";
 
 export type ParseResult = { ok: true; value: ClientMessage } | { ok: false; error: string };
 
@@ -36,5 +41,19 @@ export function parseRawClientMessage(raw: string | Buffer): ParseResult {
     return parseClientMessage(JSON.parse(raw.toString()));
   } catch {
     return { ok: false, error: "Malformed JSON" };
+  }
+}
+
+export function parseRawServerMessage(raw: string | Buffer): ServerParseResult {
+  const byteLength = typeof raw === "string" ? Buffer.byteLength(raw) : raw.byteLength;
+
+  if (byteLength > MAX_RAW_SERVER_MESSAGE_BYTES) {
+    return { ok: false, error: "Server message is too large" };
+  }
+
+  try {
+    return parseServerMessage(JSON.parse(raw.toString()));
+  } catch {
+    return { ok: false, error: "Malformed server JSON" };
   }
 }
