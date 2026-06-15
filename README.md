@@ -111,6 +111,10 @@ bun run lint
 bun test
 ```
 
+## License
+
+Tilezo is licensed under the [MIT License](LICENSE). Copyright © 2026 Forjd.
+
 ## Environment
 
 Server:
