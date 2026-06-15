@@ -1476,12 +1476,11 @@ describe("createHttpRouter", () => {
       const route = createHttpRouter(makeDeps({ config }));
 
       expect((await route(request("/debug/metrics", { method: "GET" }), "ip")).status).toBe(404);
-      const allowed = await route(
+      const queryToken = await route(
         request("/debug/metrics?token=metrics-secret", { method: "GET" }),
         "ip",
       );
-      expect(allowed.status).toBe(200);
-      expect(allowed.headers.get("access-control-allow-origin")).toBeNull();
+      expect(queryToken.status).toBe(404);
       expect((await route(request("/debug/metrics/reset", { method: "POST" }), "ip")).status).toBe(
         404,
       );
