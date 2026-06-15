@@ -10,6 +10,10 @@ export type ParseResult = { ok: true; value: ClientMessage } | { ok: false; erro
 
 export type ServerParseResult = { ok: true; value: ServerMessage } | { ok: false; error: string };
 
+type RawMessage = string | Buffer;
+
+const rawTextEncoder = new TextEncoder();
+
 export function parseClientMessage(input: unknown): ParseResult {
   const parsed = clientMessageSchema.safeParse(input);
 
@@ -30,30 +34,38 @@ export function parseServerMessage(input: unknown): ServerParseResult {
   return { ok: true, value: parsed.data as ServerMessage };
 }
 
-export function parseRawClientMessage(raw: string | Buffer): ParseResult {
-  const byteLength = typeof raw === "string" ? Buffer.byteLength(raw) : raw.byteLength;
+export function parseRawClientMessage(raw: RawMessage): ParseResult {
+  const byteLength = getRawMessageByteLength(raw);
 
   if (byteLength > MAX_RAW_MESSAGE_BYTES) {
     return { ok: false, error: "Message is too large" };
   }
 
   try {
-    return parseClientMessage(JSON.parse(raw.toString()));
+    return parseClientMessage(JSON.parse(getRawMessageText(raw)));
   } catch {
     return { ok: false, error: "Malformed JSON" };
   }
 }
 
-export function parseRawServerMessage(raw: string | Buffer): ServerParseResult {
-  const byteLength = typeof raw === "string" ? Buffer.byteLength(raw) : raw.byteLength;
+export function parseRawServerMessage(raw: RawMessage): ServerParseResult {
+  const byteLength = getRawMessageByteLength(raw);
 
   if (byteLength > MAX_RAW_SERVER_MESSAGE_BYTES) {
     return { ok: false, error: "Server message is too large" };
   }
 
   try {
-    return parseServerMessage(JSON.parse(raw.toString()));
+    return parseServerMessage(JSON.parse(getRawMessageText(raw)));
   } catch {
     return { ok: false, error: "Malformed server JSON" };
   }
+}
+
+function getRawMessageByteLength(raw: RawMessage): number {
+  return typeof raw === "string" ? rawTextEncoder.encode(raw).byteLength : raw.byteLength;
+}
+
+function getRawMessageText(raw: RawMessage): string {
+  return typeof raw === "string" ? raw : raw.toString("utf8");
 }

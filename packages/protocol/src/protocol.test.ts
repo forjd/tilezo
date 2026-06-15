@@ -124,6 +124,35 @@ describe("protocol parser", () => {
     });
   });
 
+  test("parses raw string messages without a Buffer global", () => {
+    const originalBuffer = Object.getOwnPropertyDescriptor(globalThis, "Buffer");
+
+    try {
+      Reflect.deleteProperty(globalThis, "Buffer");
+
+      expect(parseRawClientMessage(JSON.stringify({ type: "ping", sentAt: "now" }))).toEqual({
+        ok: true,
+        value: { type: "ping", sentAt: "now" },
+      });
+      expect(
+        parseRawServerMessage(
+          JSON.stringify({ type: "connected", userId: "user_1", dollars: 500 }),
+        ),
+      ).toEqual({
+        ok: true,
+        value: { type: "connected", userId: "user_1", dollars: 500 },
+      });
+      expect(parseRawServerMessage("😀".repeat(MAX_RAW_SERVER_MESSAGE_BYTES / 4 + 1))).toEqual({
+        ok: false,
+        error: "Server message is too large",
+      });
+    } finally {
+      if (originalBuffer) {
+        Object.defineProperty(globalThis, "Buffer", originalBuffer);
+      }
+    }
+  });
+
   test("rejects invalid payloads", () => {
     expect(
       parseClientMessage({
