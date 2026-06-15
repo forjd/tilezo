@@ -3,16 +3,17 @@ import { readdir } from "node:fs/promises";
 import { basename } from "node:path";
 
 describe("user auth migration", () => {
-  test("removes duplicate legacy username keys before adding the unique constraint", async () => {
+  test("fails safely instead of deleting duplicate legacy username rows", async () => {
     const migration = await Bun.file(
       new URL("./migrations/0001_green_edwin_jarvis.sql", import.meta.url),
     ).text();
 
-    const deleteDuplicatesIndex = migration.indexOf('DELETE FROM "users"');
+    const duplicateGuardIndex = migration.indexOf("Cannot add users_username_key_unique");
     const uniqueConstraintIndex = migration.indexOf('ADD CONSTRAINT "users_username_key_unique"');
 
-    expect(deleteDuplicatesIndex).toBeGreaterThan(-1);
-    expect(deleteDuplicatesIndex).toBeLessThan(uniqueConstraintIndex);
+    expect(migration).not.toContain('DELETE FROM "users"');
+    expect(duplicateGuardIndex).toBeGreaterThan(-1);
+    expect(duplicateGuardIndex).toBeLessThan(uniqueConstraintIndex);
   });
 });
 
