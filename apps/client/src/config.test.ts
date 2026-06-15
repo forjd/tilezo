@@ -32,13 +32,33 @@ describe("config", () => {
     expect(getWebSocketUrl()).toBe(DEFAULT_WS_URL);
   });
 
-  test("uses build-time values when no runtime config exists", () => {
+  test("uses secure build-time values when no runtime config exists", () => {
     Reflect.deleteProperty(globalThis, "window");
-    process.env.PUBLIC_API_URL = "http://build-api.example.test/";
+    process.env.PUBLIC_API_URL = "https://build-api.example.test/";
     process.env.PUBLIC_WS_URL = "wss://build-ws.example.test/socket/";
 
-    expect(getApiUrl()).toBe("http://build-api.example.test");
+    expect(getApiUrl()).toBe("https://build-api.example.test");
     expect(getWebSocketUrl()).toBe("wss://build-ws.example.test/socket");
+  });
+
+  test("rejects insecure non-local endpoint overrides", () => {
+    installWindowConfig({
+      PUBLIC_API_URL: "http://api.example.test",
+      PUBLIC_WS_URL: "ws://socket.example.test/ws",
+    });
+
+    expect(getApiUrl()).toBe(DEFAULT_API_URL);
+    expect(getWebSocketUrl()).toBe(DEFAULT_WS_URL);
+  });
+
+  test("allows insecure localhost endpoint overrides for development", () => {
+    installWindowConfig({
+      PUBLIC_API_URL: "http://127.0.0.1:4000/",
+      PUBLIC_WS_URL: "ws://localhost:4000/ws/",
+    });
+
+    expect(getApiUrl()).toBe("http://127.0.0.1:4000");
+    expect(getWebSocketUrl()).toBe("ws://localhost:4000/ws");
   });
 
   test("derives a secure browser websocket fallback on https pages", () => {

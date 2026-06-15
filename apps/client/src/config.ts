@@ -1,10 +1,9 @@
 import { DEFAULT_API_URL, DEFAULT_WS_URL } from "./assets";
 
 export function getApiUrl(): string {
-  return normalizeBaseUrl(getConfiguredValue("PUBLIC_API_URL"), DEFAULT_API_URL, [
-    "http:",
-    "https:",
-  ]);
+  return normalizeBaseUrl(getConfiguredValue("PUBLIC_API_URL"), DEFAULT_API_URL, ["https:"], {
+    allowLocalInsecure: true,
+  });
 }
 
 export function apiUrl(path: string): string {
@@ -13,10 +12,15 @@ export function apiUrl(path: string): string {
 
 export function getWebSocketUrl(): string {
   const browserDefault = getBrowserWebSocketUrl();
-  return normalizeBaseUrl(getConfiguredValue("PUBLIC_WS_URL"), browserDefault ?? DEFAULT_WS_URL, [
-    "ws:",
-    "wss:",
-  ]);
+  return normalizeBaseUrl(
+    getConfiguredValue("PUBLIC_WS_URL"),
+    browserDefault ?? DEFAULT_WS_URL,
+    ["wss:"],
+    {
+      allowLocalInsecure: true,
+      insecureProtocols: ["ws:"],
+    },
+  );
 }
 
 function getConfiguredValue(key: "PUBLIC_API_URL" | "PUBLIC_WS_URL"): string | undefined {
@@ -28,21 +32,35 @@ function getConfiguredValue(key: "PUBLIC_API_URL" | "PUBLIC_WS_URL"): string | u
 function normalizeBaseUrl(
   configured: string | undefined,
   fallback: string,
-  protocols: readonly string[],
+  secureProtocols: readonly string[],
+  options: { allowLocalInsecure: boolean; insecureProtocols?: readonly string[] },
 ): string {
   const raw = configured?.trim() || fallback;
 
   try {
     const url = new URL(raw);
 
-    if (!protocols.includes(url.protocol)) {
-      return fallback;
+    if (secureProtocols.includes(url.protocol)) {
+      return url.toString().replace(/\/$/, "");
     }
 
-    return url.toString().replace(/\/$/, "");
+    if (
+      options.allowLocalInsecure &&
+      (options.insecureProtocols ?? ["http:"]).includes(url.protocol) &&
+      isLocalHostname(url.hostname)
+    ) {
+      return url.toString().replace(/\/$/, "");
+    }
+
+    return fallback;
   } catch {
     return fallback;
   }
+}
+
+function isLocalHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function getBrowserWebSocketUrl(): string | undefined {
