@@ -440,7 +440,15 @@ async function handleBlockedUsersRequest(ctx: RouteContext): Promise<Response> {
 
   try {
     if (url.pathname === "/blocked-users" && ctx.request.method === "GET") {
-      return authJson({ blockedUsers: await blocks.list(user.id) }, 200);
+      return authJson(
+        {
+          blockedUsers: await blocks.list(user.id, {
+            limit: parseBoundedQueryInteger(url.searchParams.get("limit"), 50, 100),
+            afterUsername: url.searchParams.get("afterUsername") ?? undefined,
+          }),
+        },
+        200,
+      );
     }
 
     if (url.pathname === "/blocked-users" && ctx.request.method === "POST") {
@@ -1140,6 +1148,21 @@ function applyCors(response: Response, ctx: RouteContext): void {
     response.headers.set("access-control-allow-credentials", "true");
     response.headers.append("vary", "origin");
   }
+}
+
+function parseBoundedQueryInteger(
+  value: string | null,
+  defaultValue: number,
+  maxValue: number,
+): number {
+  if (!value) {
+    return defaultValue;
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return defaultValue;
+  }
+  return Math.min(parsed, maxValue);
 }
 
 function authJson(body: unknown, status: number, headers: Record<string, string> = {}): Response {

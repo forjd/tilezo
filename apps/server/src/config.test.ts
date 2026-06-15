@@ -34,6 +34,7 @@ describe("getConfig", () => {
       websocketUpgradeRateLimitWindowMs: 60000,
       maxRoomsPerUser: 50,
       maxFriendsPerUser: 500,
+      maxBlockedUsersPerUser: 500,
       maxWebSocketConnectionsPerUser: 5,
       maxAuthBodyBytes: 4096,
       trustProxy: false,
@@ -64,6 +65,7 @@ describe("getConfig", () => {
         WEBSOCKET_UPGRADE_RATE_LIMIT_MAX: "9",
         MAX_ROOMS_PER_USER: "25",
         MAX_FRIENDS_PER_USER: "200",
+        MAX_BLOCKED_USERS_PER_USER: "250",
         MAX_WEBSOCKET_CONNECTIONS_PER_USER: "3",
         MAX_AUTH_BODY_BYTES: "2048",
         TRUST_PROXY: "true",
@@ -95,6 +97,7 @@ describe("getConfig", () => {
       websocketUpgradeRateLimitWindowMs: 60000,
       maxRoomsPerUser: 25,
       maxFriendsPerUser: 200,
+      maxBlockedUsersPerUser: 250,
       maxWebSocketConnectionsPerUser: 3,
       maxAuthBodyBytes: 2048,
       trustProxy: true,
@@ -131,6 +134,9 @@ describe("getConfig", () => {
     );
     expect(() => getConfig({ WEBSOCKET_UPGRADE_RATE_LIMIT_MAX: "0" })).toThrow(
       "WEBSOCKET_UPGRADE_RATE_LIMIT_MAX must be a positive integer",
+    );
+    expect(() => getConfig({ MAX_BLOCKED_USERS_PER_USER: "0" })).toThrow(
+      "MAX_BLOCKED_USERS_PER_USER must be a positive integer",
     );
     expect(() => getConfig({ MAX_WEBSOCKET_CONNECTIONS_PER_USER: "0" })).toThrow(
       "MAX_WEBSOCKET_CONNECTIONS_PER_USER must be a positive integer",

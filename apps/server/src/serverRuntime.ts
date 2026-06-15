@@ -150,7 +150,11 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
     : undefined;
   const presence = new PresenceTracker();
   const rooms = await RoomManager.create({ persistence, bots: DEFAULT_ROOM_BOTS });
-  const blocks = database ? new BlockService(new DrizzleBlockStore(database)) : undefined;
+  const blocks = database
+    ? new BlockService(new DrizzleBlockStore(database), {
+        maxBlockedUsers: config.maxBlockedUsersPerUser,
+      })
+    : undefined;
   const friends = database
     ? new FriendService(new DrizzleFriendStore(database), (userId) => presence.get(userId), {
         canJoinRoom: (userId, roomId) => rooms.canJoinRoom(roomId, userId).ok,

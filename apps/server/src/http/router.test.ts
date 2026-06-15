@@ -60,7 +60,17 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
       remove: async () => {},
     } as unknown as FriendService,
     blocks: {
-      list: async () => [],
+      list: async (_userId: string, options?: { limit?: number; afterUsername?: string }) =>
+        options
+          ? [
+              {
+                id: "user_2",
+                username: `limit:${options.limit}:after:${options.afterUsername ?? ""}`,
+                appearance: DEFAULT_AVATAR_APPEARANCE,
+                blockedAt: "2026-06-13T00:00:00.000Z",
+              },
+            ]
+          : [],
       block: async () => {},
       unblock: async () => {},
     } as unknown as BlockService,
@@ -605,7 +615,17 @@ describe("createHttpRouter", () => {
       const route = createHttpRouter(
         makeDeps({
           friends: {
-            list: async () => [],
+            list: async (_userId: string, options?: { limit?: number; afterUsername?: string }) =>
+              options
+                ? [
+                    {
+                      id: "user_2",
+                      username: `limit:${options.limit}:after:${options.afterUsername ?? ""}`,
+                      appearance: DEFAULT_AVATAR_APPEARANCE,
+                      blockedAt: "2026-06-13T00:00:00.000Z",
+                    },
+                  ]
+                : [],
             add: async () => ({
               friend: {
                 ...authUser,
@@ -664,7 +684,17 @@ describe("createHttpRouter", () => {
       const route = createHttpRouter(
         makeDeps({
           friends: {
-            list: async () => [],
+            list: async (_userId: string, options?: { limit?: number; afterUsername?: string }) =>
+              options
+                ? [
+                    {
+                      id: "user_2",
+                      username: `limit:${options.limit}:after:${options.afterUsername ?? ""}`,
+                      appearance: DEFAULT_AVATAR_APPEARANCE,
+                      blockedAt: "2026-06-13T00:00:00.000Z",
+                    },
+                  ]
+                : [],
             add: async () => {
               throw new Error("db down");
             },
@@ -828,10 +858,12 @@ describe("createHttpRouter", () => {
       const route = createHttpRouter(
         makeDeps({
           blocks: {
-            list: async () => [
+            list: async (_userId: string, options?: { limit?: number; afterUsername?: string }) => [
               {
                 id: "user_2",
-                username: "Kai",
+                username: options
+                  ? `limit:${options.limit}:after:${options.afterUsername ?? ""}`
+                  : "Kai",
                 appearance: DEFAULT_AVATAR_APPEARANCE,
                 blockedAt: "2026-06-13T00:00:00.000Z",
               },
@@ -858,6 +890,13 @@ describe("createHttpRouter", () => {
         request("/blocked-users", { method: "GET", token: "good-token" }),
         "ip",
       );
+      const paged = await route(
+        request("/blocked-users?limit=500&afterUsername=Kai", {
+          method: "GET",
+          token: "good-token",
+        }),
+        "ip",
+      );
       const remove = await route(
         request("/blocked-users/user_2", { method: "DELETE", token: "good-token" }),
         "ip",
@@ -866,6 +905,9 @@ describe("createHttpRouter", () => {
       expect(post.status).toBe(200);
       expect(list.status).toBe(200);
       expect(await list.json()).toMatchObject({ blockedUsers: [{ id: "user_2" }] });
+      expect(await paged.json()).toMatchObject({
+        blockedUsers: [{ username: "limit:100:after:Kai" }],
+      });
       expect(remove.status).toBe(200);
       expect(blocked).toEqual(["user_2"]);
       expect(unblocked).toEqual(["user_2"]);
@@ -875,7 +917,17 @@ describe("createHttpRouter", () => {
       const route = createHttpRouter(
         makeDeps({
           blocks: {
-            list: async () => [],
+            list: async (_userId: string, options?: { limit?: number; afterUsername?: string }) =>
+              options
+                ? [
+                    {
+                      id: "user_2",
+                      username: `limit:${options.limit}:after:${options.afterUsername ?? ""}`,
+                      appearance: DEFAULT_AVATAR_APPEARANCE,
+                      blockedAt: "2026-06-13T00:00:00.000Z",
+                    },
+                  ]
+                : [],
             block: async () => {
               throw new BlockError("INVALID_BLOCK", "You cannot block yourself");
             },
@@ -961,7 +1013,17 @@ describe("createHttpRouter", () => {
       const broken = createHttpRouter(
         makeDeps({
           blocks: {
-            list: async () => [],
+            list: async (_userId: string, options?: { limit?: number; afterUsername?: string }) =>
+              options
+                ? [
+                    {
+                      id: "user_2",
+                      username: `limit:${options.limit}:after:${options.afterUsername ?? ""}`,
+                      appearance: DEFAULT_AVATAR_APPEARANCE,
+                      blockedAt: "2026-06-13T00:00:00.000Z",
+                    },
+                  ]
+                : [],
             block: async () => {
               throw new Error("db down");
             },

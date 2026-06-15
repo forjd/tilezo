@@ -1,5 +1,5 @@
 import type { AvatarAppearance } from "@tilezo/protocol";
-import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, eq, gt, or } from "drizzle-orm";
 import type { TilezoDatabase } from "../db/db";
 import { blockedUsers, users } from "../db/schema";
 
@@ -17,12 +17,21 @@ type BlockedUserRow = {
   blockedAt: Date;
 };
 
+export type BlockListOptions = {
+  limit: number;
+  afterUsername?: string;
+};
+
 export type BlockStore = {
   blockUser(blockerUserId: string, blockedUserId: string): Promise<void>;
   unblockUser(blockerUserId: string, blockedUserId: string): Promise<void>;
   isBlocked(blockerUserId: string, blockedUserId: string): Promise<boolean>;
   isBlockedEitherDirection(userId: string, otherUserId: string): Promise<boolean>;
-  listBlockedUsers(blockerUserId: string): Promise<BlockedUserSummary[]>;
+  countBlockedUsers(blockerUserId: string): Promise<number>;
+  listBlockedUsers(
+    blockerUserId: string,
+    options?: BlockListOptions,
+  ): Promise<BlockedUserSummary[]>;
 };
 
 export class BlockError extends Error {
@@ -34,12 +43,27 @@ export class BlockError extends Error {
   }
 }
 
+export const DEFAULT_BLOCK_LIST_LIMIT = 50;
+export const MAX_BLOCK_LIST_LIMIT = 100;
+export const DEFAULT_MAX_BLOCKED_USERS = 500;
+
 export class BlockService {
-  constructor(private readonly store: BlockStore) {}
+  constructor(
+    private readonly store: BlockStore,
+    private readonly options: { maxBlockedUsers?: number } = {},
+  ) {}
 
   async block(userId: string, blockedUserId: string): Promise<void> {
     if (userId === blockedUserId) {
       throw new BlockError("INVALID_BLOCK", "You cannot block yourself");
+    }
+
+    if (!(await this.store.isBlocked(userId, blockedUserId))) {
+      const count = await this.store.countBlockedUsers(userId);
+      const maxBlockedUsers = this.options.maxBlockedUsers ?? DEFAULT_MAX_BLOCKED_USERS;
+      if (count >= maxBlockedUsers) {
+        throw new BlockError("BLOCK_LIMIT_REACHED", "You have reached the blocked user limit");
+      }
     }
 
     await this.store.blockUser(userId, blockedUserId);
@@ -57,8 +81,11 @@ export class BlockService {
     return this.store.isBlockedEitherDirection(userId, otherUserId);
   }
 
-  list(userId: string): Promise<BlockedUserSummary[]> {
-    return this.store.listBlockedUsers(userId);
+  list(userId: string, options: Partial<BlockListOptions> = {}): Promise<BlockedUserSummary[]> {
+    return this.store.listBlockedUsers(userId, {
+      limit: clampLimit(options.limit),
+      afterUsername: normalizeCursor(options.afterUsername),
+    });
   }
 }
 
@@ -111,7 +138,24 @@ export class DrizzleBlockStore implements BlockStore {
     return Boolean(row);
   }
 
-  async listBlockedUsers(blockerUserId: string): Promise<BlockedUserSummary[]> {
+  async countBlockedUsers(blockerUserId: string): Promise<number> {
+    const rows = await this.db
+      .select({ blockedUserId: blockedUsers.blockedUserId })
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockerUserId, blockerUserId));
+    return rows.length;
+  }
+
+  async listBlockedUsers(
+    blockerUserId: string,
+    options: BlockListOptions = { limit: DEFAULT_BLOCK_LIST_LIMIT },
+  ): Promise<BlockedUserSummary[]> {
+    const afterUsername = normalizeCursor(options.afterUsername);
+    const conditions = [eq(blockedUsers.blockerUserId, blockerUserId)];
+    if (afterUsername) {
+      conditions.push(gt(users.usernameKey, afterUsername));
+    }
+
     const rows = await this.db
       .select({
         id: users.id,
@@ -121,8 +165,9 @@ export class DrizzleBlockStore implements BlockStore {
       })
       .from(blockedUsers)
       .innerJoin(users, eq(users.id, blockedUsers.blockedUserId))
-      .where(eq(blockedUsers.blockerUserId, blockerUserId))
-      .orderBy(asc(users.usernameKey));
+      .where(and(...conditions))
+      .orderBy(asc(users.usernameKey))
+      .limit(clampLimit(options.limit));
 
     return rows.map(toSummary);
   }
@@ -135,4 +180,16 @@ function toSummary(row: BlockedUserRow): BlockedUserSummary {
     appearance: row.appearance,
     blockedAt: row.blockedAt.toISOString(),
   };
+}
+
+function clampLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isInteger(limit) || limit < 1) {
+    return DEFAULT_BLOCK_LIST_LIMIT;
+  }
+  return Math.min(limit, MAX_BLOCK_LIST_LIMIT);
+}
+
+function normalizeCursor(cursor: string | undefined): string | undefined {
+  const trimmed = cursor?.trim().toLowerCase();
+  return trimmed || undefined;
 }
