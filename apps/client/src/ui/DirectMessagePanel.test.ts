@@ -179,7 +179,16 @@ describe("DirectMessagePanel", () => {
     expect(typingStatus.classList.contains("visible")).toBe(false);
     expect(panel.append(dm({ text: "after close" }))).toBe(false);
     expect(panel.markRead(["dm_1"])).toBe(false);
+
+    panel.open({ id: "user_2", username: "Kai" }, [], "user_1");
+    input.value = "again";
+    input.dispatch("input", {});
+    panel.dispose();
+
+    expect(panel.isOpenFor("user_2")).toBe(false);
     expect(typing).toEqual([
+      { friendId: "user_2", isTyping: true },
+      { friendId: "user_2", isTyping: false },
       { friendId: "user_2", isTyping: true },
       { friendId: "user_2", isTyping: false },
     ]);

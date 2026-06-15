@@ -25,6 +25,7 @@ chore: configure biome
 
 - Use Bun test tooling and repository scripts for verification.
 - Run `bun run test:coverage` before `bun run coverage:check` when validating coverage locally, because the coverage check reads `coverage/lcov.info`.
+- New or changed executable product code should have focused tests that keep the changed lines at 100% coverage where practical; document any intentional, behavior-preserving exception in the handoff.
 - Preserve the adjusted coverage gate in `scripts/check-coverage.ts`: CI requires adjusted line coverage to stay at or above `COVERAGE_THRESHOLD` and treats executable source files missing from LCOV as uncovered.
 - Do not lower the coverage threshold or exclude executable product code from coverage accounting to make CI pass. Add focused tests for real behavior instead; only exclude entrypoints, config, type-only modules, or re-export shims when they do not contain meaningful executable logic.
 

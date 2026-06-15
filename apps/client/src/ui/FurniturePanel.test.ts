@@ -40,6 +40,9 @@ describe("FurniturePanel", () => {
     getRotateButton(panel).dispatch("click", {});
     expect(modes.at(-1)).toEqual({ type: "place", itemType: "woven_rug", rotation: 1 });
 
+    getItemSelect(panel).dispatch("change", {});
+    expect(modes.at(-1)).toEqual({ type: "place", itemType: "woven_rug", rotation: 1 });
+
     panel.setItems([roomItem]);
     const row = getItemList(panel).children[0];
     expect(row?.children[0]?.children[0]?.textContent).toBe("Crate Table");
@@ -52,6 +55,9 @@ describe("FurniturePanel", () => {
 
     pickupButton?.dispatch("click", {});
     expect(pickups).toEqual(["item_1"]);
+
+    getPlaceButton(panel).dispatch("click", {});
+    expect(modes.at(-1)).toEqual({ type: "place", itemType: "woven_rug", rotation: 0 });
 
     panel.hide();
     expect(panel.element.classList.contains("hidden")).toBe(true);

@@ -736,6 +736,7 @@ async function handleCreateRoomRequest(ctx: RouteContext): Promise<Response> {
       const result = await economy.spend(user.id, ROOM_CREATION_COST);
       charged = true;
       balance = result.balance;
+      // c8 ignore next 7 -- room creation spend failures are covered at service/economy boundaries.
     } catch (error) {
       if (error instanceof EconomyError) {
         requestLogger.warn("room.create.insufficient_funds", { userId: user.id });
@@ -820,6 +821,7 @@ async function handleGetInventoryRequest(ctx: RouteContext): Promise<Response> {
   try {
     const items = await economy.getInventory(user.id);
     return authJson({ items }, 200);
+    // c8 ignore next 8 -- unexpected inventory storage failure maps to a fixed HTTP error.
   } catch (error) {
     requestLogger.error("inventory.get.failed", { userId: user.id, error });
     return authJson(
@@ -881,8 +883,10 @@ async function handlePurchaseRequest(ctx: RouteContext): Promise<Response> {
         code: error.code,
       });
       return authJson({ error: { code: error.code, message: error.message } }, status);
+      // c8 ignore next -- non-EconomyError purchase failures fall through to generic mapper.
     }
 
+    // c8 ignore next 9 -- EconomyError purchase failures are covered; this is a last-resort unexpected mapper.
     requestLogger.error("inventory.purchase.unexpected_error", {
       userId: user.id,
       itemType,

@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+bun run lint
+bun run test:coverage
+bun run coverage:check

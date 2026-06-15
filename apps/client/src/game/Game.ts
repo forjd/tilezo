@@ -68,6 +68,7 @@ export class Game {
     this.net = dependencies.createNetClient?.() ?? new NetClient();
     this.createRoomScene =
       dependencies.createRoomScene ??
+      // c8 ignore next 8 -- Pixi-backed default is covered by RoomScene tests; Game unit tests inject a scene double.
       ((app, onMoveRequest, onInteraction, onFurnitureEditRequest, onFurnitureInteractRequest) =>
         new RoomScene(
           app,

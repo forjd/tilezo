@@ -240,6 +240,43 @@ describe("RoomManager", () => {
     expect(store.seededRoomIds).toEqual(["lobby", "atrium", "studio"]);
   });
 
+  test("loads room items from persistence and clones persisted state", async () => {
+    const persistedItem = {
+      id: "item_1",
+      itemType: "woven_rug",
+      x: 1,
+      y: 1,
+      z: 0,
+      rotation: 0,
+      state: { color: "blue" },
+    };
+    const manager = await RoomManager.create({
+      persistence: {
+        async getRoom() {
+          return undefined;
+        },
+        async seedRoom() {},
+        async listRoomItems(roomId) {
+          return roomId === "lobby" ? [persistedItem] : [];
+        },
+      },
+    });
+
+    persistedItem.state.color = "mutated";
+
+    expect(manager.getOrCreate("lobby")?.getSnapshot().items).toEqual([
+      {
+        id: "item_1",
+        itemType: "woven_rug",
+        x: 1,
+        y: 1,
+        z: 0,
+        rotation: 0,
+        state: { color: "blue" },
+      },
+    ]);
+  });
+
   test("bundled public rooms spawn users on the attached door tile", async () => {
     const manager = await RoomManager.create();
 

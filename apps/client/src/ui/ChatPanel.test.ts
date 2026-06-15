@@ -64,16 +64,32 @@ describe("ChatPanel", () => {
     expect(input.value).toBe("ignored");
   });
 
-  test("keeps text when the send handler rejects the local send", () => {
+  test("keeps text when the send handler rejects the local send and disposes handlers", () => {
     installDocument();
     const panel = new ChatPanel();
     const input = getInput(panel);
+    const statuses: boolean[] = [];
+    const sent: string[] = [];
 
-    panel.onSend(() => false);
+    panel.onSend((text) => {
+      sent.push(text);
+      return false;
+    });
+    panel.onTypingChange((isTyping) => statuses.push(isTyping));
     input.value = "  still here  ";
+    input.dispatch("input", {});
     input.dispatch("keydown", { key: "Enter" });
 
     expect(input.value).toBe("  still here  ");
+    expect(sent).toEqual(["still here"]);
+
+    panel.dispose();
+    input.value = "after dispose";
+    input.dispatch("input", {});
+    input.dispatch("keydown", { key: "Enter" });
+
+    expect(sent).toEqual(["still here"]);
+    expect(statuses).toEqual([true, false]);
   });
 
   test("emits typing status from input changes and message sends", () => {

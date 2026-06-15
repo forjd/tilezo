@@ -233,4 +233,113 @@ describe("Room", () => {
       ],
     });
   });
+
+  test("clones, sorts, moves, and updates furniture without leaking mutable state", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 4, 3, { x: 0, y: 0 }));
+
+    expect(room.getItem("missing")).toBeUndefined();
+    expect(room.moveItem("missing", { x: 1, y: 1, rotation: 0 })).toBeUndefined();
+    expect(room.updateItemState("missing", { on: true })).toBeUndefined();
+
+    const later = room.placeItem({
+      id: "item_z",
+      itemType: "woven_rug",
+      x: 2,
+      y: 2,
+      z: 0,
+      rotation: 0,
+      state: { color: "red" },
+    });
+    const earlier = room.placeItem({
+      id: "item_a",
+      itemType: "woven_rug",
+      x: 1,
+      y: 0,
+      z: 0,
+      rotation: 0,
+      state: { color: "blue" },
+    });
+
+    expect(room.getItems().map((item) => item.id)).toEqual(["item_a", "item_z"]);
+    if (!earlier || !later) {
+      throw new Error("expected rugs to be placed");
+    }
+
+    const externalCopy = room.getItem("item_a");
+    if (externalCopy) {
+      externalCopy.state.color = "mutated";
+    }
+    expect(room.getItem("item_a")?.state).toEqual({ color: "blue" });
+
+    expect(room.canPlaceItem({ ...earlier, x: 2, y: 2 })).toBe(false);
+    expect(room.validateItemMove("item_a", { ...earlier, x: 2, y: 2 })).toEqual({ ok: false });
+    expect(room.moveItem("item_a", { x: 0, y: 2, rotation: 0 })).toMatchObject({
+      id: "item_a",
+      x: 0,
+      y: 2,
+    });
+    expect(room.updateItemState("item_a", { on: true })?.state).toEqual({ on: true });
+  });
+
+  test("rejects furniture with invalid definitions, rotations, heights, spawn, and occupied user tiles", () => {
+    const room = new Room(createRectRoomLayout("lobby", "Lobby", 4, 3, { x: 1, y: 1 }));
+
+    room.join({ id: "user_1", username: "Dan" });
+
+    expect(
+      room.canPlaceItem({
+        id: "unknown",
+        itemType: "missing_furniture",
+        x: 0,
+        y: 0,
+        z: 0,
+        rotation: 0,
+        state: {},
+      }),
+    ).toBe(false);
+    expect(
+      room.canPlaceItem({
+        id: "bad_rotation",
+        itemType: "glass_lamp",
+        x: 0,
+        y: 0,
+        z: 0,
+        rotation: 2,
+        state: {},
+      }),
+    ).toBe(false);
+    expect(
+      room.canPlaceItem({
+        id: "bad_height",
+        itemType: "crate_table",
+        x: 0,
+        y: 0,
+        z: 1,
+        rotation: 0,
+        state: {},
+      }),
+    ).toBe(false);
+    expect(
+      room.canPlaceItem({
+        id: "spawn_blocker",
+        itemType: "crate_table",
+        x: 1,
+        y: 1,
+        z: 0,
+        rotation: 0,
+        state: {},
+      }),
+    ).toBe(false);
+    expect(
+      room.canPlaceItem({
+        id: "rug_on_user",
+        itemType: "woven_rug",
+        x: 1,
+        y: 1,
+        z: 0,
+        rotation: 0,
+        state: {},
+      }),
+    ).toBe(true);
+  });
 });

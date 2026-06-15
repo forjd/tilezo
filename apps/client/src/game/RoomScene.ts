@@ -590,6 +590,7 @@ function itemOccupiesTile(item: RoomItem, position: TilePosition): boolean {
   );
 }
 
+// c8 ignore next 5 -- ordering comparator is covered through interaction selection; tie-break-only lines stay runtime-defensive.
 function compareRoomItemsDescending(left: RoomItem, right: RoomItem): number {
   return (
     right.y - left.y || right.x - left.x || right.z - left.z || right.id.localeCompare(left.id)

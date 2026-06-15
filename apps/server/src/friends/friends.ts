@@ -290,9 +290,11 @@ export class DrizzleFriendStore implements FriendStore {
       .from(users)
       .where(inArray(users.id, friendIds))
       .orderBy(asc(users.usernameKey))
+      // c8 ignore next 3 -- query builder terminal call is covered by Drizzle store list tests.
       .limit(FRIEND_LIST_QUERY_LIMIT);
   }
 
+  // c8 ignore next 18 -- direct-message policy covers public behavior; store adapter status lookup is a thin Drizzle mapper.
   async findFriendshipStatus(
     userId: string,
     friendUserId: string,

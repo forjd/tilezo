@@ -3,6 +3,7 @@ import { type AvatarAppearance, DEFAULT_AVATAR_APPEARANCE } from "@tilezo/protoc
 import type { DirectMessage, RoomSnapshotMessage } from "@tilezo/protocol/messages";
 import type { AuthUser } from "../auth/AuthClient";
 import type { FriendSummary } from "../friends/FriendClient";
+import type { FurnitureEditMode } from "../game/RoomScene";
 import type { CreateRoomRequest, RoomTemplateSummary } from "../rooms/RoomClient";
 import { createApp } from "./createApp";
 
@@ -368,6 +369,83 @@ describe("createApp", () => {
     await expect(furniturePanel.buy("crate_table")).rejects.toThrow("not enough cash");
     expect(findByClass(harness.root, "status").textContent).toBe("not enough cash");
   });
+
+  test("routes furniture edit controls, hidden furniture, balance creation, and inventory refresh", async () => {
+    const harness = createAppHarness();
+    await flushAsyncMessages();
+
+    await harness.loginForms[0]?.submit({
+      mode: "login",
+      username: "Dan",
+      password: "secret phrase",
+    });
+    await harness.characterEditors[0]?.submit(DEFAULT_AVATAR_APPEARANCE);
+    await flushAsyncMessages();
+
+    const game = harness.requireGame();
+    const furniturePanel = harness.requireFurniturePanel();
+    const editableSnapshot: RoomSnapshotMessage = {
+      type: "room.snapshot",
+      roomId: "editable_room",
+      users: [],
+      tiles: [],
+      items: [],
+      canEditItems: true,
+    };
+    game.options.onRoomJoined(editableSnapshot);
+    furniturePanel.changeMode({ type: "place", itemType: "low_stool", rotation: 0 });
+    furniturePanel.pickup("item_1");
+    game.options.onFurnitureItemsChanged([roomItem]);
+    harness.services.getInventory = async () => [{ itemType: "low_stool", quantity: 2 }];
+    findByClass(harness.root, "furniture-button").dispatch("click");
+    await flushAsyncMessages();
+
+    expect(game.furnitureModes).toEqual([{ type: "place", itemType: "low_stool", rotation: 0 }]);
+    expect(game.pickedUpItems).toEqual(["item_1"]);
+    expect(furniturePanel.itemSets.at(-1)).toEqual([roomItem]);
+    expect(furniturePanel.inventorySets.at(-1)).toEqual([{ itemType: "low_stool", quantity: 2 }]);
+    expect(furniturePanel.shown).toBe(1);
+
+    harness.services.getInventory = async () => {
+      throw new Error("inventory down");
+    };
+    findByClass(harness.root, "furniture-button").dispatch("click");
+    await flushAsyncMessages();
+    expect(findByClass(harness.root, "status").textContent).toBe("inventory down");
+
+    game.options.onRoomJoined({ ...editableSnapshot, canEditItems: false });
+    expect(findByClass(harness.root, "furniture-button").classList.contains("hidden")).toBe(true);
+    expect(furniturePanel.hidden).toBe(1);
+
+    harness.services.createRoom = async () => ({
+      roomId: "created_with_balance",
+      room: { id: "created_with_balance", name: "Created", userCount: 1, joined: true },
+      balance: 400,
+    });
+    await harness.createRoomDialogs[0]?.submit(roomRequest);
+    await flushAsyncMessages();
+    expect(findByClass(harness.root, "balance").textContent).toBe("$400");
+    expect(findByClass(harness.root, "balance").classList.contains("balance-updated")).toBe(true);
+    expect(game.joinedRooms).toContain("created_with_balance");
+  });
+
+  test("ignores purchase, balance, create-room, and inventory callbacks before a user exists", async () => {
+    const harness = createAppHarness();
+    await flushAsyncMessages();
+
+    const furniturePanel = harness.requireFurniturePanel();
+    await furniturePanel.buy("woven_rug");
+    furniturePanel.changeMode({ type: "move", itemId: "item_1", rotation: 0 });
+    furniturePanel.pickup("item_1");
+    findByClass(harness.root, "furniture-button").dispatch("click");
+    findByClass(harness.root, "create-room-button").dispatch("click");
+    await harness.createRoomDialogs[0]?.submit(roomRequest);
+    await flushAsyncMessages();
+
+    expect(harness.games).toEqual([]);
+    expect(furniturePanel.inventorySets).toEqual([]);
+    expect(findByClass(harness.root, "status").textContent).toBe("idle");
+  });
 });
 
 function createAppHarness(
@@ -611,10 +689,22 @@ const roomRequest: CreateRoomRequest = {
   doorY: 2,
 };
 
+const roomItem: RoomSnapshotMessage["items"][number] = {
+  id: "item_1",
+  itemType: "crate_table",
+  x: 2,
+  y: 1,
+  z: 0,
+  rotation: 0,
+  state: {},
+};
+
 class FakeGame {
   readonly joinedRooms: string[] = [];
   readonly updatedAppearances: AvatarAppearance[] = [];
   readonly directMessages: { friendId: string; text: string }[] = [];
+  readonly furnitureModes: unknown[] = [];
+  readonly pickedUpItems: string[] = [];
   started = 0;
   stopped = 0;
   refreshed = 0;
@@ -677,9 +767,12 @@ class FakeGame {
     return true;
   }
 
-  setFurnitureEditMode(): void {}
+  setFurnitureEditMode(mode: unknown): void {
+    this.furnitureModes.push(mode);
+  }
 
-  pickupRoomItem(): boolean {
+  pickupRoomItem(itemId: string): boolean {
+    this.pickedUpItems.push(itemId);
     return true;
   }
 }
@@ -702,6 +795,14 @@ class FakeFurniturePanel {
 
   buy(itemType: string): unknown {
     return this.options.onBuy(itemType);
+  }
+
+  changeMode(mode: FurnitureEditMode | undefined): void {
+    this.options.onModeChange(mode);
+  }
+
+  pickup(itemId: string): void {
+    this.options.onPickup(itemId);
   }
 
   hide(): void {

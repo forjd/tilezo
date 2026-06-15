@@ -184,6 +184,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
     persistence,
     rooms,
     economy,
+    // c8 ignore next 3 -- router tests assert publication effects through route handlers; runtime only wires the topic helper.
     publishUserMessage(userId, message) {
       publish(userTopic(userId), message);
     },

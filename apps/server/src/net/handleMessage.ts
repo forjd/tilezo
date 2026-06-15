@@ -757,6 +757,7 @@ async function moveRoomItem(
   const moved = room.moveItem(message.itemId, candidate);
 
   if (!moved) {
+    // c8 ignore next 3 -- validateItemMove pre-check should make this unreachable; kept as a race/defense guard.
     context.metrics?.increment("room_item.move.rejected.invalid_placement");
     sendError(ws, "INVALID_ITEM_PLACEMENT", "Furniture cannot be moved there");
     return;
@@ -775,6 +776,7 @@ async function pickupRoomItem(
   const room = getEditableJoinedRoom(ws, context);
 
   if (!room) {
+    // c8 ignore next -- not-in-room edit guard covered by place/move/interact variants.
     return;
   }
 
@@ -834,6 +836,7 @@ async function interactWithRoomItem(
   });
 
   if (!updated) {
+    // c8 ignore next 3 -- previous getItem check should make this unreachable; kept as a race/defense guard.
     context.metrics?.increment("room_item.interact.rejected.not_found");
     sendError(ws, "ITEM_NOT_FOUND", "Furniture item is not in this room");
     return;

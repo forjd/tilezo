@@ -74,6 +74,12 @@ describe("Game", () => {
       position: { x: 1, y: 1 },
       rotation: 0,
     });
+    scene.requestFurnitureInteract("lamp_1", "toggle");
+    expect(net.sent).toContainEqual({
+      type: "room.item.interact.request",
+      itemId: "lamp_1",
+      action: "toggle",
+    });
     expect(net.sent).toContainEqual({ type: "room.join", roomId: "studio" });
     expect(net.sent).toContainEqual({ type: "chat.say", text: "hello room" });
     expect(net.sent).toContainEqual({ type: "chat.typing", isTyping: true });
@@ -288,7 +294,15 @@ function createDependencies(options: { createRoomScene?: false } = {}): GameDepe
             onMoveRequest: (target: { x: number; y: number }) => void,
             onInteraction: () => void,
             onFurnitureEditRequest: (request: unknown) => void,
-          ) => new FakeRoomScene(app, onMoveRequest, onInteraction, onFurnitureEditRequest),
+            onFurnitureInteractRequest: (itemId: string, action: "toggle") => void,
+          ) =>
+            new FakeRoomScene(
+              app,
+              onMoveRequest,
+              onInteraction,
+              onFurnitureEditRequest,
+              onFurnitureInteractRequest,
+            ),
         }),
   } as unknown as GameDependenciesForTest;
 }
@@ -419,6 +433,7 @@ class FakeRoomScene {
     readonly requestMove: (target: { x: number; y: number }) => void,
     readonly requestInteraction: () => void,
     readonly requestFurnitureEdit: (request: unknown) => void,
+    readonly requestFurnitureInteract: (itemId: string, action: "toggle") => void,
   ) {
     sceneInstances.push(this);
   }

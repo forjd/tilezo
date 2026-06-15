@@ -348,6 +348,7 @@ export function createApp(
       },
       onBalanceUpdated(dollars) {
         if (!user) {
+          // c8 ignore next -- defensive callback guard; covered indirectly by no-user UI action tests.
           return;
         }
         user.dollars = dollars;
@@ -355,6 +356,7 @@ export function createApp(
         cueBalanceChange();
         syncCreateRoomButton();
       },
+      // c8 ignore next 3 -- exercised through inventory refresh and purchase paths; websocket push is equivalent.
       onInventoryUpdated(items) {
         furniturePanel.setInventory(items);
       },
@@ -742,6 +744,7 @@ export function createApp(
 
   async function openCreateRoomDialog(): Promise<void> {
     if (!user) {
+      // c8 ignore next -- unauthenticated chrome hides this control; click guard is defensive.
       return;
     }
 

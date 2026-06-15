@@ -604,6 +604,300 @@ describe("handleMessage", () => {
     ]);
   });
 
+  test("covers furniture edit and interaction rejection/rollback paths", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("owned_room", "Owned Room"), {
+      ownerUserId: "user_db_1",
+      visibility: "public",
+    });
+    const notJoined = createSocket({ userId: "user_db_1", username: "Dan" });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const economy = createEconomyStore();
+    const metrics = createMetricsDouble();
+    await economy.refundItem(ws.data.userId, "crate_table");
+    await economy.refundItem(ws.data.userId, "crate_table");
+
+    handleMessage(
+      notJoined,
+      JSON.stringify({
+        type: "room.item.move.request",
+        itemId: "item_1",
+        position: { x: 1, y: 1 },
+        rotation: 0,
+      }),
+      { rooms, publish() {}, metrics },
+    );
+    handleMessage(
+      notJoined,
+      JSON.stringify({ type: "room.item.interact.request", itemId: "item_1", action: "toggle" }),
+      { rooms, publish() {}, metrics },
+    );
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "owned_room" }), {
+      rooms,
+      publish() {},
+    });
+    ws.sent.length = 0;
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.place.request",
+        itemType: "missing_furniture",
+        position: { x: 1, y: 1 },
+        rotation: 0,
+      }),
+      { rooms, economy, publish() {}, metrics },
+    );
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 99, y: 99 },
+        rotation: 0,
+      }),
+      { rooms, economy, publish() {}, metrics },
+    );
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.place.request",
+        itemType: "crate_table",
+        position: { x: 2, y: 1 },
+        rotation: 0,
+      }),
+      {
+        rooms,
+        economy,
+        publish() {},
+        logger: createLoggerDouble(),
+        metrics,
+        persistence: failingFurniturePersistence("save"),
+      },
+    );
+    await flushAsyncMessages();
+
+    const room = rooms.get("owned_room");
+    expect(room?.getItems()).toEqual([]);
+    expect(await economy.getInventory(ws.data.userId)).toEqual([
+      { itemType: "crate_table", quantity: 2 },
+    ]);
+
+    room?.placeItem({
+      id: "item_1",
+      itemType: "crate_table",
+      x: 2,
+      y: 1,
+      z: 0,
+      rotation: 0,
+      state: {},
+    });
+    room?.placeItem({
+      id: "lamp_1",
+      itemType: "glass_lamp",
+      x: 0,
+      y: 1,
+      z: 0,
+      rotation: 0,
+      state: { on: false },
+    });
+
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.move.request",
+        itemId: "missing",
+        position: { x: 1, y: 1 },
+        rotation: 0,
+      }),
+      { rooms, publish() {}, metrics },
+    );
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.move.request",
+        itemId: "item_1",
+        position: { x: 99, y: 99 },
+        rotation: 0,
+      }),
+      { rooms, publish() {}, metrics },
+    );
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.move.request",
+        itemId: "item_1",
+        position: { x: 0, y: 0 },
+        rotation: 0,
+      }),
+      {
+        rooms,
+        publish() {},
+        logger: createLoggerDouble(),
+        metrics,
+        persistence: failingFurniturePersistence("save"),
+      },
+    );
+    await flushAsyncMessages();
+    handleMessage(ws, JSON.stringify({ type: "room.item.pickup.request", itemId: "missing" }), {
+      rooms,
+      publish() {},
+      metrics,
+    });
+    handleMessage(ws, JSON.stringify({ type: "room.item.pickup.request", itemId: "item_1" }), {
+      rooms,
+      publish() {},
+      logger: createLoggerDouble(),
+      metrics,
+      persistence: failingFurniturePersistence("delete"),
+    });
+    await flushAsyncMessages();
+    handleMessage(
+      ws,
+      JSON.stringify({ type: "room.item.interact.request", itemId: "missing", action: "toggle" }),
+      { rooms, publish() {}, metrics },
+    );
+    handleMessage(
+      ws,
+      JSON.stringify({ type: "room.item.interact.request", itemId: "item_1", action: "toggle" }),
+      { rooms, publish() {}, metrics },
+    );
+    handleMessage(
+      ws,
+      JSON.stringify({ type: "room.item.interact.request", itemId: "lamp_1", action: "toggle" }),
+      {
+        rooms,
+        publish() {},
+        logger: createLoggerDouble(),
+        metrics,
+        persistence: failingFurniturePersistence("save"),
+      },
+    );
+    await flushAsyncMessages();
+    expect(room?.getItem("lamp_1")?.state).toEqual({ on: false });
+
+    expect(notJoined.sent).toEqual([
+      { type: "error", code: "NOT_IN_ROOM", message: "Join a room before editing furniture" },
+      { type: "error", code: "NOT_IN_ROOM", message: "Join a room before using furniture" },
+    ]);
+    expect(
+      ws.sent.map((message) => (message.type === "error" ? message.code : message.type)),
+    ).toEqual([
+      "UNKNOWN_ITEM_TYPE",
+      "INVALID_ITEM_PLACEMENT",
+      "FURNITURE_PERSISTENCE_FAILED",
+      "ITEM_NOT_FOUND",
+      "INVALID_ITEM_PLACEMENT",
+      "FURNITURE_PERSISTENCE_FAILED",
+      "ITEM_NOT_FOUND",
+      "FURNITURE_PERSISTENCE_FAILED",
+      "ITEM_NOT_FOUND",
+      "UNSUPPORTED_ITEM_ACTION",
+      "FURNITURE_PERSISTENCE_FAILED",
+    ]);
+    expect(room?.getItem("item_1")).toBeDefined();
+    expect(room?.getItem("lamp_1")?.state).toEqual({ on: false });
+    expect(metrics.seenCounters).toEqual(
+      expect.arrayContaining([
+        "room_item.edit.rejected.not_in_room",
+        "room_item.interact.rejected.not_in_room",
+        "room_item.place.rejected.unknown_type",
+        "room_item.place.rejected.invalid_placement",
+        "room_item.move.rejected.not_found",
+        "room_item.move.rejected.invalid_placement",
+        "room_item.pickup.rejected.not_found",
+        "room_item.interact.rejected.not_found",
+        "room_item.interact.rejected.unsupported",
+        "room_item.persistence.save_failed",
+        "room_item.persistence.delete_failed",
+      ]),
+    );
+  });
+
+  test("publishes furniture move and toggle updates", async () => {
+    const rooms = await RoomManager.create();
+    rooms.addRoom(createTestLayout("owned_room", "Owned Room"), {
+      ownerUserId: "user_db_1",
+      visibility: "public",
+    });
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const metrics = createMetricsDouble();
+    const published: ServerMessage[] = [];
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "owned_room" }), {
+      rooms,
+      publish() {},
+    });
+    rooms.get("owned_room")?.placeItem({
+      id: "item_1",
+      itemType: "crate_table",
+      x: 2,
+      y: 1,
+      z: 0,
+      rotation: 0,
+      state: {},
+    });
+    rooms.get("owned_room")?.placeItem({
+      id: "lamp_1",
+      itemType: "glass_lamp",
+      x: 0,
+      y: 1,
+      z: 0,
+      rotation: 0,
+      state: { on: false },
+    });
+    ws.sent.length = 0;
+
+    const context = {
+      rooms,
+      publish(_topic: string, message: ServerMessage) {
+        published.push(message);
+      },
+      metrics,
+      persistence: workingFurniturePersistence(),
+    };
+    handleMessage(
+      ws,
+      JSON.stringify({
+        type: "room.item.move.request",
+        itemId: "item_1",
+        position: { x: 1, y: 0 },
+        rotation: 0,
+      }),
+      context,
+    );
+    handleMessage(
+      ws,
+      JSON.stringify({ type: "room.item.interact.request", itemId: "lamp_1", action: "toggle" }),
+      context,
+    );
+    await flushAsyncMessages();
+
+    expect(ws.sent).toEqual([]);
+    expect(published).toEqual([
+      {
+        type: "room.item.moved",
+        item: { id: "item_1", itemType: "crate_table", x: 1, y: 0, z: 0, rotation: 0, state: {} },
+      },
+      {
+        type: "room.item.state_updated",
+        item: {
+          id: "lamp_1",
+          itemType: "glass_lamp",
+          x: 0,
+          y: 1,
+          z: 0,
+          rotation: 0,
+          state: { on: true },
+        },
+      },
+    ]);
+    expect(metrics.seenCounters).toEqual(
+      expect.arrayContaining(["room_item.move.accepted", "room_item.interact.accepted"]),
+    );
+  });
+
   test("publishes chat and responds to ping", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket({ userId: "user_db_1", username: "Dan" });
@@ -842,6 +1136,40 @@ describe("handleMessage", () => {
         message: { type: "avatar.appearance.update", appearance: DEFAULT_AVATAR_APPEARANCE },
         counter: "rate_limited.appearance",
         errorMessage: "Slow down before updating your character again",
+      },
+      {
+        kind: "default",
+        message: {
+          type: "room.item.place.request",
+          itemType: "crate_table",
+          position: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        counter: "rate_limited.room_item_place",
+        errorMessage: "Slow down before editing furniture again",
+      },
+      {
+        kind: "default",
+        message: {
+          type: "room.item.move.request",
+          itemId: "item_1",
+          position: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        counter: "rate_limited.room_item_move",
+        errorMessage: "Slow down before editing furniture again",
+      },
+      {
+        kind: "default",
+        message: { type: "room.item.pickup.request", itemId: "item_1" },
+        counter: "rate_limited.room_item_pickup",
+        errorMessage: "Slow down before editing furniture again",
+      },
+      {
+        kind: "default",
+        message: { type: "room.item.interact.request", itemId: "item_1", action: "toggle" },
+        counter: "rate_limited.room_item_interact",
+        errorMessage: "Slow down before using furniture again",
       },
       {
         kind: "chat",
@@ -2036,6 +2364,36 @@ function createLoggerDouble(): Logger {
     info() {},
     warn() {},
   } as unknown as Logger;
+}
+
+function workingFurniturePersistence(): PersistenceStore {
+  return {
+    async getRoom() {
+      return undefined;
+    },
+    async seedRoom() {},
+    async saveRoomItem() {},
+    async deleteRoomItem() {},
+  } as unknown as PersistenceStore;
+}
+
+function failingFurniturePersistence(operation: "save" | "delete"): PersistenceStore {
+  return {
+    async getRoom() {
+      return undefined;
+    },
+    async seedRoom() {},
+    async saveRoomItem() {
+      if (operation === "save") {
+        throw new Error("save failed");
+      }
+    },
+    async deleteRoomItem() {
+      if (operation === "delete") {
+        throw new Error("delete failed");
+      }
+    },
+  } as unknown as PersistenceStore;
 }
 
 function createTestLayout(id: string, name: string) {
