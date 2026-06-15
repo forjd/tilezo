@@ -257,6 +257,8 @@ describe("startServerRuntime", () => {
 
     expect(runtime.config.host).toBe("127.0.0.1");
     expect(harness.serveOptions.websocket.maxPayloadLength).toBeGreaterThan(0);
+    expect(harness.timers).toHaveLength(3);
+    harness.timers[1]?.callback();
 
     await stopRuntime(runtime);
   });

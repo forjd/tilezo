@@ -8,6 +8,11 @@ import { getConfig, type ServerConfig } from "./config";
 import { createDatabase } from "./db/db";
 import { DrizzlePersistenceStore, type PersistenceStore } from "./db/persistence";
 import { DrizzleEconomyStore, type EconomyStore } from "./economy/economy";
+import {
+  DrizzlePlaytimeRewardStore,
+  PLAYTIME_REWARD_FLUSH_INTERVAL_MS,
+  PlaytimeRewardService,
+} from "./economy/playtimeRewards";
 import { DrizzleFriendStore, FriendService } from "./friends/friends";
 import { corsHeaders, createHttpRouter } from "./http/router";
 import { DirectMessageService, DrizzleDirectMessageStore } from "./messaging/messaging";
@@ -186,6 +191,25 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
   const userSockets: UserSocketStore = new Map();
   const joinVersions = new Map<string, number>();
   const joinTargets = new Map<string, string>();
+  const playtimeRewards = database
+    ? new PlaytimeRewardService(new DrizzlePlaytimeRewardStore(database), {
+        publishBalanceUpdate(userId, dollars) {
+          publish(userTopic(userId), { type: "balance.updated", dollars });
+        },
+      })
+    : undefined;
+  const playtimeRewardTimer = playtimeRewards
+    ? setIntervalRef(() => {
+        void playtimeRewards.flushConnectedUsers().catch((error) => {
+          metrics.increment("playtime_reward.periodic_flush_failed");
+          logger.warn("playtime_reward.periodic_flush_failed", { error });
+        });
+      }, PLAYTIME_REWARD_FLUSH_INTERVAL_MS)
+    : undefined;
+
+  if (playtimeRewardTimer) {
+    unrefTimer(playtimeRewardTimer);
+  }
 
   const router = createHttpRouter({
     config,
@@ -237,6 +261,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
           presence,
           userSockets,
           economy,
+          playtimeRewards,
         });
       },
       message(ws, message) {
@@ -254,6 +279,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
             joinVersions,
             joinTargets,
             economy,
+            playtimeRewards,
           });
           return;
         }
@@ -273,7 +299,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
         );
       },
       close(ws) {
-        handleClose(ws, rooms, publish, logger, metrics, presence, userSockets);
+        handleClose(ws, rooms, publish, logger, metrics, presence, userSockets, playtimeRewards);
       },
     },
   });
@@ -439,6 +465,9 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
     logger.info("server.shutdown", { signal });
     clearIntervalRef(botTimer);
     clearIntervalRef(rateLimiterPruneTimer);
+    if (playtimeRewardTimer) {
+      clearIntervalRef(playtimeRewardTimer);
+    }
     metrics.stopEventLoopMonitor();
     await server.stop(true);
     processRef.exit(0);

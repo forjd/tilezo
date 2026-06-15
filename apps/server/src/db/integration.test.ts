@@ -4,6 +4,7 @@ import { DEFAULT_AVATAR_APPEARANCE, ROOM_CREATION_COST } from "@tilezo/protocol"
 import { sql } from "drizzle-orm";
 import { DrizzleAuthStore, UsernameTakenError } from "../auth/auth";
 import { DrizzleEconomyStore } from "../economy/economy";
+import { DrizzlePlaytimeRewardStore, PLAYTIME_ACTIVE_WINDOW_MS } from "../economy/playtimeRewards";
 import { DrizzleFriendStore } from "../friends/friends";
 import { DrizzleDirectMessageStore } from "../messaging/messaging";
 import { createDatabase } from "./db";
@@ -27,13 +28,14 @@ describe("database integration", () => {
 
   const authStore = new DrizzleAuthStore(database);
   const economyStore = new DrizzleEconomyStore(database);
+  const playtimeRewardStore = new DrizzlePlaytimeRewardStore(database);
   const friendStore = new DrizzleFriendStore(database);
   const directMessageStore = new DrizzleDirectMessageStore(database);
   const persistence = new DrizzlePersistenceStore(database);
 
   beforeEach(async () => {
     await database.execute(
-      sql`TRUNCATE TABLE users, rooms, friendships, user_room_sessions, room_items, direct_messages, user_inventory RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE users, rooms, friendships, user_room_sessions, room_items, direct_messages, user_inventory, user_playtime_rewards RESTART IDENTITY CASCADE`,
     );
   });
 
@@ -198,6 +200,29 @@ describe("database integration", () => {
       itemType: "woven_rug",
       quantity: 2,
     });
+  });
+
+  test("credits hourly active play rewards and persists remainder progress", async () => {
+    const owner = await seedUser("Dan");
+    const startBalance = owner.dollars;
+    const startedAt = new Date("2026-06-15T00:00:00.000Z");
+    let result: Awaited<ReturnType<typeof playtimeRewardStore.apply>>;
+
+    for (let index = 0; index <= 12; index += 1) {
+      result = await playtimeRewardStore.apply(
+        owner.id,
+        "activity",
+        new Date(startedAt.getTime() + index * PLAYTIME_ACTIVE_WINDOW_MS),
+      );
+    }
+
+    expect(result).toMatchObject({
+      accruedActiveMs: 0,
+      awardedDollars: 500,
+      awardedIntervals: 1,
+      balance: startBalance + 500,
+    });
+    expect(await economyStore.getBalance(owner.id)).toBe(startBalance + 500);
   });
 
   test("rejects spending and purchases with insufficient funds", async () => {

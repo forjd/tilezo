@@ -10,6 +10,7 @@ import {
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import type { EconomyStore } from "../economy/economy";
+import type { PlaytimeRewardService } from "../economy/playtimeRewards";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
@@ -34,6 +35,7 @@ type Context = {
   joinVersions?: Map<string, number>;
   joinTargets?: Map<string, string>;
   userSockets?: UserSocketStore;
+  playtimeRewards?: PlaytimeRewardService;
 };
 
 type RateLimitKind = keyof typeof RATE_LIMITS;
@@ -86,7 +88,13 @@ export function handleMessage(
           return;
         }
 
-        void joinRoom(ws, parsed.value.roomId, context, { sendUnavailableError: true });
+        void joinRoom(ws, parsed.value.roomId, context, { sendUnavailableError: true }).then(
+          (joined) => {
+            if (joined) {
+              recordPlaytimeActivity(ws, context);
+            }
+          },
+        );
         break;
       }
 
@@ -122,6 +130,8 @@ export function handleMessage(
           sendError(ws, "INVALID_TILE", "Target tile is not walkable");
           return;
         }
+
+        recordPlaytimeActivity(ws, context);
 
         if (path.length < 2) {
           // Target is the avatar's current tile: nothing to move, so do not broadcast an
@@ -174,6 +184,7 @@ export function handleMessage(
         // Only mirror the appearance onto the socket after the authoritative room update
         // succeeds, so a rejected update cannot leave the local copy out of sync.
         ws.data.appearance = parsed.value.appearance;
+        recordPlaytimeActivity(ws, context);
 
         context.publish(roomTopic(room.id), {
           type: "avatar.appearance.updated",
@@ -255,6 +266,7 @@ export function handleMessage(
           text: parsed.value.text,
           sentAt: new Date().toISOString(),
         });
+        recordPlaytimeActivity(ws, context);
         context.metrics?.increment("chat.accepted");
         context.logger?.debug("room.chat.accepted", {
           ...socketFields(ws),
@@ -291,6 +303,7 @@ export function handleMessage(
           username: ws.data.username,
           isTyping: parsed.value.isTyping,
         });
+        recordPlaytimeActivity(ws, context);
         context.metrics?.increment("typing.accepted");
         break;
       }
@@ -401,6 +414,7 @@ export function handleOpen(ws: ServerWebSocket<SocketData>, context: Context): v
     context.presence?.connect(ws.data.userId, ws.data.connectionId);
   }
   registerUserSocket(ws, context.userSockets);
+  context.playtimeRewards?.socketOpened(ws.data.userId);
   context.metrics?.socketOpened();
   context.logger?.info("websocket.opened", socketFields(ws));
   // Subscribe to a per-user topic so direct messages can be delivered to this user's
@@ -427,10 +441,12 @@ export function handleClose(
   metrics?: Metrics,
   presence?: PresenceTracker,
   userSockets?: UserSocketStore,
+  playtimeRewards?: PlaytimeRewardService,
 ) {
   metrics?.socketClosed();
   const { roomId, userId } = ws.data;
   unregisterUserSocket(ws, userSockets);
+  flushPlaytimeOnSocketClose(userId, playtimeRewards, logger, metrics);
   if (ws.data.connectionId) {
     presence?.disconnect(userId, ws.data.connectionId);
   }
@@ -460,7 +476,7 @@ async function joinRoom(
   roomId: string,
   context: Context,
   options: { sendUnavailableError: boolean },
-): Promise<void> {
+): Promise<boolean> {
   const startedAt = performance.now();
 
   try {
@@ -492,7 +508,7 @@ async function joinRoom(
       if (access.code === "ROOM_NOT_FOUND" || !options.sendUnavailableError) {
         await clearLastRoomId(context, ws.data.userId);
       }
-      return;
+      return false;
     }
 
     const room = context.rooms.getOrCreate(roomId, ws.data.userId);
@@ -507,7 +523,7 @@ async function joinRoom(
         sendError(ws, "ROOM_NOT_FOUND", "Room is not available");
       }
       await clearLastRoomId(context, ws.data.userId);
-      return;
+      return false;
     }
 
     const previousRoomId = ws.data.roomId;
@@ -526,7 +542,7 @@ async function joinRoom(
         ...socketFields(ws),
         roomId: room.id,
       });
-      return;
+      return true;
     }
 
     const joinVersion = nextJoinVersion(context, ws.data.userId, room.id);
@@ -611,6 +627,7 @@ async function joinRoom(
       ...socketFields(ws),
       roomId: room.id,
     });
+    return true;
   } finally {
     context.metrics?.observe("room.join.duration", performance.now() - startedAt);
   }
@@ -714,6 +731,7 @@ async function placeRoomItem(
   context.rooms.rememberRoomItem(room.id, placed);
   context.publish(roomTopic(room.id), { type: "room.item.placed", item: placed });
   await sendInventoryUpdate(ws, context);
+  recordPlaytimeActivity(ws, context);
   context.metrics?.increment("room_item.place.accepted");
 }
 
@@ -765,6 +783,7 @@ async function moveRoomItem(
 
   context.rooms.rememberRoomItem(room.id, moved);
   context.publish(roomTopic(room.id), { type: "room.item.moved", item: moved });
+  recordPlaytimeActivity(ws, context);
   context.metrics?.increment("room_item.move.accepted");
 }
 
@@ -797,6 +816,7 @@ async function pickupRoomItem(
   context.rooms.forgetRoomItem(room.id, pickedUp.id);
   context.publish(roomTopic(room.id), { type: "room.item.picked_up", itemId: pickedUp.id });
   await sendInventoryUpdate(ws, context);
+  recordPlaytimeActivity(ws, context);
   context.metrics?.increment("room_item.pickup.accepted");
 }
 
@@ -849,6 +869,7 @@ async function interactWithRoomItem(
 
   context.rooms.rememberRoomItem(room.id, updated);
   context.publish(roomTopic(room.id), { type: "room.item.state_updated", item: updated });
+  recordPlaytimeActivity(ws, context);
   context.metrics?.increment("room_item.interact.accepted");
 }
 
@@ -1073,6 +1094,7 @@ async function editDirectMessage(
     };
     context.publish(userTopic(record.toUserId), message);
     context.publish(userTopic(record.fromUserId), message);
+    recordPlaytimeActivity(ws, context);
     context.metrics?.increment("dm_edit.accepted");
   } catch (error) {
     if (error instanceof DirectMessageError) {
@@ -1107,6 +1129,7 @@ async function deleteDirectMessage(
     };
     context.publish(userTopic(record.toUserId), message);
     context.publish(userTopic(record.fromUserId), message);
+    recordPlaytimeActivity(ws, context);
     context.metrics?.increment("dm_delete.accepted");
   } catch (error) {
     if (error instanceof DirectMessageError) {
@@ -1132,6 +1155,7 @@ async function markDirectMessagesRead(
 
   try {
     const receipt = await context.directMessages.markRead(ws.data.userId, friendId);
+    recordPlaytimeActivity(ws, context);
 
     if (receipt.messageIds.length === 0) {
       return;
@@ -1202,6 +1226,7 @@ async function sendDirectTyping(
     toUserId,
     isTyping,
   });
+  recordPlaytimeActivity(ws, context);
   context.metrics?.increment("dm_typing.accepted");
 }
 
@@ -1230,6 +1255,7 @@ async function sendDirectMessage(
     // server-assigned id/timestamp stay in sync).
     context.publish(userTopic(record.toUserId), message);
     context.publish(userTopic(record.fromUserId), message);
+    recordPlaytimeActivity(ws, context);
     context.metrics?.increment("dm.sent");
   } catch (error) {
     if (error instanceof DirectMessageError) {
@@ -1260,6 +1286,37 @@ async function sendInventoryUpdate(
   if (items) {
     context.publish(userTopic(ws.data.userId), { type: "inventory.updated", items });
   }
+}
+
+function recordPlaytimeActivity(ws: ServerWebSocket<SocketData>, context: Context): void {
+  const recorded = context.playtimeRewards?.recordActivity(ws.data.userId);
+
+  if (!recorded) {
+    return;
+  }
+
+  void recorded.catch((error) => {
+    context.metrics?.increment("playtime_reward.activity_failed");
+    context.logger?.warn("playtime_reward.activity_failed", { ...socketFields(ws), error });
+  });
+}
+
+function flushPlaytimeOnSocketClose(
+  userId: string,
+  playtimeRewards: PlaytimeRewardService | undefined,
+  logger?: Logger,
+  metrics?: Metrics,
+): void {
+  const flushed = playtimeRewards?.socketClosed(userId);
+
+  if (!flushed) {
+    return;
+  }
+
+  void flushed.catch((error) => {
+    metrics?.increment("playtime_reward.close_flush_failed");
+    logger?.warn("playtime_reward.close_flush_failed", { userId, error });
+  });
 }
 
 function send(ws: ServerWebSocket<SocketData>, message: ServerMessage): void {

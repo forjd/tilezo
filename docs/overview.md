@@ -13,7 +13,7 @@ The current product loop is:
 7. Click tiles to request server-authoritative movement.
 8. Send and receive room chat messages.
 9. If you own the room, place, move, rotate, and pick up room furniture bought from the catalogue.
-10. Earn a starting balance of $500 and spend it on room creation and furniture.
+10. Earn a starting balance of $500, then earn $500 for every hour of active play.
 11. Buy furniture once, keep it in a persistent inventory, and place or pick it up freely in owned rooms.
 12. See live balance and inventory updates across sessions.
 13. See users leave the room when they disconnect or switch rooms.
@@ -37,8 +37,8 @@ Implemented:
 - Friend-gated direct messages: realtime delivery, persistence, and history.
 - Public room browser with live room population counts, plus per-user private rooms and
   player-created rooms persisted to PostgreSQL.
-- Server-authoritative economy: starting balance, room creation fees, furniture catalogue,
-  persistent inventory, and live balance/inventory updates.
+- Server-authoritative economy: starting balance, hourly active-play rewards, room creation fees,
+  furniture catalogue, persistent inventory, and live balance/inventory updates.
 - Owner-only room furniture placement, movement, rotation, pickup, persistence, and
   snapshot delivery.
 - Scripted, server-authoritative room bots (movement and chat).
