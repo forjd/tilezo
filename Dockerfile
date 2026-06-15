@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.3.13 AS base
+FROM oven/bun:1.3.13@sha256:87416c977a612a204eb54ab9f3927023c2a3c971f4f345a01da08ea6262ae30e AS base
 WORKDIR /app
 
 COPY package.json bun.lock tsconfig.base.json biome.json ./
@@ -25,7 +25,7 @@ ENV PUBLIC_API_URL=$PUBLIC_API_URL
 ENV PUBLIC_WS_URL=$PUBLIC_WS_URL
 RUN bun run --filter '@tilezo/client' build
 
-FROM caddy:2-alpine AS client
+FROM caddy:2-alpine@sha256:77c07d5ebfa5be9fd6c820d2094ae662c9e7eeb9bf98346b7f639900263ee2a2 AS client
 COPY --from=client-build /app/apps/client/dist /usr/share/caddy
 EXPOSE 80
 
@@ -38,7 +38,7 @@ ENV NODE_ENV=production
 USER bun
 CMD ["bun", "run", "--cwd", "apps/server", "db:migrate"]
 
-FROM oven/bun:1.3.13 AS server
+FROM oven/bun:1.3.13@sha256:87416c977a612a204eb54ab9f3927023c2a3c971f4f345a01da08ea6262ae30e AS server
 WORKDIR /app
 ENV HOST=0.0.0.0
 ENV NODE_ENV=production
