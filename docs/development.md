@@ -218,3 +218,8 @@ Current test coverage includes:
 - Room join, leave, and authoritative movement.
 
 Rendering tests should stay light until the client UI becomes more complex.
+
+
+## Direct message privacy
+
+Direct messages are friend-gated and block-aware, but message bodies are stored as server-readable plaintext for now so moderation, account export, and deletion workflows can operate. They are private from other players, not end-to-end encrypted from server operators or anyone with database access. Do not represent Tilezo DMs as E2EE unless a future encrypted storage design is implemented and reviewed.
