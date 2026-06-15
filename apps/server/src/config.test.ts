@@ -28,8 +28,13 @@ describe("getConfig", () => {
       friendRateLimitWindowMs: 60000,
       clientEventRateLimitMax: 1000,
       clientEventRateLimitWindowMs: DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS,
+      inventoryPurchaseRateLimitMax: 1000,
+      inventoryPurchaseRateLimitWindowMs: 60000,
+      websocketUpgradeRateLimitMax: 1000,
+      websocketUpgradeRateLimitWindowMs: 60000,
       maxRoomsPerUser: 50,
       maxFriendsPerUser: 500,
+      maxWebSocketConnectionsPerUser: 5,
       maxAuthBodyBytes: 4096,
       trustProxy: false,
       metricsToken: undefined,
@@ -55,8 +60,11 @@ describe("getConfig", () => {
         ROOM_CREATE_RATE_LIMIT_MAX: "5",
         FRIEND_RATE_LIMIT_MAX: "40",
         CLIENT_EVENT_RATE_LIMIT_MAX: "30",
+        INVENTORY_PURCHASE_RATE_LIMIT_MAX: "7",
+        WEBSOCKET_UPGRADE_RATE_LIMIT_MAX: "9",
         MAX_ROOMS_PER_USER: "25",
         MAX_FRIENDS_PER_USER: "200",
+        MAX_WEBSOCKET_CONNECTIONS_PER_USER: "3",
         MAX_AUTH_BODY_BYTES: "2048",
         TRUST_PROXY: "true",
         METRICS_TOKEN: "metrics-secret",
@@ -81,8 +89,13 @@ describe("getConfig", () => {
       friendRateLimitWindowMs: 60000,
       clientEventRateLimitMax: 30,
       clientEventRateLimitWindowMs: DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS,
+      inventoryPurchaseRateLimitMax: 7,
+      inventoryPurchaseRateLimitWindowMs: 60000,
+      websocketUpgradeRateLimitMax: 9,
+      websocketUpgradeRateLimitWindowMs: 60000,
       maxRoomsPerUser: 25,
       maxFriendsPerUser: 200,
+      maxWebSocketConnectionsPerUser: 3,
       maxAuthBodyBytes: 2048,
       trustProxy: true,
       metricsToken: "metrics-secret",
@@ -112,6 +125,15 @@ describe("getConfig", () => {
     );
     expect(() => getConfig({ AUTH_REGISTER_RATE_LIMIT_WINDOW_MS: "0" })).toThrow(
       "AUTH_REGISTER_RATE_LIMIT_WINDOW_MS must be a positive integer",
+    );
+    expect(() => getConfig({ INVENTORY_PURCHASE_RATE_LIMIT_MAX: "0" })).toThrow(
+      "INVENTORY_PURCHASE_RATE_LIMIT_MAX must be a positive integer",
+    );
+    expect(() => getConfig({ WEBSOCKET_UPGRADE_RATE_LIMIT_MAX: "0" })).toThrow(
+      "WEBSOCKET_UPGRADE_RATE_LIMIT_MAX must be a positive integer",
+    );
+    expect(() => getConfig({ MAX_WEBSOCKET_CONNECTIONS_PER_USER: "0" })).toThrow(
+      "MAX_WEBSOCKET_CONNECTIONS_PER_USER must be a positive integer",
     );
   });
 

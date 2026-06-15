@@ -35,6 +35,7 @@ export type RouterDeps = {
   roomCreateRateLimiter: FixedWindowRateLimiter;
   friendRateLimiter: FixedWindowRateLimiter;
   clientEventRateLimiter: FixedWindowRateLimiter;
+  inventoryPurchaseRateLimiter: FixedWindowRateLimiter;
 };
 
 type RouteContext = RouterDeps & {
@@ -850,6 +851,17 @@ async function handlePurchaseRequest(ctx: RouteContext): Promise<Response> {
       { error: { code: "UNAUTHENTICATED", message: "Log in before purchasing" } },
       401,
     );
+  }
+
+  const limited = enforceRateLimit(
+    ctx,
+    ctx.inventoryPurchaseRateLimiter,
+    `user:${user.id}`,
+    "inventory.purchase.rate_limited",
+    "Too many purchase attempts, try again shortly",
+  );
+  if (limited) {
+    return limited;
   }
 
   const body = await readJsonWithLimit(ctx.request, ctx.config.maxAuthBodyBytes);

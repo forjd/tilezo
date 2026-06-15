@@ -18,8 +18,13 @@ export type ServerConfig = {
   friendRateLimitWindowMs: number;
   clientEventRateLimitMax: number;
   clientEventRateLimitWindowMs: number;
+  inventoryPurchaseRateLimitMax: number;
+  inventoryPurchaseRateLimitWindowMs: number;
+  websocketUpgradeRateLimitMax: number;
+  websocketUpgradeRateLimitWindowMs: number;
   maxRoomsPerUser: number;
   maxFriendsPerUser: number;
+  maxWebSocketConnectionsPerUser: number;
   maxAuthBodyBytes: number;
   trustProxy: boolean;
   metricsToken?: string;
@@ -39,8 +44,11 @@ export const DEFAULT_AUTH_LOGIN_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_ROOM_CREATE_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_FRIEND_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_CLIENT_EVENT_RATE_LIMIT_WINDOW_MS = 60_000;
+export const DEFAULT_INVENTORY_PURCHASE_RATE_LIMIT_WINDOW_MS = 60_000;
+export const DEFAULT_WEBSOCKET_UPGRADE_RATE_LIMIT_WINDOW_MS = 60_000;
 export const DEFAULT_MAX_ROOMS_PER_USER = 50;
 export const DEFAULT_MAX_FRIENDS_PER_USER = 500;
+export const DEFAULT_MAX_WEBSOCKET_CONNECTIONS_PER_USER = 5;
 export const DEFAULT_MAX_AUTH_BODY_BYTES = 4 * 1024;
 
 // Placeholder secrets that must never be accepted in production even if long enough.
@@ -117,6 +125,26 @@ export function getConfig(env = Bun.env): ServerConfig {
     env.CLIENT_EVENT_RATE_LIMIT_MAX,
     isProduction ? 120 : 1000,
   );
+  const inventoryPurchaseRateLimitWindowMs = parsePositiveInteger(
+    "INVENTORY_PURCHASE_RATE_LIMIT_WINDOW_MS",
+    env.INVENTORY_PURCHASE_RATE_LIMIT_WINDOW_MS,
+    DEFAULT_INVENTORY_PURCHASE_RATE_LIMIT_WINDOW_MS,
+  );
+  const inventoryPurchaseRateLimitMax = parsePositiveInteger(
+    "INVENTORY_PURCHASE_RATE_LIMIT_MAX",
+    env.INVENTORY_PURCHASE_RATE_LIMIT_MAX,
+    isProduction ? 30 : 1000,
+  );
+  const websocketUpgradeRateLimitWindowMs = parsePositiveInteger(
+    "WEBSOCKET_UPGRADE_RATE_LIMIT_WINDOW_MS",
+    env.WEBSOCKET_UPGRADE_RATE_LIMIT_WINDOW_MS,
+    DEFAULT_WEBSOCKET_UPGRADE_RATE_LIMIT_WINDOW_MS,
+  );
+  const websocketUpgradeRateLimitMax = parsePositiveInteger(
+    "WEBSOCKET_UPGRADE_RATE_LIMIT_MAX",
+    env.WEBSOCKET_UPGRADE_RATE_LIMIT_MAX,
+    isProduction ? 20 : 1000,
+  );
   const maxRoomsPerUser = parsePositiveInteger(
     "MAX_ROOMS_PER_USER",
     env.MAX_ROOMS_PER_USER,
@@ -126,6 +154,11 @@ export function getConfig(env = Bun.env): ServerConfig {
     "MAX_FRIENDS_PER_USER",
     env.MAX_FRIENDS_PER_USER,
     DEFAULT_MAX_FRIENDS_PER_USER,
+  );
+  const maxWebSocketConnectionsPerUser = parsePositiveInteger(
+    "MAX_WEBSOCKET_CONNECTIONS_PER_USER",
+    env.MAX_WEBSOCKET_CONNECTIONS_PER_USER,
+    DEFAULT_MAX_WEBSOCKET_CONNECTIONS_PER_USER,
   );
   const maxAuthBodyBytes = parsePositiveInteger(
     "MAX_AUTH_BODY_BYTES",
@@ -177,8 +210,13 @@ export function getConfig(env = Bun.env): ServerConfig {
     friendRateLimitWindowMs,
     clientEventRateLimitMax,
     clientEventRateLimitWindowMs,
+    inventoryPurchaseRateLimitMax,
+    inventoryPurchaseRateLimitWindowMs,
+    websocketUpgradeRateLimitMax,
+    websocketUpgradeRateLimitWindowMs,
     maxRoomsPerUser,
     maxFriendsPerUser,
+    maxWebSocketConnectionsPerUser,
     maxAuthBodyBytes,
     trustProxy,
     metricsToken,

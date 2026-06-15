@@ -111,6 +111,7 @@ function makeDeps(overrides: Partial<RouterDeps> = {}): RouterDeps {
     roomCreateRateLimiter: limiter(),
     friendRateLimiter: limiter(),
     clientEventRateLimiter: limiter(),
+    inventoryPurchaseRateLimiter: limiter(),
     ...overrides,
   };
 }
@@ -1228,6 +1229,23 @@ describe("createHttpRouter", () => {
           message: { type: "inventory.updated", items: [{ itemType: "crate_table", quantity: 1 }] },
         },
       ]);
+    });
+
+    test("rate limits purchases by authenticated user", async () => {
+      const route = createHttpRouter(makeDeps({ inventoryPurchaseRateLimiter: limiter(1) }));
+
+      const first = await route(
+        request("/inventory/purchase", { token: "good-token", body: { itemType: "crate_table" } }),
+        "ip-1",
+      );
+      const second = await route(
+        request("/inventory/purchase", { token: "good-token", body: { itemType: "crate_table" } }),
+        "ip-2",
+      );
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(429);
+      expect(second.headers.get("retry-after")).toBe("60");
     });
 
     test("validates inventory access, request bodies, and economy errors", async () => {
