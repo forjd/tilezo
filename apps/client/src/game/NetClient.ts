@@ -1,4 +1,4 @@
-import { parseServerMessage } from "@tilezo/protocol";
+import { parseRawServerMessage } from "@tilezo/protocol";
 import type { ClientMessage, ServerMessage } from "@tilezo/protocol/messages";
 import { getWebSocketUrl } from "../config";
 
@@ -88,19 +88,10 @@ export class NetClient {
       return;
     }
 
-    let parsedJson: unknown;
-
-    try {
-      parsedJson = JSON.parse(raw);
-    } catch {
-      this.emitStatus("received invalid server message");
-      return;
-    }
-
-    // Validate the server message against the shared schema instead of blindly casting,
-    // so a malformed or skewed payload is reported cleanly rather than throwing deep in
-    // the scene/avatar code and silently dropping a state update.
-    const parsed = parseServerMessage(parsedJson);
+    // Validate the raw server message against size and schema limits instead of
+    // blindly parsing/casting, so malformed, oversized, or skewed payloads are
+    // reported cleanly rather than crashing the browser client.
+    const parsed = parseRawServerMessage(raw);
 
     if (!parsed.ok) {
       this.emitStatus("received invalid server message");
