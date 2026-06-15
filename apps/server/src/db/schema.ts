@@ -91,6 +91,23 @@ export const userInventory = pgTable(
   ],
 );
 
+export const userPlaytimeRewards = pgTable(
+  "user_playtime_rewards",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accruedActiveMs: integer("accrued_active_ms").notNull().default(0),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
+    lastAccruedAt: timestamp("last_accrued_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check("user_playtime_rewards_accrued_active_ms_check", sql`${table.accruedActiveMs} >= 0`),
+  ],
+);
+
 export const userRoomSessions = pgTable(
   "user_room_sessions",
   {

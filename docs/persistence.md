@@ -14,6 +14,7 @@ The current server has:
 Persist:
 
 - Users, including account balance in `dollars`.
+- Active play reward progress (`user_playtime_rewards`) for hourly dollar awards.
 - Rooms.
 - Room layouts.
 - Room items.
@@ -39,6 +40,21 @@ Live avatar position should remain server-authoritative in memory for now.
 - Not nullable.
 - Represents the account's cash balance in whole dollars.
 - Updated atomically by the economy store with row-level locking (`for("update")`).
+
+### `user_playtime_rewards`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `user_id` | `text` | FK to `users.id`, `onDelete: cascade`. Primary key. |
+| `accrued_active_ms` | `integer` | Active playtime carried toward the next hourly reward. |
+| `last_activity_at` | `timestamp with time zone` | Last qualifying gameplay/social input seen by the server. |
+| `last_accrued_at` | `timestamp with time zone` | Last timestamp through which active playtime has been accrued. |
+
+- The server awards `$500` for each full hour of active play.
+- A qualifying input keeps the user active for up to five minutes; longer gaps accrue only the
+  five-minute active window.
+- Multiple sockets for the same user count as one earning stream.
+- Reward progress and `users.dollars` are updated in the same transaction.
 
 ### `user_inventory`
 
@@ -71,7 +87,9 @@ When using Docker Compose, the `migrate` service runs migrations before the serv
 3. Load persisted `room_items` for known public and private rooms.
 4. Create or refresh a private room for each successfully authenticated user.
 5. Persist owner-approved furniture placement, movement, rotation, pickup, and item state changes.
-6. Keep realtime room membership, movement, and chat in memory.
+6. Accrue active play rewards from accepted gameplay/social WebSocket messages and publish
+   `balance.updated` when an hourly reward is earned.
+7. Keep realtime room membership, movement, and chat in memory.
 
 ## Constraints
 

@@ -4,6 +4,7 @@ import { DEFAULT_AVATAR_APPEARANCE, type RoomItem, type ServerMessage } from "@t
 import type { ServerWebSocket } from "bun";
 import type { PersistenceStore } from "../db/persistence";
 import type { EconomyStore } from "../economy/economy";
+import type { PlaytimeRewardService } from "../economy/playtimeRewards";
 import { DirectMessageError, type DirectMessageService } from "../messaging/messaging";
 import type { Logger } from "../observability/logger";
 import type { Metrics } from "../observability/metrics";
@@ -1246,6 +1247,46 @@ describe("handleMessage", () => {
     }
   });
 
+  test("records playtime for accepted qualifying messages only", async () => {
+    const rooms = await RoomManager.create();
+    const ws = createSocket({ userId: "user_db_1", username: "Dan" });
+    const playtimeRewards = createPlaytimeRewardsDouble();
+    const context = {
+      rooms,
+      publish() {},
+      playtimeRewards: playtimeRewards.service,
+    };
+
+    handleMessage(ws, "{", context);
+    handleMessage(ws, JSON.stringify({ type: "room.list.request" }), context);
+    handleMessage(ws, JSON.stringify({ type: "ping", sentAt: "2026-05-10T00:00:00.000Z" }), {
+      ...context,
+      userRateLimits: new Map(),
+    });
+    await flushAsyncMessages();
+
+    expect(playtimeRewards.activities).toEqual([]);
+
+    handleMessage(ws, JSON.stringify({ type: "room.join", roomId: "lobby" }), context);
+    await flushAsyncMessages();
+
+    handleMessage(ws, JSON.stringify({ type: "avatar.move.request", target: { x: 1, y: 1 } }), {
+      ...context,
+      userRateLimits: new Map(),
+    });
+    await flushAsyncMessages();
+
+    expect(playtimeRewards.activities).toEqual(["user_db_1", "user_db_1"]);
+
+    handleMessage(ws, JSON.stringify({ type: "chat.say", text: "too fast" }), {
+      ...context,
+      userRateLimits: exhaustedRateLimitStore(ws.data.userId, "chat"),
+    });
+    await flushAsyncMessages();
+
+    expect(playtimeRewards.activities).toEqual(["user_db_1", "user_db_1"]);
+  });
+
   test("resends a snapshot when the same socket rejoins its current room", async () => {
     const rooms = await RoomManager.create();
     const ws = createSocket({ userId: "user_db_1", username: "Dan" });
@@ -1457,15 +1498,29 @@ describe("handleOpen", () => {
       connectionId: "socket_1",
     });
     const userSockets = new Map();
+    const playtimeRewards = createPlaytimeRewardsDouble();
 
     handleOpen(ws, {
       rooms,
       publish() {},
       userSockets,
+      playtimeRewards: playtimeRewards.service,
     });
-    handleClose(ws, rooms, () => {}, undefined, undefined, undefined, userSockets);
+    handleClose(
+      ws,
+      rooms,
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      userSockets,
+      playtimeRewards.service,
+    );
+    await flushAsyncMessages();
 
     expect(userSockets.has("user_db_1")).toBe(false);
+    expect(playtimeRewards.opened).toEqual(["user_db_1"]);
+    expect(playtimeRewards.closed).toEqual(["user_db_1"]);
   });
 
   test("silently drops rejected resume rooms and logs clear failures", async () => {
@@ -2302,6 +2357,43 @@ function createEconomyStore(): EconomyStore {
     async refundItem(_userId: string, itemType: string) {
       inventory.set(itemType, (inventory.get(itemType) ?? 0) + 1);
     },
+  };
+}
+
+function createPlaytimeRewardsDouble(): {
+  activities: string[];
+  closed: string[];
+  opened: string[];
+  service: PlaytimeRewardService;
+} {
+  const activities: string[] = [];
+  const closed: string[] = [];
+  const opened: string[] = [];
+  const result = { accruedActiveMs: 0, awardedDollars: 0, awardedIntervals: 0 };
+
+  return {
+    activities,
+    closed,
+    opened,
+    service: {
+      socketOpened(userId: string) {
+        opened.push(userId);
+      },
+      async socketClosed(userId: string) {
+        closed.push(userId);
+        return result;
+      },
+      async recordActivity(userId: string) {
+        activities.push(userId);
+        return result;
+      },
+      async flushConnectedUsers() {
+        return [];
+      },
+      async flushUser() {
+        return result;
+      },
+    } as unknown as PlaytimeRewardService,
   };
 }
 
