@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { basename, resolve } from "node:path";
@@ -70,7 +71,7 @@ async function generateWorktreeEnv(existing: EnvValues): Promise<EnvValues> {
 
   const postgresDb = existing.POSTGRES_DB ?? "tilezo";
   const postgresUser = existing.POSTGRES_USER ?? "postgres";
-  const postgresPassword = existing.POSTGRES_PASSWORD ?? "postgres";
+  const postgresPassword = existing.POSTGRES_PASSWORD ?? randomSecret(24);
 
   return {
     COMPOSE_PROJECT_NAME: projectName,
@@ -85,7 +86,7 @@ async function generateWorktreeEnv(existing: EnvValues): Promise<EnvValues> {
     DATABASE_URL:
       existing.DATABASE_URL ??
       `postgres://${postgresUser}:${postgresPassword}@localhost:${dbPort}/${postgresDb}`,
-    AUTH_SECRET: existing.AUTH_SECRET ?? "tilezo-development-secret",
+    AUTH_SECRET: existing.AUTH_SECRET ?? randomSecret(48),
     NODE_ENV: existing.NODE_ENV ?? "development",
     PUBLIC_API_URL: existing.PUBLIC_API_URL ?? `http://localhost:${serverPort}`,
     PUBLIC_WS_URL: existing.PUBLIC_WS_URL ?? `ws://localhost:${serverPort}/ws`,
@@ -216,4 +217,8 @@ async function isPortAvailable(port: number): Promise<boolean> {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function randomSecret(bytes: number): string {
+  return randomBytes(bytes).toString("base64url");
 }
