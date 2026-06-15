@@ -134,6 +134,54 @@ describe("startServerRuntime", () => {
     await stopRuntime(runtime);
   });
 
+  test("rate limits websocket upgrades and caps active sockets per user", async () => {
+    const harness = createRuntimeHarness({
+      env: { WEBSOCKET_UPGRADE_RATE_LIMIT_MAX: "1", MAX_WEBSOCKET_CONNECTIONS_PER_USER: "1" },
+    });
+    const auth = {
+      verifyToken: async (token: string) =>
+        token === "good-token"
+          ? {
+              id: "user_1",
+              username: "Dan",
+              appearance: DEFAULT_AVATAR_APPEARANCE,
+              dollars: 500,
+            }
+          : undefined,
+    } as unknown as AuthService;
+    const runtime = await startServerRuntime({ ...harness.deps, auth });
+
+    const firstIp = await harness.serveOptions.fetch(webSocketRequest("bad-token"), harness.server);
+    const secondIp = await harness.serveOptions.fetch(
+      webSocketRequest("bad-token"),
+      harness.server,
+    );
+    expect(firstIp?.status).toBe(401);
+    expect(secondIp?.status).toBe(429);
+
+    await stopRuntime(runtime);
+
+    const capHarness = createRuntimeHarness({ env: { MAX_WEBSOCKET_CONNECTIONS_PER_USER: "1" } });
+    const capRuntime = await startServerRuntime({ ...capHarness.deps, auth });
+    const existing = createSocket({
+      userId: "user_1",
+      username: "Dan",
+      connectionId: "socket_existing",
+      dollars: 500,
+    });
+    capHarness.serveOptions.websocket.open(existing);
+
+    const capped = await capHarness.serveOptions.fetch(
+      webSocketRequest("good-token"),
+      capHarness.server,
+    );
+    expect(capped?.status).toBe(429);
+    expect(await capped?.json()).toMatchObject({ error: { code: "TOO_MANY_CONNECTIONS" } });
+
+    capHarness.serveOptions.websocket.close(existing);
+    await stopRuntime(capRuntime);
+  });
+
   test("upgrades authenticated websocket handshakes and reports failed upgrades", async () => {
     const harness = createRuntimeHarness();
     let resumeShouldThrow = false;

@@ -118,12 +118,22 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
     limit: config.clientEventRateLimitMax,
     windowMs: config.clientEventRateLimitWindowMs,
   });
+  const inventoryPurchaseRateLimiter = new FixedWindowRateLimiter({
+    limit: config.inventoryPurchaseRateLimitMax,
+    windowMs: config.inventoryPurchaseRateLimitWindowMs,
+  });
+  const websocketUpgradeRateLimiter = new FixedWindowRateLimiter({
+    limit: config.websocketUpgradeRateLimitMax,
+    windowMs: config.websocketUpgradeRateLimitWindowMs,
+  });
   const rateLimiters = [
     registerRateLimiter,
     loginRateLimiter,
     roomCreateRateLimiter,
     friendRateLimiter,
     clientEventRateLimiter,
+    inventoryPurchaseRateLimiter,
+    websocketUpgradeRateLimiter,
   ];
   const rateLimiterPruneTimer = setIntervalRef(() => {
     for (const limiter of rateLimiters) {
@@ -193,6 +203,7 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
     roomCreateRateLimiter,
     friendRateLimiter,
     clientEventRateLimiter,
+    inventoryPurchaseRateLimiter,
   });
 
   const server = serve({
@@ -284,6 +295,22 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
 
     // Browsers send the HttpOnly session cookie on the WS handshake; API clients can use the
     // Authorization header. Do not accept query tokens because they leak through URLs/logs.
+    const clientKey = resolveClientKey(request, bunServer, config);
+    const ipLimit = websocketUpgradeRateLimiter.consume(`ip:${clientKey}`);
+    if (!ipLimit.allowed) {
+      metrics.increment("websocket.upgrade.rate_limited");
+      logger.warn("websocket.upgrade.rate_limited", {
+        retryAfterSeconds: ipLimit.retryAfterSeconds,
+      });
+      return Response.json(
+        { error: { code: "RATE_LIMITED", message: "Too many websocket connection attempts" } },
+        {
+          status: 429,
+          headers: { ...corsHeaders(), "retry-after": ipLimit.retryAfterSeconds.toString() },
+        },
+      );
+    }
+
     const user = await auth?.verifyToken(readWebSocketSessionToken(request) ?? "");
 
     if (!user) {
@@ -291,6 +318,37 @@ export async function startServerRuntime(deps: ServerRuntimeDeps = {}): Promise<
       return Response.json(
         { error: { code: "UNAUTHENTICATED", message: "Log in before connecting" } },
         { status: 401, headers: corsHeaders() },
+      );
+    }
+
+    const userLimit = websocketUpgradeRateLimiter.consume(`user:${user.id}`);
+    if (!userLimit.allowed) {
+      metrics.increment("websocket.upgrade.rate_limited");
+      logger.warn("websocket.upgrade.rate_limited", {
+        userId: user.id,
+        retryAfterSeconds: userLimit.retryAfterSeconds,
+      });
+      return Response.json(
+        { error: { code: "RATE_LIMITED", message: "Too many websocket connection attempts" } },
+        {
+          status: 429,
+          headers: { ...corsHeaders(), "retry-after": userLimit.retryAfterSeconds.toString() },
+        },
+      );
+    }
+
+    const existingSockets = userSockets.get(user.id)?.size ?? 0;
+    if (existingSockets >= config.maxWebSocketConnectionsPerUser) {
+      metrics.increment("websocket.upgrade.too_many_connections");
+      logger.warn("websocket.upgrade.too_many_connections", {
+        userId: user.id,
+        sockets: existingSockets,
+      });
+      return Response.json(
+        {
+          error: { code: "TOO_MANY_CONNECTIONS", message: "Too many active websocket connections" },
+        },
+        { status: 429, headers: corsHeaders() },
       );
     }
 
