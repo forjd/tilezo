@@ -125,7 +125,7 @@ describe("startServerRuntime", () => {
         user: {
           id: "user_1",
           username: "Dan",
-          position: { x: -1, y: 2 },
+          position: { x: 0, y: 0 },
           appearance: DEFAULT_AVATAR_APPEARANCE,
         },
       },

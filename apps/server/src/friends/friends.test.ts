@@ -271,7 +271,7 @@ function createStore(users: FriendUser[]): FriendStore {
       }).length;
     },
     async findFriendshipStatus(userId, friendUserId) {
-      return friendships.get(friendshipKey(userId, friendUserId))?.status;
+      return friendships.get(friendshipKey(userId, friendUserId));
     },
     async findUserByUsername(username) {
       return users.find((user) => user.username.toLowerCase() === username.trim().toLowerCase());

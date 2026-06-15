@@ -92,9 +92,9 @@ describe("persistence", () => {
       publicLayouts: [storedLobby, studio],
       privateLayouts: [{ layout: privateRoom, ownerUserId: "user_1", access: "knock" }],
       roomRules: [
-        { roomId: "lobby", ownerUserId: undefined, access: "open" },
-        { roomId: "studio", ownerUserId: undefined, access: "open" },
-        { roomId: "home_user_1", ownerUserId: "user_1", access: "knock" },
+        { roomId: "lobby", ownerUserId: undefined, access: "open", capacity: 25 },
+        { roomId: "studio", ownerUserId: undefined, access: "open", capacity: 25 },
+        { roomId: "home_user_1", ownerUserId: "user_1", access: "knock", capacity: 10 },
       ],
     });
     expect(store.seededRooms).toEqual([studio]);

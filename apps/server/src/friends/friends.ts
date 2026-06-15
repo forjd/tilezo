@@ -42,7 +42,9 @@ export type FriendStore = {
   findFriendshipStatus?(
     userId: string,
     friendUserId: string,
-  ): Promise<FriendshipStatus | undefined>;
+  ): Promise<
+    { requestedByUserId: string; status: FriendshipStatus } | FriendshipStatus | undefined
+  >;
   findUserByUsername(username: string): Promise<FriendUser | undefined>;
   listFriends(userId: string): Promise<FriendUser[]>;
   removeFriend(userId: string, friendUserId: string): Promise<void>;
@@ -83,10 +85,20 @@ export class FriendService {
     }
 
     const status = await this.withAddLock(userId, friend.id, async () => {
-      const existingStatus = await this.store.findFriendshipStatus?.(userId, friend.id);
+      const existingFriendship = await this.store.findFriendshipStatus?.(userId, friend.id);
 
-      if (existingStatus) {
-        return existingStatus;
+      if (existingFriendship) {
+        if (typeof existingFriendship === "string") {
+          return existingFriendship;
+        }
+
+        if (existingFriendship.status === "accepted") {
+          return "accepted";
+        }
+
+        if (existingFriendship.requestedByUserId === userId) {
+          return "pending";
+        }
       }
 
       const friendCount = await this.store.countFriendSlots(userId);
@@ -284,9 +296,18 @@ export class DrizzleFriendStore implements FriendStore {
   async findFriendshipStatus(
     userId: string,
     friendUserId: string,
-  ): Promise<FriendshipStatus | undefined> {
+  ): Promise<{ requestedByUserId: string; status: FriendshipStatus } | undefined> {
     const [leftUserId, rightUserId] = friendshipPair(userId, friendUserId);
-    return (await this.findFriendship(leftUserId, rightUserId))?.status;
+    const friendship = await this.findFriendship(leftUserId, rightUserId);
+
+    if (!friendship) {
+      return undefined;
+    }
+
+    return {
+      requestedByUserId: friendship.requestedByUserId,
+      status: friendship.status,
+    };
   }
 
   private async findFriendship(

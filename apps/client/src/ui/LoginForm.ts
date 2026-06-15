@@ -80,7 +80,7 @@ export class LoginForm {
       const password = this.password.value;
       const confirmPassword = this.confirmPassword.value;
 
-      if (!username || !password) {
+      if (!username || !password.trim()) {
         return;
       }
 
