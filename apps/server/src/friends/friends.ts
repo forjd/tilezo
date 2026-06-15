@@ -39,7 +39,10 @@ export type FriendStore = {
   addFriend(userId: string, friendUserId: string): Promise<FriendshipStatus>;
   areFriends(userId: string, friendUserId: string): Promise<boolean>;
   countFriendSlots(userId: string): Promise<number>;
-  findFriendshipStatus?(userId: string, friendUserId: string): Promise<FriendshipStatus | undefined>;
+  findFriendshipStatus?(
+    userId: string,
+    friendUserId: string,
+  ): Promise<FriendshipStatus | undefined>;
   findUserByUsername(username: string): Promise<FriendUser | undefined>;
   listFriends(userId: string): Promise<FriendUser[]>;
   removeFriend(userId: string, friendUserId: string): Promise<void>;
@@ -113,7 +116,11 @@ export class FriendService {
     return this.store.areFriends(userId, friendUserId);
   }
 
-  private async withAddLock<T>(userId: string, friendUserId: string, work: () => Promise<T>): Promise<T> {
+  private async withAddLock<T>(
+    userId: string,
+    friendUserId: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
     const [leftUserId, rightUserId] = friendshipPair(userId, friendUserId);
     const key = `${leftUserId}:${rightUserId}`;
     const previous = this.addLocks.get(key) ?? Promise.resolve();
@@ -121,7 +128,13 @@ export class FriendService {
     const current = new Promise<void>((resolve) => {
       release = resolve;
     });
-    this.addLocks.set(key, previous.then(() => current, () => current));
+    this.addLocks.set(
+      key,
+      previous.then(
+        () => current,
+        () => current,
+      ),
+    );
 
     await previous;
 

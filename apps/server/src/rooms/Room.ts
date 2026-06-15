@@ -219,10 +219,7 @@ export class Room {
     return cloneRoomItem(nextItem);
   }
 
-  moveItem(
-    itemId: string,
-    next: Pick<RoomItem, "x" | "y" | "rotation">,
-  ): RoomItem | undefined {
+  moveItem(itemId: string, next: Pick<RoomItem, "x" | "y" | "rotation">): RoomItem | undefined {
     const existing = this.items.get(itemId);
 
     if (!existing) {

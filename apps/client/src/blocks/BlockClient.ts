@@ -49,7 +49,6 @@ export async function unblockUser(userId: string): Promise<void> {
   }
 }
 
-
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {
     return (await response.json()) as T;

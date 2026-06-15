@@ -1,7 +1,10 @@
 import { DEFAULT_API_URL, DEFAULT_WS_URL } from "./assets";
 
 export function getApiUrl(): string {
-  return normalizeBaseUrl(getConfiguredValue("PUBLIC_API_URL"), DEFAULT_API_URL, ["http:", "https:"]);
+  return normalizeBaseUrl(getConfiguredValue("PUBLIC_API_URL"), DEFAULT_API_URL, [
+    "http:",
+    "https:",
+  ]);
 }
 
 export function apiUrl(path: string): string {

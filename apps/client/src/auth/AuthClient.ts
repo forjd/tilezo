@@ -88,7 +88,6 @@ export async function updateAppearance(appearance: AvatarAppearance): Promise<Av
   return (body as { appearance: AvatarAppearance }).appearance;
 }
 
-
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {
     return (await response.json()) as T;

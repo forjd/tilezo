@@ -68,13 +68,7 @@ export class Game {
     this.net = dependencies.createNetClient?.() ?? new NetClient();
     this.createRoomScene =
       dependencies.createRoomScene ??
-      ((
-        app,
-        onMoveRequest,
-        onInteraction,
-        onFurnitureEditRequest,
-        onFurnitureInteractRequest,
-      ) =>
+      ((app, onMoveRequest, onInteraction, onFurnitureEditRequest, onFurnitureInteractRequest) =>
         new RoomScene(
           app,
           onMoveRequest,
@@ -105,7 +99,8 @@ export class Game {
         },
         () => this.options.chat.focusInput(),
         (request) => this.sendFurnitureEditRequest(request),
-        (itemId, action) => this.sendIfConnected({ type: "room.item.interact.request", itemId, action }),
+        (itemId, action) =>
+          this.sendIfConnected({ type: "room.item.interact.request", itemId, action }),
       );
 
       this.cleanup.push(this.net.onStatus(this.options.setStatus));

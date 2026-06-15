@@ -61,7 +61,6 @@ export async function createRoom(room: CreateRoomRequest): Promise<CreatedRoom> 
   return body as CreatedRoom;
 }
 
-
 async function readJson<T>(response: Response): Promise<T | undefined> {
   try {
     return (await response.json()) as T;

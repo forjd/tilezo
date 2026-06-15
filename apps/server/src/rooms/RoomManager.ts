@@ -132,7 +132,11 @@ export class RoomManager {
 
     const activeRoom = this.rooms.get(roomId);
 
-    if (activeRoom && !activeRoom.hasUser(userId ?? "") && isRoomAtCapacity(activeRoom, rule?.capacity)) {
+    if (
+      activeRoom &&
+      !activeRoom.hasUser(userId ?? "") &&
+      isRoomAtCapacity(activeRoom, rule?.capacity)
+    ) {
       return {
         ok: false,
         code: "ROOM_FULL",
